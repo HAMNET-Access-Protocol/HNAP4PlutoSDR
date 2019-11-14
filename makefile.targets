@@ -1,0 +1,38 @@
+################################################################################
+# Own makefile targets
+################################################################################
+
+MAIN_OBJS := ./test_phy_channel.o ./iio_loopback.o ./platform/pluto_test.o ./decode_from_file.o
+COMMON_OBJS := $(filter-out $(MAIN_OBJS), $(OBJS))
+
+# loopback test using one Adalm Pluto and libiio buffers
+iio_loopback: $(OBJS) $(USER_OBJS)
+	@echo 'Building target: $@'
+	@echo 'Invoking: GCC C Linker'
+	arm-linux-gnueabihf-gcc --sysroot=$(HOME)/pluto-0.31.sysroot/ -o "iio_loopback" ./iio_loopback.o $(COMMON_OBJS) $(USER_OBJS) $(LIBS)
+	@echo 'Finished building target: $@'
+	@echo ' '
+
+pluto_test: $(OBJS) $(USER_OBJS)
+	@echo 'Building target: $@'
+	@echo 'Invoking: GCC C Linker'
+	arm-linux-gnueabihf-gcc --sysroot=$(HOME)/pluto-0.31.sysroot/ -o "pluto_test" ./platform/pluto_test.o $(COMMON_OBJS) $(USER_OBJS) $(LIBS)
+	@echo 'Finished building target: $@'
+	@echo ' '
+	
+# simluation test with static float complex buffers
+simulation: $(OBJS) $(USER_OBJS)
+	@echo 'Building target: $@'
+	@echo 'Invoking: GCC C Linker'
+	arm-linux-gnueabihf-gcc --sysroot=$(HOME)/pluto-0.31.sysroot/ -o "simulation" ./test_phy_channel.o $(COMMON_OBJS) $(USER_OBJS) $(LIBS)
+	@echo 'Finished building target: $@'
+	@echo ' '
+	
+# read samples from a binary file and decode them
+decode_from_file: $(OBJS) $(USER_OBJS)
+	@echo 'Building target: $@'
+	@echo 'Invoking: GCC C Linker'
+	$(CC) -o "decode_from_file" ./decode_from_file.o $(COMMON_OBJS) $(USER_OBJS) $(LIBS)
+	@echo 'Finished building target: $@'
+	@echo ' '
+	
