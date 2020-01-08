@@ -249,8 +249,8 @@ int pluto_prep_tx(float complex* buf_tx, uint buflen)
 		// Example: fill with zeros
 		// 12-bit sample needs to be MSB alligned so shift by 4
 		// https://wiki.analog.com/resources/eval/user-guides/ad-fmcomms2-ebz/software/basic_iq_datafiles#binary_format
-		((int16_t*)p_dat)[0] = 8196.0*((int16_t)creal(buf_tx[i])); // Real (I)
-		((int16_t*)p_dat)[1] = 8196.0*((int16_t)cimag(buf_tx[i++])); // Imag (Q)
+		((int16_t*)p_dat)[0] = (int16_t)(8196.0*creal(buf_tx[i])); // Real (I)
+		((int16_t*)p_dat)[1] = (int16_t)(8196.0*cimag(buf_tx[i++])); // Imag (Q)
 		if (i>=buflen) {
 			break;
 		}
