@@ -97,9 +97,7 @@ int phy_map_dlslot(PhyBS phy, LogicalChannel chan, uint8_t slot_nr, uint mcs)
 	fec_encode(common->mcs_fec[mcs], blocksize/8, interleaved_b, enc_b);
 
 	// repack bytes so that each array entry can be mapped to one symbol
-	// allocate additional 8 bytes, because sometimes the encoded message len
-	// is a bit to short. TODO: fix this
-	int num_repacked = enc_len*8/modem_get_bps(common->mcs_modem[mcs])+8;
+	int num_repacked = ceil(enc_len*8.0/modem_get_bps(common->mcs_modem[mcs]));
 	repacked_b = malloc(num_repacked);
 	liquid_repack_bytes(enc_b,8,enc_len,repacked_b,modem_get_bps(common->mcs_modem[mcs]),num_repacked,&bytes_written);
 
