@@ -9,6 +9,7 @@
 #include <string.h>
 #include <signal.h>
 #include <time.h>
+#include <liquid/liquid.h>
 
 static bool stop;
 
@@ -29,6 +30,8 @@ int main()
     memset(buf_in,0,buf_len*sizeof(float complex));
     memset(buf_out,0,buf_len*sizeof(float complex));
 
+    modem qammod = modem_create(LIQUID_MODEM_QAM4);
+
     init_pluto_platform();
 
     start = clock();
@@ -41,9 +44,13 @@ int main()
 		pluto_receive(buf_out,buf_len);
 
     	printf("preptx: %f\n",(clock()-start)*1000.0/CLOCKS_PER_SEC);
-    	for (int i=0; i<buf_len; i++) {
-    		buf_in[i] = (rand() >= RAND_MAX/2) ? 1:-1;
-    		buf_in[i] += (rand() >= RAND_MAX/2) ? I:-I;
+    	for (int i=0; i<buf_len; i+=1) {
+    		// generate random QAM symbol
+    		uint sym = modem_gen_rand_sym(qammod);
+    		modem_modulate(qammod,sym,&buf_in[i]);
+    		modem_modulate(qammod,sym,&buf_in[i+1]);
+    		//buf_in[i]= (rand() >= RAND_MAX/2) ? 1:-1;
+    		//buf_in[i]+= (rand() >= RAND_MAX/2) ? I:-I;
     	}
     	pluto_prep_tx(buf_in,buf_len);
 
