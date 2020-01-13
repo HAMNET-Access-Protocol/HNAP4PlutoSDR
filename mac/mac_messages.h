@@ -43,6 +43,7 @@ typedef struct {
 		MacTimingAdvance TimingAdvance;
 		MacDLdata DLdata;
 		MacULreq ULreq;
+		MacULdata ULdata;
 	} msg;
 	CtrlID_e type;
 	uint8_t hdr_len;
@@ -80,7 +81,7 @@ typedef struct {
 typedef struct {
 	uint16_t ctrl_id :3;
 	uint16_t data_length : 12;
-	uint16_t fragment :1;
+	uint16_t final_flag :1;
 	uint8_t seqNr : 3;
 	uint8_t fragNr : 5;
 } MacDLdata;
@@ -89,6 +90,14 @@ typedef struct {
 	uint16_t ctrl_id :3;
 	uint16_t packetqueuesize :13;
 } MacULreq;
+
+typedef struct {
+	uint16_t ctrl_id :3;
+	uint16_t data_length : 12;
+	uint16_t final_flag :1;
+	uint8_t seqNr : 3;
+	uint8_t fragNr : 5;
+} MacULdata;
 
 // Functions for creating/destroying MAC messages
 MacMessage mac_msg_create_ul_req(uint PacketQueueSize);

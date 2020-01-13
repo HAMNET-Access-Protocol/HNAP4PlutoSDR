@@ -113,15 +113,37 @@ MacMessage mac_msg_create_timing_advance(uint timingAdvance)
 	return genericmsg;
 }
 
-MacMessage mac_msg_create_dl_data(uint data_length, uint8_t fragment,
-							uint8_t seqNr, uint8_t fragNr, uint8_t* data )
+MacMessage mac_msg_create_dl_data(uint data_length, uint8_t final,
+							uint8_t seqNr, uint8_t fragNr, uint8_t* data)
 {
 	MacMessage genericmsg = mac_msg_create_generic(dl_data);
 	MacDLdata msg = genericmsg->msg.DLdata;
 
 	msg.ctrl_id = dl_data & 0b111;
 	msg.data_length = data_length;
+	msg.fragNr = fragNr;
+	msg.seqNr = seqNr;
+	msg.final_flag = final;
 	genericmsg->data = malloc(data_length);
+	memcpy(genericmsg->data,data,data_length);
+
+	return genericmsg;
+}
+
+MacMessage mac_msg_create_ul_data(uint data_length, uint8_t final,
+							uint8_t seqNr, uint8_t fragNr, uint8_t* data)
+{
+	MacMessage genericmsg = mac_msg_create_generic(ul_data);
+	MacDLdata msg = genericmsg->msg.ULdata;
+
+	msg.ctrl_id = ul_data & 0b111;
+	msg.data_length = data_length;
+	msg.fragNr = fragNr;
+	msg.seqNr = seqNr;
+	msg.final_flag = final;
+	genericmsg->data = malloc(data_length);
+	memcpy(genericmsg->data,data,data_length);
+
 	return genericmsg;
 }
 
