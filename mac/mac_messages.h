@@ -34,6 +34,11 @@ typedef enum {
 	ul_data = 15
 } CtrlID_e;
 
+// Association response types
+enum {
+	assoc_resp_success=0,
+	assoc_resp_full
+};
 // Generic struct for Mac Message exchange between Modules
 typedef struct {
 	union {
