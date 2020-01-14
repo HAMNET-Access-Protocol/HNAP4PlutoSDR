@@ -15,8 +15,15 @@ MacBS mac_bs_init()
 	for (int i=0; i<MAX_USER; i++) {
 		macinst->UE = NULL;
 	}
-	macinst->msg_broadcast_queue = ringbuf_create(MAC_MSG_BUF_SIZE);
+	macinst->broadcast_ctrl_queue = ringbuf_create(MAC_MSG_BUF_SIZE);
+	macinst->broadcast_data_fragmenter = mac_frag_init();
 	return macinst;
+}
+
+void mac_bs_destroy(MacBS mac)
+{
+	ringbuf_destroy(mac->broadcast_ctrl_queue);
+	// TODO mac bs destroy
 }
 
 void mac_bs_add_new_ue(MacBS mac, uint8_t rachuserid, ofdmframesync fs)
@@ -24,7 +31,8 @@ void mac_bs_add_new_ue(MacBS mac, uint8_t rachuserid, ofdmframesync fs)
 	MacMessage response;
 	// find the first unused userid
 	uint8_t userid = 0;
-	while((userid<MAX_USER) && (mac->UE[userid]==NULL)) {
+	while((userid<MAX_USER) && ((mac->UE[userid]!=NULL) ||
+			(userid == USER_BROADCAST) || (userid == USER_UNUSED))) {
 		userid++;
 	}
 	if (userid==MAX_USER) {
@@ -45,7 +53,7 @@ void mac_bs_add_new_ue(MacBS mac, uint8_t rachuserid, ofdmframesync fs)
 	}
 
 	// Response will be sent via broadcast channel
-	ringbuf_put(mac->msg_broadcast_queue,(void*)response);
+	ringbuf_put(mac->broadcast_ctrl_queue,(void*)response);
 }
 
 
@@ -88,7 +96,10 @@ int mac_bs_handle_message(MacBS mac, MacMessage msg, uint8_t userID)
 	case ul_data:
 		MacDataFrame frame = mac_assmbl_reassemble(user->reassembler,msg);
 		if (frame != NULL) {
+			printf("[MAC BS] rec %d bytes: %s\n",frame->size,frame->data);
 			//TODO forward received frame to higher layer
+			free(frame->data);
+			free(frame);
 		}
 		break;
 	default:
