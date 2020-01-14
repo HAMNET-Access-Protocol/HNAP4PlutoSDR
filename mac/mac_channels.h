@@ -26,7 +26,8 @@ typedef LogicalChannel_s* LogicalChannel;
 
 // Function declarations
 void lchan_create(LogicalChannel chan, uint size);
-void lchan_delete(LogicalChannel chan);
+void lchan_destroy(LogicalChannel chan);
+int  lchan_unused_bytes(LogicalChannel chan);
 int  lchan_add_message(LogicalChannel chan, MacMessage msg);
 void lchan_calc_crc(LogicalChannel chan);
 int  lchan_verify_crc(LogicalChannel chan);
