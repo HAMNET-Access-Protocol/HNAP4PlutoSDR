@@ -109,3 +109,122 @@ int mac_bs_handle_message(MacBS mac, MacMessage msg, uint8_t userID)
 	mac_msg_destroy(msg);
 	return 1;
 }
+
+void mac_dequeue_ctrl_msgs(LogicalChannel lchan, ringbuf ctrl_msg_buf)
+{
+	// TODO: improve check whether there is enough space to add msg. Msg size currently hardcoded
+	while (!ringbuf_isempty(ctrl_msg_buf) && lchan_unused_bytes(lchan)>1) {
+		MacMessage msg = ringbuf_get(ctrl_msg_buf);
+		lchan_add_message(lchan,msg);
+		mac_msg_destroy(msg);
+	}
+}
+
+user_s* get_next_user(MacBS mac, uint curr_user)
+{
+	uint next_user = curr_user;
+	do {
+		next_user = (next_user + 1) % MAX_USER;
+	} while (mac->UE[next_user] == NULL && curr_user!=next_user);
+	return mac->UE[next_user];
+}
+
+int ue_has_dldata(user_s* ue)
+{
+	return (mac_frag_has_fragment(ue->fragmenter) ||
+			ringbuf_isempty(ue->msg_control_queue));
+}
+
+void mac_bs_run_scheduler(MacBS mac)
+{
+	uint slot_idx = 0;
+	uint user_id = 0;
+	// TODO 1. Assign UL ctrl slots
+
+	// 2. check Broadcast queue
+	LogicalChannel bchan = NULL;
+	if (!ringbuf_isempty(mac->broadcast_ctrl_queue)) {
+		bchan = lchan_create(get_tbs_size(mac->phy,0)/8);
+		mac_dequeue_ctrl_msgs(bchan,mac->broadcast_ctrl_queue);
+		// reserve a slot for broadcasting
+		mac->dl_data_assignments[slot_idx++] = USER_BROADCAST;
+	}
+
+	// 3. iterate over all DL slots and assign it to the users
+	// start by disabling all slots
+	for (int i=0; i<MAC_DLDATA_SLOTS; i++) {
+		mac->dl_data_assignments[i] = USER_UNUSED;
+	}
+	// assign slots to active users
+	while (slot_idx < MAC_DLDATA_SLOTS) {
+		// get next user. Round robin allocation
+		user_s* ue = get_next_user(mac,user_id);
+		if (ue==NULL) {
+			// no active user at all. stop
+			break;
+		}
+		// check whether the user has DL data or DL ctrl data
+		if (ue_has_dldata(ue)) {
+			mac->dl_data_assignments[slot_idx++] = ue->userid;
+			user_id = ue->userid; // update last active user
+		} else if (ue->userid == user_id) {
+			break; // no other active user found. stop
+		}
+	}
+
+	// 4. iterate over each UL slot and assign it
+	// TODO check that assignment do not overlap with DL slots
+	slot_idx = 0;
+	user_id = 0;
+	while (slot_idx < MAC_ULDATA_SLOTS) {
+		// get next user. Round robin allocation
+		user_s* ue = get_next_user(mac,user_id);
+		if (ue==NULL) {
+			// no active user at all. stop
+			break;
+		}
+
+		// check whether the user has pending ul data
+		if (ue->ul_queue > 0) {
+			mac->ul_data_assignments[slot_idx++] = ue->userid;
+			user_id = ue->userid; // update last active user
+		} else if (ue->userid == user_id) {
+			// no other active user found. assign to
+			// current user even if there is no ul req
+			mac->ul_data_assignments[slot_idx++] = ue->userid;
+			user_id = ue->userid; // update last active user
+		}
+	}
+
+	// Assign UL ctrl slots
+	// TODO correctly assign UL ctrl slots. This assigns to userids that are inactive
+	uint id = mac->phy->common->subframe *2;
+	mac->ul_ctrl_assignments[0] = id;
+	mac->ul_ctrl_assignments[1] = id+1;
+
+	// 5. Generate DL slot data
+	for (int slot=0; slot<MAC_DLDATA_SLOTS; slot++) {
+		user_s* ue = mac->UE[mac->dl_data_assignments[slot]];
+		if (ue == NULL) {
+			continue; // skip slots that are assigned for broadcast or disabled
+		}
+
+		// Generate logical channel
+		uint tbs = get_tbs_size(mac->phy,ue->dl_mcs);
+		LogicalChannel chan = lchan_create(tbs/8);
+		mac_dequeue_ctrl_msgs(chan, ue->msg_control_queue);
+		if (mac_frag_has_fragment(ue->fragmenter)) {
+			uint payload_size = lchan_unused_bytes(chan);
+			MacMessage msg = mac_frag_get_fragment(ue->fragmenter, payload_size, 0);
+			lchan_add_message(chan,msg);
+			mac_msg_destroy(msg);
+		}
+		lchan_calc_crc(chan);
+        phy_map_dlslot(mac->phy, chan, slot, ue->dl_mcs);
+        lchan_destroy(chan);
+	}
+
+	// 5.2 set UL assignments
+	phy_assign_dlctrl_ud(mac->phy, mac->ul_data_assignments);
+	phy_assign_dlctrl_uc(mac->phy, mac->ul_ctrl_assignments);
+}
