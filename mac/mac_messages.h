@@ -48,6 +48,9 @@ typedef struct {
 		MacTimingAdvance TimingAdvance;
 		MacDLdata DLdata;
 		MacULreq ULreq;
+		MacChannelQuality ChannelQuality;
+		MacKeepalive Keepalive;
+		MacControlAck ControlAck;
 		MacULdata ULdata;
 	} msg;
 	CtrlID_e type;
@@ -97,6 +100,21 @@ typedef struct {
 } MacULreq;
 
 typedef struct {
+	uint8_t ctrl_id :3;
+	uint8_t channel_quality :5; // TODO to be defined
+} MacChannelQuality;
+
+typedef struct {
+	uint8_t ctrl_id :3;
+	uint8_t reserved : 5;
+} MacKeepalive;
+
+typedef struct {
+	uint8_t ctrl_id :3;
+	uint8_t acked_ctrl_id :3;
+} MacControlAck;
+
+typedef struct {
 	uint16_t ctrl_id :3;
 	uint16_t data_length : 12;
 	uint16_t final_flag :1;
@@ -104,18 +122,26 @@ typedef struct {
 	uint8_t fragNr : 5;
 } MacULdata;
 
-// Functions for creating/destroying MAC messages
-MacMessage mac_msg_create_ul_req(uint PacketQueueSize);
+//// Functions for creating/destroying MAC messages ////
+// Downlink
 MacMessage mac_msg_create_associate_response(uint userID, uint rachUserID,
 											 uint response);
 MacMessage mac_msg_create_dl_mcs_info(uint mcs);
 MacMessage mac_msg_create_ul_mcs_info(uint mcs);
 MacMessage mac_msg_create_timing_advance(uint timingAdvance);
 MacMessage mac_msg_create_dl_data(uint data_length, uint8_t fragment,
-							uint8_t seqNr, uint8_t fragNr, uint8_t* data );
+								  uint8_t seqNr, uint8_t fragNr, uint8_t* data );
+// Uplink
+MacMessage mac_msg_create_ul_req(uint PacketQueueSize);
+MacMessage mac_msg_create_channel_quality(uint quality_idx);
+MacMessage mac_msg_create_keepalive();
+MacMessage mac_msg_create_control_ack(uint acked_ctrl_id);
+MacMessage mac_msg_create_ul_data(uint data_length, uint8_t final,
+								  uint8_t seqNr, uint8_t fragNr, uint8_t* data);
+
 void mac_msg_destroy(MacMessage genericmsg);
 
-// Functions to write/parse messages to/from buffers
+//// Functions to write/parse messages to/from buffers ////
 int mac_msg_generate(MacMessage genericmsg, uint8_t* buf, uint buflen);
 MacMessage mac_msg_parse(uint8_t* buf, uint buflen, uint8_t ul_flag);
 

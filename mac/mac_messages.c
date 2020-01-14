@@ -59,16 +59,6 @@ MacMessage mac_msg_create_generic(CtrlID_e type)
 
 /* Mac Message functinons */
 
-MacMessage mac_msg_create_ul_req(uint PacketQueueSize)
-{
-	MacMessage genericmsg = mac_msg_create_generic(ul_req);
-	MacULreq msg = genericmsg->msg.ULreq;
-
-	msg.ctrl_id = ul_req  & 0b111;
-	msg.packetqueuesize = PacketQueueSize;
-	return genericmsg;
-}
-
 MacMessage mac_msg_create_associate_response(uint userID, uint rachUserID,
 												uint response)
 {
@@ -127,6 +117,46 @@ MacMessage mac_msg_create_dl_data(uint data_length, uint8_t final,
 	genericmsg->data = malloc(data_length);
 	memcpy(genericmsg->data,data,data_length);
 
+	return genericmsg;
+}
+
+MacMessage mac_msg_create_ul_req(uint PacketQueueSize)
+{
+	MacMessage genericmsg = mac_msg_create_generic(ul_req);
+	MacULreq msg = genericmsg->msg.ULreq;
+
+	msg.ctrl_id = ul_req  & 0b111;
+	msg.packetqueuesize = PacketQueueSize;
+	return genericmsg;
+}
+
+MacMessage mac_msg_create_channel_quality(uint quality_idx)
+{
+	MacMessage genericmsg = mac_msg_create_generic(channel_quality);
+	MacChannelQuality msg = genericmsg->msg.ChannelQuality;
+
+	msg.ctrl_id = channel_quality  & 0b111;
+	msg.channel_quality = quality_idx;
+	return genericmsg;
+}
+
+MacMessage mac_msg_create_keepalive()
+{
+	MacMessage genericmsg = mac_msg_create_generic(keepalive);
+	MacKeepalive msg = genericmsg->msg.Keepalive;
+
+	msg.ctrl_id = keepalive  & 0b111;
+	msg.reserved = 0;
+	return genericmsg;
+}
+
+MacMessage mac_msg_create_control_ack(uint acked_ctrl_id)
+{
+	MacMessage genericmsg = mac_msg_create_generic(control_ack);
+	MacControlAck msg = genericmsg->msg.ControlAck;
+
+	msg.ctrl_id = control_ack  & 0b111;
+	msg.acked_ctrl_id = acked_ctrl_id;
 	return genericmsg;
 }
 
