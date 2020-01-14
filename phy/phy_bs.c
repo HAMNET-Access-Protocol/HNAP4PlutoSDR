@@ -151,7 +151,23 @@ void phy_map_dlctrl(PhyBS phy)
 	free(repacked_b);
 }
 
-int phy_assign_dlctrl_ud(PhyBS phy, uint8_t* assigned_slots, uint userid)
+void phy_assign_dlctrl_ud(PhyBS phy, uint8_t* slot_assignment)
+{
+	for (int i=0; i<NUM_SLOT; i+=2) {
+	    phy->dlctrl_buf[NUM_SLOT/2+i/2].h4 = slot_assignment[i];
+	    phy->dlctrl_buf[NUM_SLOT/2+i/2].l4 = slot_assignment[i+1];
+	}
+}
+
+void phy_assign_dlctrl_uc(PhyBS phy, uint8_t* slot_assignment)
+{
+	for (int i=0; i<NUM_ULCTRL_SLOT; i+=2) {
+	    phy->dlctrl_buf[NUM_SLOT+i/2].h4 = slot_assignment[i];
+	    phy->dlctrl_buf[NUM_SLOT+i/2].l4 = slot_assignment[i+1];
+	}
+}
+
+int phy_assign_dlctrl_ud_user(PhyBS phy, uint8_t* assigned_slots, uint userid)
 {
 	for (int i=0; i<NUM_SLOT; i+=2) {
 		if (assigned_slots[i] == 1) {
@@ -164,7 +180,7 @@ int phy_assign_dlctrl_ud(PhyBS phy, uint8_t* assigned_slots, uint userid)
 	return 0;
 }
 
-int phy_assign_caich_uc(PhyBS phy, uint8_t* assigned_slots, uint userid)
+int phy_assign_caich_uc_user(PhyBS phy, uint8_t* assigned_slots, uint userid)
 {
 	for (int i=0; i<NUM_ULCTRL_SLOT; i+=2) {
 		if (assigned_slots[i] == 1) {
