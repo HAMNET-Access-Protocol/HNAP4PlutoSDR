@@ -9,22 +9,34 @@
 #include "mac_channels.h"
 #include <liquid/liquid.h>
 
-#define CRC_LEN	2 // CRC length in bytes (16bit crc)
 
 // allocate memory for a channel object
-LogicalChannel lchan_create(uint size)
+// Params: 	size: size in bytes
+//			crc_len: 8 for 8bit crc, 16 for 16bit crc
+LogicalChannel lchan_create(uint size, uint crc_len)
 {
+	int crc;
+	if (crc_len == CRC8) {
+		crc=1;
+	} else if (crc_len == CRC16) {
+		crc=2;
+	} else {
+		LOG(ERR,"[MAC CHAN] undefined crc type: %d\n",crc_len);
+		return NULL;
+	}
+
 	LogicalChannel chan = malloc(sizeof(LogicalChannel_s));
 	chan->data = malloc(size);
 	chan->writepos = 0;
 	chan->payload_len = size;
+	chan->crc_type = crc;
 	return chan;
 }
 
 // free the memory allocated for the channel
 void lchan_destroy(LogicalChannel chan)
 {
-	free(chan->payload_len);
+	free(chan->data);
 	free(chan);
 }
 
@@ -42,25 +54,45 @@ int lchan_add_message(LogicalChannel chan, MacMessage msg)
 	return 0;
 }
 
+// Try to get the next MAC message in the channel object
+MacMessage lchan_parse_next_msg(LogicalChannel chan, uint ul_flag)
+{
+	MacMessage msg = NULL;
+	uint8_t* data_start = chan->data+chan->writepos;
+	uint remaining_bytes = chan->payload_len - chan->writepos - chan->crc_type;
+	msg = mac_msg_parse(data_start,remaining_bytes, ul_flag);
+	return msg;
+}
+
 // Get number of bytes which are unused, i.e. can be used to add
 // messages
 int lchan_unused_bytes(LogicalChannel chan)
 {
-	return chan->payload_len - chan->writepos - CRC_LEN;
+	return chan->payload_len - chan->writepos - chan->crc_type;
 }
 
 // Calculate the crc-16 for a logical channel and add it
 // at the end of the payload
 void lchan_calc_crc(LogicalChannel chan)
 {
-	uint16_t crc = crc_generate_key(LIQUID_CRC_16, chan->data, chan->payload_len-2);
-	memcpy(&chan->data[chan->payload_len-2],&crc,2);
+	crc_scheme crc_scheme;
+	if (chan->crc_type == CRC16)
+		crc_scheme = LIQUID_CRC_16;
+	else
+		crc_scheme = LIQUID_CRC_8;
+	uint16_t crc = crc_generate_key(crc_scheme, chan->data, chan->payload_len-chan->crc_type);
+	memcpy(&chan->data[chan->payload_len-chan->crc_type],&crc,chan->crc_type);
 }
 
 // Verify the CRC
 int lchan_verify_crc(LogicalChannel chan)
 {
+	crc_scheme crc_scheme;
+	if (chan->crc_type == CRC8)
+		crc_scheme = LIQUID_CRC_16;
+	else
+		crc_scheme = LIQUID_CRC_8;
 	uint16_t crc;
-	memcpy(&crc, &chan->data[chan->payload_len-2], 2);
-	return crc_validate_message(LIQUID_CRC_16, chan->data, chan->payload_len-2, crc);
+	memcpy(&crc, &chan->data[chan->payload_len-chan->crc_type], chan->crc_type);
+	return crc_validate_message(crc_scheme, chan->data, chan->payload_len-2, crc);
 }

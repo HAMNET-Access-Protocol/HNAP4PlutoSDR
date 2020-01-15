@@ -39,29 +39,6 @@ enum {
 	assoc_resp_success=0,
 	assoc_resp_full
 };
-// Generic struct for Mac Message exchange between Modules
-typedef struct {
-	union {
-		MacAssociateResponse AssociateResponse;
-		MacDLMCSInfo DLMCSInfo;
-		MacULMCSInfo ULMCSInfo;
-		MacTimingAdvance TimingAdvance;
-		MacDLdata DLdata;
-		MacULreq ULreq;
-		MacChannelQuality ChannelQuality;
-		MacKeepalive Keepalive;
-		MacControlAck ControlAck;
-		MacULdata ULdata;
-	} msg;
-	CtrlID_e type;
-	uint8_t hdr_len;
-	uint16_t payload_len;
-	uint8_t* data = NULL;
-
-} MacMessage_s;
-
-typedef MacMessage_s* MacMessage;
-
 
 typedef struct {
 	uint16_t ctrl_id :3;
@@ -121,6 +98,32 @@ typedef struct {
 	uint8_t seqNr : 3;
 	uint8_t fragNr : 5;
 } MacULdata;
+
+// Generic struct for Mac Message exchange between Modules
+typedef struct {
+	union {
+		MacAssociateResponse AssociateResponse;
+		MacDLMCSInfo DLMCSInfo;
+		MacULMCSInfo ULMCSInfo;
+		MacTimingAdvance TimingAdvance;
+		MacDLdata DLdata;
+		MacULreq ULreq;
+		MacChannelQuality ChannelQuality;
+		MacKeepalive Keepalive;
+		MacControlAck ControlAck;
+		MacULdata ULdata;
+	} hdr;
+	CtrlID_e type;
+	uint8_t hdr_len;
+	uint16_t payload_len;
+	uint8_t* data;
+
+} MacMessage_s;
+
+typedef MacMessage_s* MacMessage;
+
+//// Utility functions ////
+int mac_msg_get_hdrlen(CtrlID_e type);
 
 //// Functions for creating/destroying MAC messages ////
 // Downlink

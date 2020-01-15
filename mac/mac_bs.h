@@ -10,9 +10,11 @@
 
 #include "mac_config.h"
 #include "mac_fragmentation.h"
-#include <util/ringbuf.h>
+#include "mac_common.h"
+
+#include "../util/ringbuf.h"
 #include <liquid/liquid.h>
-#include <phy/phy_bs.h>
+#include "../phy/phy_bs.h"
 
 
 typedef struct {
@@ -27,8 +29,10 @@ typedef struct {
 	uint8_t ul_mcs;
 }user_s;
 
+//forward declaration of phy struct that is needed in mac struct
+struct PhyBS_s;
 
-typedef struct {
+struct MacBS_s {
 	ringbuf broadcast_ctrl_queue;
 	MacFrag broadcast_data_fragmenter;
 	user_s* UE[MAX_USER];
@@ -37,11 +41,16 @@ typedef struct {
 	uint8_t ul_data_assignments[MAC_DLDATA_SLOTS];
 	uint8_t dl_data_assignments[MAC_ULDATA_SLOTS];
 
-	PhyBS phy;
-} MacBS_s;
+	struct PhyBS_s* phy;
+};
 
-typedef MacBS_s* MacBS;
+typedef struct MacBS_s* MacBS;
 
-void mac_bs_add_new_ue();
+MacBS mac_bs_init();
+void mac_bs_destroy(MacBS mac);
+
+void mac_bs_add_new_ue(MacBS mac, uint8_t rachuserid, ofdmframesync fs);
+int mac_bs_add_txdata(MacBS mac, uint8_t destUserID, MacDataFrame frame);
+void mac_bs_run_scheduler(MacBS mac);
 
 #endif /* MAC_MAC_BS_H_ */

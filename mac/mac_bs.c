@@ -5,15 +5,16 @@
  *      Author: lukas
  */
 #include "mac_bs.h"
-#include <log.h>
+#include "../log.h"
+
 
 MacBS mac_bs_init()
 {
-	MacBS macinst = malloc(sizeof(MacBS_s));
-	memset(macinst, 0, sizeof(MacBS_s));
+	MacBS macinst = malloc(sizeof(struct MacBS_s));
+	memset(macinst, 0, sizeof(struct MacBS_s));
 
 	for (int i=0; i<MAX_USER; i++) {
-		macinst->UE = NULL;
+		macinst->UE[i] = NULL;
 	}
 	macinst->broadcast_ctrl_queue = ringbuf_create(MAC_MSG_BUF_SIZE);
 	macinst->broadcast_data_fragmenter = mac_frag_init();
@@ -57,18 +58,17 @@ void mac_bs_add_new_ue(MacBS mac, uint8_t rachuserid, ofdmframesync fs)
 }
 
 
-int mac_bs_add_txdata(MacBS mac, uint8_t destUserID, uint8_t* buf, uint buflen)
+int mac_bs_add_txdata(MacBS mac, uint8_t destUserID, MacDataFrame frame)
 {
 	//TODO function arg could be ethernet-MAC packet or sth?
 	user_s* destUser = mac->UE[destUserID];
-	void* data=NULL;
 
 	if (destUser == NULL) {
 		LOG(WARN,"[MAC BS] add_txdata: user %d does not exist!\n",destUserID);
 		return 0;
 	}
 
-	uint ret = mac_frag_add_frame(destUser->fragmenter,buf,buflen);
+	uint ret = mac_frag_add_frame(destUser->fragmenter,frame);
 	if (ret == 0) {
 		LOG(WARN,"[MAC BS] add_txdata: msg queue is full. dropping packet!\n");
 		return 0;
@@ -80,11 +80,11 @@ int mac_bs_add_txdata(MacBS mac, uint8_t destUserID, uint8_t* buf, uint buflen)
 int mac_bs_handle_message(MacBS mac, MacMessage msg, uint8_t userID)
 {
 	user_s* user = mac->UE[userID];
-
+	MacDataFrame frame;
 	switch (msg->type) {
 	case ul_req:
 		// Update the user uplink queue state
-		user->ul_queue=msg->msg->ULreq.packetqueuesize;
+		user->ul_queue=msg->hdr.ULreq.packetqueuesize;
 		break;
 	case channel_quality:
 		LOG(DEBUG, "[MAC BS] channel quality measurement not implemented yet\n");
@@ -94,12 +94,11 @@ int mac_bs_handle_message(MacBS mac, MacMessage msg, uint8_t userID)
 	case control_ack:
 		break;
 	case ul_data:
-		MacDataFrame frame = mac_assmbl_reassemble(user->reassembler,msg);
+		frame = mac_assmbl_reassemble(user->reassembler,msg);
 		if (frame != NULL) {
 			printf("[MAC BS] rec %d bytes: %s\n",frame->size,frame->data);
 			//TODO forward received frame to higher layer
-			free(frame->data);
-			free(frame);
+			dataframe_destroy(frame);
 		}
 		break;
 	default:
@@ -110,15 +109,7 @@ int mac_bs_handle_message(MacBS mac, MacMessage msg, uint8_t userID)
 	return 1;
 }
 
-void mac_dequeue_ctrl_msgs(LogicalChannel lchan, ringbuf ctrl_msg_buf)
-{
-	// TODO: improve check whether there is enough space to add msg. Msg size currently hardcoded
-	while (!ringbuf_isempty(ctrl_msg_buf) && lchan_unused_bytes(lchan)>1) {
-		MacMessage msg = ringbuf_get(ctrl_msg_buf);
-		lchan_add_message(lchan,msg);
-		mac_msg_destroy(msg);
-	}
-}
+
 
 user_s* get_next_user(MacBS mac, uint curr_user)
 {
@@ -144,8 +135,8 @@ void mac_bs_run_scheduler(MacBS mac)
 	// 2. check Broadcast queue
 	LogicalChannel bchan = NULL;
 	if (!ringbuf_isempty(mac->broadcast_ctrl_queue)) {
-		bchan = lchan_create(get_tbs_size(mac->phy,0)/8);
-		mac_dequeue_ctrl_msgs(bchan,mac->broadcast_ctrl_queue);
+		bchan = lchan_create(get_tbs_size(mac->phy->common,0)/8, CRC16);
+		lchan_add_all_msgs(bchan,mac->broadcast_ctrl_queue);
 		// reserve a slot for broadcasting
 		mac->dl_data_assignments[slot_idx++] = USER_BROADCAST;
 	}
@@ -210,9 +201,9 @@ void mac_bs_run_scheduler(MacBS mac)
 		}
 
 		// Generate logical channel
-		uint tbs = get_tbs_size(mac->phy,ue->dl_mcs);
-		LogicalChannel chan = lchan_create(tbs/8);
-		mac_dequeue_ctrl_msgs(chan, ue->msg_control_queue);
+		uint tbs = get_tbs_size(mac->phy->common, ue->dl_mcs);
+		LogicalChannel chan = lchan_create(tbs/8, CRC16);
+		lchan_add_all_msgs(chan, ue->msg_control_queue);
 		if (mac_frag_has_fragment(ue->fragmenter)) {
 			uint payload_size = lchan_unused_bytes(chan);
 			MacMessage msg = mac_frag_get_fragment(ue->fragmenter, payload_size, 0);
@@ -220,11 +211,19 @@ void mac_bs_run_scheduler(MacBS mac)
 			mac_msg_destroy(msg);
 		}
 		lchan_calc_crc(chan);
-        phy_map_dlslot(mac->phy, chan, slot, ue->dl_mcs);
+        phy_map_dlslot(mac->phy, chan, slot, ue->userid, ue->dl_mcs);
         lchan_destroy(chan);
 	}
 
 	// 5.2 set UL assignments
 	phy_assign_dlctrl_ud(mac->phy, mac->ul_data_assignments);
 	phy_assign_dlctrl_uc(mac->phy, mac->ul_ctrl_assignments);
+
+	// Log schedule
+	LOG(DEBUG,"[MAC BS] Scheduler user assignments:\n");
+	LOG(DEBUG,"DL data slots: %4d %4d %4d %4d\n", mac->dl_data_assignments[0],
+			mac->dl_data_assignments[1],mac->dl_data_assignments[2],mac->dl_data_assignments[3]);
+	LOG(DEBUG,"UL data slots: %4d %4d %4d %4d\n", mac->dl_data_assignments[0],
+			mac->ul_data_assignments[1],mac->ul_data_assignments[2],mac->ul_data_assignments[3]);
+	LOG(DEBUG,"UL ctrl slots: %4d %4d\n", mac->ul_ctrl_assignments[0],mac->ul_ctrl_assignments[1]);
 }

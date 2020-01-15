@@ -30,8 +30,11 @@ enum {NO_PILOT, PILOT};		// definition for pilot_symbols variable
 
 // Struct contains PHY variables common to UE and BS Phy layer
 typedef struct {
-	uint subframe;
+	uint rx_subframe;
 	uint rx_symbol;
+	uint tx_subframe;
+	uint tx_symbol;
+
 	uint8_t* pilot_sc;	// defines which subcarriers are used for pilots
 	uint8_t* pilot_symbols; // stores whether the ofdm symbols within a slot contain pilots
 
@@ -60,6 +63,9 @@ int _ofdm_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd);
 
 // returns the Transport Block size of a UL/DL data slot in bits
 int get_tbs_size(PhyCommon phy, uint mcs);
+
+// returns the size of an UL control slot in bits
+int get_ulctrl_slot_size(PhyCommon phy);
 
 // Modulate the given data to the frequency domain data of the Phy object
 // returns the number of symbols that have been generated

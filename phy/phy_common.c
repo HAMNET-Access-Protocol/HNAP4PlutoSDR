@@ -28,31 +28,37 @@ PhyCommon phy_init_common()
 
     // init modulator objects
     phy->mcs_modem[0] = modem_create(LIQUID_MODEM_QPSK);
-    phy->mcs_modem[1] = phy->mcs_modem[0];
+    phy->mcs_modem[1] = modem_create(LIQUID_MODEM_QPSK);
     phy->mcs_modem[2] = modem_create(LIQUID_MODEM_QAM16);
     phy->mcs_modem[3] = modem_create(LIQUID_MODEM_QAM64);
+    phy->mcs_modem[4] = modem_create(LIQUID_MODEM_QAM64);
 
     // init FEC modules
     phy->mcs_fec[0] = fec_create(LIQUID_FEC_CONV_V27, NULL);
-    phy->mcs_fec[1] = fec_create(LIQUID_FEC_CONV_V27P23, NULL);
+    phy->mcs_fec[1] = fec_create(LIQUID_FEC_CONV_V27P34, NULL);
     phy->mcs_fec[2] = fec_create(LIQUID_FEC_CONV_V27, NULL);
     phy->mcs_fec[3] = fec_create(LIQUID_FEC_CONV_V27, NULL);
+    phy->mcs_fec[4] = fec_create(LIQUID_FEC_CONV_V27P34, NULL);
 
     phy->mcs_fec_scheme[0] = LIQUID_FEC_CONV_V27;
-    phy->mcs_fec_scheme[1] = LIQUID_FEC_CONV_V27P23;
+    phy->mcs_fec_scheme[1] = LIQUID_FEC_CONV_V27P34;
     phy->mcs_fec_scheme[2] = LIQUID_FEC_CONV_V27;
     phy->mcs_fec_scheme[3] = LIQUID_FEC_CONV_V27;
+    phy->mcs_fec_scheme[4] = LIQUID_FEC_CONV_V27P34;
 
 
-    // init slot number and rx symbol nr
-    phy->subframe = 0;
+    // init subframe number and rx symbol nr
+    phy->rx_subframe = 0;
     phy->rx_symbol = 0;
+    phy->tx_subframe = 0;
+    phy->tx_symbol = 0;
 
     // init the interleaver
     phy->mcs_interlvr[0] = interleaver_create(get_tbs_size(phy,0)/8);
     phy->mcs_interlvr[1] = interleaver_create(get_tbs_size(phy,1)/8);
     phy->mcs_interlvr[2] = interleaver_create(get_tbs_size(phy,2)/8);
     phy->mcs_interlvr[3] = interleaver_create(get_tbs_size(phy,3)/8);
+    phy->mcs_interlvr[4] = interleaver_create(get_tbs_size(phy,4)/8);
 
     return phy;
 }
@@ -102,6 +108,13 @@ int get_tbs_size(PhyCommon phy, uint mcs)
 	}
 }
 
+int get_ulctrl_slot_size(PhyCommon phy)
+{
+	uint symbols = NUM_DATA_SC;
+	uint enc_bits = symbols*modem_get_bps(phy->mcs_modem[0]); //number of encoded bits
+	return (enc_bits-16)*fec_get_rate(phy->mcs_fec_scheme[0]); // real tbs size. Subtract 16bit for conv encoding
+
+}
 // Modulate the given data to the frequency domain data of the Phy object
 // returns the number of symbols that have been generated
 void phy_mod(PhyCommon common, uint first_sc, uint last_sc, uint first_symb, uint last_symb,

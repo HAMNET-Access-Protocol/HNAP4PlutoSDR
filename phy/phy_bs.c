@@ -11,7 +11,7 @@ int _ofdm_rx_rach_cb(float complex* X,unsigned char* p, uint M, void* rach_buffe
 
 PhyBS phy_init_bs()
 {
-	PhyBS phy = malloc(sizeof(PhyBS_s));
+	PhyBS phy = malloc(sizeof(struct PhyBS_s));
 
 	phy->common = phy_init_common();
 
@@ -74,7 +74,7 @@ void phy_write_subframe(PhyBS phy, float complex* txbuf_time)
 
 
 // create phy data channel in frequency domain
-int phy_map_dlslot(PhyBS phy, LogicalChannel chan, uint8_t slot_nr, uint mcs)
+int phy_map_dlslot(PhyBS phy, LogicalChannel chan, uint8_t slot_nr, uint userid, uint mcs)
 {
 	PhyCommon common = phy->common;
 
@@ -110,9 +110,9 @@ int phy_map_dlslot(PhyBS phy, LogicalChannel chan, uint8_t slot_nr, uint mcs)
 
 	// set dlctrl slot
 	if (slot_nr % 2 == 0) {
-		phy->dlctrl_buf[slot_nr/2].h4 = chan->userid;
+		phy->dlctrl_buf[slot_nr/2].h4 = userid;
 	} else {
-		phy->dlctrl_buf[slot_nr/2].l4 = chan->userid;
+		phy->dlctrl_buf[slot_nr/2].l4 = userid;
 	}
 
 	free(interleaved_b);
@@ -220,6 +220,44 @@ int phy_bs_rx_subframe(PhyBS phy, float complex* rxbuf_time)
 	return 0;
 }
 
+// Main Phy BS send function
+// generate one OFDM symbol of samples
+void phy_bs_do_tx(PhyBS phy, float complex** txbuf_time, uint num_samples)
+{
+	phy->common->
+}
+// Main PHY receive function
+//receive an arbitrary number of samples and process slots once they are received
+void phy_bs_do_rx(PhyBS phy, float complex* rxbuf_time, uint num_samples)
+{
+	uint remaining_samps = num_samples;
+	PhyCommon common = phy->common;
+
+	while (remaining_samps > 0) {
+		// find sync sequence
+		if (!ofdmframesync_is_synced(phy->fs)) {
+			int offset = phy_ue_initial_sync(phy,rxbuf_time,remaining_samps);
+			if (offset!=-1) {
+				remaining_samps -= offset;
+				rxbuf_time += offset;
+				phy->rx_offset =  NFFT+CP_LEN - remaining_samps;
+			} else {
+				remaining_samps = 0;
+			}
+		} else {
+			// receive symbols
+			uint rx_sym = fmin(NFFT+CP_LEN,remaining_samps);
+			if (common->pilot_symbols[common->rx_symbol] == PILOT) {
+				ofdmframesync_execute(phy->fs,rxbuf_time,rx_sym);
+			} else {
+				ofdmframesync_execute_nopilot(phy->fs,rxbuf_time,rx_sym);
+			}
+			remaining_samps -= rx_sym;
+			rxbuf_time += rx_sym;
+		}
+	}
+}
+
 int phy_bs_rx_rach(PhyBS phy, float complex* rxbuf_time)
 {
 	// create new sync context and try to receive sync sequence
@@ -241,6 +279,6 @@ int phy_bs_rx_rach(PhyBS phy, float complex* rxbuf_time)
 
 	uint8_t rach_userid = phy->rach_buffer[0];
 
-	mac_bs_add_new_ue(rach_userid, diff); //TODO correct mac call
+	mac_bs_add_new_ue(phy->mac,rach_userid, phy->fs_rach); //TODO correct mac call
 	return 1;
 }

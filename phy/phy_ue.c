@@ -12,7 +12,7 @@
 // Init the PhyUE struct
 PhyUE phy_init_ue()
 {
-	PhyUE phy = malloc(sizeof(PhyUE_s));
+	PhyUE phy = malloc(sizeof(struct PhyUE_s));
 
 	phy->common = phy_init_common();
 
@@ -29,29 +29,26 @@ PhyUE phy_init_ue()
 	phy->mac_rx_cb = NULL;
 
 	phy->mcs_dl = 0;
-	phy->mcs_ul = 0;
 
 	phy->prev_cfo = 0.0;
+
+	phy->rx_offset = 0;
 
     return phy;
 }
 
 // Sets the callback function that is called after a phy slot was received
-void phy_ue_set_mac_cb(PhyUE phy, void (*mac_rx_cb)(LogicalChannel))
+// and the Mac UE instance
+void phy_ue_set_mac_interface(PhyUE phy, void (*mac_rx_cb)(LogicalChannel), struct MacUE_s* mac)
 {
 	phy->mac_rx_cb = mac_rx_cb;
+	phy->mac = mac;
 }
 
 // Setter function for Downlink MCS
 void phy_ue_set_mcs_dl(PhyUE phy, uint mcs)
 {
 	phy->mcs_dl = mcs;
-}
-
-// Setter function for Uplink MCS
-void phy_ue_set_mcs_ul(PhyUE phy, uint mcs)
-{
-	phy->mcs_ul = mcs;
 }
 
 // Searches for the initial sync sequence
@@ -63,7 +60,7 @@ int phy_ue_initial_sync(PhyUE phy, float complex* rxbuf_time, uint num_samples)
 	int offset = ofdmframesync_find_data_start(phy->fs,rxbuf_time,num_samples);
 	if (offset!=-1) {
 		common->rx_symbol = NFFT - 1; //there is one more guard symbol in this subframe to receive
-		common->subframe = 0;
+		common->rx_subframe = 0;
 
 		//apply filtering of coarse CFO estimation if we have old estimates
 		if (phy->has_synced_once == 0) {
@@ -71,7 +68,7 @@ int phy_ue_initial_sync(PhyUE phy, float complex* rxbuf_time, uint num_samples)
 			phy->prev_cfo = ofdmframesync_get_cfo(phy->fs);
 		} else {
 			float new_cfo = ofdmframesync_get_cfo(phy->fs);
-			float cfo_filt = 0.9*phy->prev_cfo + (1-0.9)*new_cfo;
+			float cfo_filt = 0.1*phy->prev_cfo + (1-0.1)*new_cfo;
 			ofdmframesync_set_cfo(phy->fs,cfo_filt);
 		}
 	}
@@ -102,7 +99,7 @@ int phy_ue_proc_dlctrl(PhyUE phy)
 		return 0; // CRC not valid
 	}
 
-	// pass CAICH data to mac control
+	// pass DL Ctrl slot data to mac control
 	uint idx = 0;
 	for (int i=0; i<NUM_SLOT/2; i++) {
 		phy->dlslot_assignments[2*i  ] = (dlctrl_buf[idx].h4 == common->userid) ? 1 : 0;
@@ -134,8 +131,6 @@ void phy_ue_proc_slot(PhyUE phy, uint slotnr)
 		uint buf_len = 8*fec_get_enc_msg_length(common->mcs_fec_scheme[phy->mcs_dl],blocksize/8);
 		uint8_t* demod_buf = malloc(buf_len);
 
-		LogicalChannel chan = malloc(sizeof(LogicalChannel_s));
-
 		// demodulate signal
 		uint written_samps = 0;
 		uint first_symb = DLCTRL_LEN+2+(SLOT_LEN+1)*slotnr;
@@ -148,10 +143,8 @@ void phy_ue_proc_slot(PhyUE phy, uint slotnr)
 		fec_decode_soft(common->mcs_fec[phy->mcs_dl], blocksize/8, demod_buf, interleaved_b);
 
 		//deinterleaving
-		chan->userid = common->userid;
-		chan->payload_len = blocksize/8;
-		chan->writepos = slotnr; //TODO: this is only for simulation to ind the slot nr
-		chan->data = malloc(blocksize/8);
+		LogicalChannel chan = lchan_create(blocksize/8,CRC16);
+		//chan->writepos = slotnr; //TODO: this is only for simulation to ind the slot nr
 		interleaver_decode(common->mcs_interlvr[phy->mcs_dl],interleaved_b,chan->data);
 
 		// pass to upper layer
@@ -266,7 +259,7 @@ int _ofdm_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd)
 	}
 
 	// sync sequence will follow. Reset framesync
-	if ((common->subframe == 0) &&
+	if ((common->rx_subframe == 0) &&
 			(common->rx_symbol == DLCTRL_LEN+1+SLOT_LEN*3)) {
 		// store old cfo estimation
 		phy->prev_cfo = ofdmframesync_get_cfo(phy->fs);
@@ -275,13 +268,13 @@ int _ofdm_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd)
 
 	// Debug log
 	char name[30];
-	sprintf(name,"rxF/rxF_%d_%d.m",common->subframe,common->rx_symbol-1);
-	//if (common->rx_symbol == 5) {
+	sprintf(name,"rxF/rxF_%d_%d.m",common->rx_subframe,common->rx_symbol-1);
+	if (common->rx_symbol == 5) {
 	LOG_MATLAB_FC(DEBUG,X, NFFT, name);
-	//}
+	}
 	if (common->rx_symbol > NFFT-1) {
 		common->rx_symbol = 0;
-		common->subframe = (common->subframe + 1) % FRAME_LEN;
+		common->rx_subframe = (common->rx_subframe + 1) % FRAME_LEN;
 	}
 
 
@@ -292,28 +285,29 @@ int _ofdm_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd)
 //receive an arbitrary number of samples and process slots once they are received
 void phy_ue_do_rx(PhyUE phy, float complex* rxbuf_time, uint num_samples)
 {
-	static uint8_t has_synced_once = 0;
+	uint remaining_samps = num_samples;
 	PhyCommon common = phy->common;
 
-	while (num_samples > 0) {
+	while (remaining_samps > 0) {
 		// find sync sequence
 		if (!ofdmframesync_is_synced(phy->fs)) {
-			int offset = phy_ue_initial_sync(phy,rxbuf_time,num_samples);
+			int offset = phy_ue_initial_sync(phy,rxbuf_time,remaining_samps);
 			if (offset!=-1) {
-				num_samples -= offset;
+				remaining_samps -= offset;
 				rxbuf_time += offset;
+				phy->rx_offset =  NFFT+CP_LEN - remaining_samps;
 			} else {
-				num_samples = 0;
+				remaining_samps = 0;
 			}
 		} else {
 			// receive symbols
-			uint rx_sym = fmin(NFFT+CP_LEN,num_samples);
+			uint rx_sym = fmin(NFFT+CP_LEN,remaining_samps);
 			if (common->pilot_symbols[common->rx_symbol] == PILOT) {
 				ofdmframesync_execute(phy->fs,rxbuf_time,rx_sym);
 			} else {
 				ofdmframesync_execute_nopilot(phy->fs,rxbuf_time,rx_sym);
 			}
-			num_samples -= rx_sym;
+			remaining_samps -= rx_sym;
 			rxbuf_time += rx_sym;
 		}
 	}
@@ -329,7 +323,7 @@ int phy_map_ulctrl(PhyUE phy, LogicalChannel chan, uint8_t slot_nr)
 
 	uint mcs=0;
 	// fixed MCS 0: r=1/2, bps=2, 16tail bits.
-	uint32_t blocksize = ((NFFT-NUM_GUARD-NUM_PILOT)*2-16)/2;
+	uint32_t blocksize = get_ulctrl_slot_size(phy->common);
 
 	if (blocksize/8 != chan->payload_len) {
 		printf("Error: Wrong TBS\n");

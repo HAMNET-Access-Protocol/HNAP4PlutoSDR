@@ -12,7 +12,10 @@
 
 typedef enum {NO_SYNC, HAS_SYNC} phy_states;
 
-typedef struct {
+// forward declaration of Mac struct
+struct MacUE_s;
+
+struct PhyUE_s {
 	PhyCommon common;	// pointer to common phy objects
 	ofdmframegen fg;	// OFDM frame generator object
 	ofdmframesync fs;	// OFDM frame receiver object
@@ -22,26 +25,28 @@ typedef struct {
 	uint8_t* ulslot_assignments;
 	uint8_t* ulctrl_assignments;
 
-	// Currently used modulation schemes.
+	// Currently used modulation scheme for RX
 	uint mcs_dl;
-	uint mcs_ul;
 
 	// MAC layer function that will be called when a slot was received
 	void (*mac_rx_cb)(LogicalChannel);
+	struct MacUE_s* mac;	// Pointer to MAC layer. Needed to call mac interface function
 
 	// old cfo estimate for filtering
 	float prev_cfo;
 	// Flag stores whether prev_cfo already holds an estimate, i.e. if we were synced before
 	int has_synced_once;
-} PhyUE_s;
 
-typedef PhyUE_s* PhyUE;
+	// Sample offset between buffer start and start of subframe
+	int rx_offset;
+};
+
+typedef struct PhyUE_s* PhyUE;
 
 /************ GENERAL PHY CONFIG FUNCTIONS **********************/
 PhyUE phy_init_ue();
-void phy_ue_set_mac_cb(PhyUE phy, void (*mac_rx_cb)(LogicalChannel));
+void phy_ue_set_mac_interface(PhyUE phy, void (*mac_rx_cb)(LogicalChannel), struct MacUE_s* mac);
 void phy_ue_set_mcs_dl(PhyUE phy, uint mcs);
-void phy_ue_set_mcs_ul(PhyUE phy, uint mcs);
 
 /***************** PHY TX FUNCTIONS *****************************/
 int phy_map_ulslot(PhyUE phy, LogicalChannel chan, uint8_t slot_nr, uint mcs);
