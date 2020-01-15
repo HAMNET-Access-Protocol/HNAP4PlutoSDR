@@ -32,13 +32,13 @@ int main()
 
     modem qammod = modem_create(LIQUID_MODEM_QAM4);
 
-    init_pluto_platform();
+    init_pluto_platform(buf_len);
 
     start = clock();
     while (!stop) {
 
     	printf("tx: %f\n",(clock()-start)*1000.0/CLOCKS_PER_SEC);
-    	pluto_transmit();
+    	pluto_transmit(buf_len);
 
     	printf("rx: %f\n",(clock()-start)*1000.0/CLOCKS_PER_SEC);
 		pluto_receive(buf_out,buf_len);

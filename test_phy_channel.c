@@ -113,7 +113,7 @@ int main_biterr_test() {
     PhyBS phy_bs = phy_init_bs();
     phy_ue = phy_init_ue();
     phy_ue->common->userid = 0x01;
-    phy_ue_set_mac_cb(phy_ue, mac_callback);
+    phy_ue_set_mac_interface(phy_ue, mac_callback, NULL);
     phy_ue_set_mcs_dl(phy_ue, mcs);
 
     LogicalChannel chan = malloc(sizeof(LogicalChannel_s));
@@ -128,18 +128,17 @@ int main_biterr_test() {
         }
 
         // Phy channel mapping
-        chan->userid = 0x01;
         chan->payload_len = tbs/8;
         chan->data = payload;
 
         before = clock();
-        phy_map_dlslot(phy_bs, chan, 0, mcs);
+        phy_map_dlslot(phy_bs, chan, 0, 0x01, mcs);
         chan->data += tbs/8;
-        phy_map_dlslot(phy_bs, chan, 1, mcs);
+        phy_map_dlslot(phy_bs, chan, 1, 0x01, mcs);
         chan->data += tbs/8;
-        phy_map_dlslot(phy_bs, chan, 2, mcs);
+        phy_map_dlslot(phy_bs, chan, 2, 0x01, mcs);
         chan->data += tbs/8;
-        phy_map_dlslot(phy_bs, chan, 3, mcs);
+        phy_map_dlslot(phy_bs, chan, 3, 0x01, mcs);
 
         phy_write_subframe(phy_bs, buf_in);
         elapsed_tx += (clock() - before)*1000.0/CLOCKS_PER_SEC;
@@ -220,12 +219,12 @@ int main_cfo_estimation_test()
 
     channel_cccf_print(channel);
 
-    uint mcs = 3;
+    uint mcs = 4;
 
     PhyBS phy_bs = phy_init_bs();
     phy_ue = phy_init_ue();
     phy_ue->common->userid = 0x01;
-    phy_ue_set_mac_cb(phy_ue, mac_callback_cfo_test);
+    phy_ue_set_mac_interface(phy_ue, mac_callback_cfo_test, NULL);
     phy_ue_set_mcs_dl(phy_ue, mcs);
 
     LogicalChannel chan = malloc(sizeof(LogicalChannel_s));
@@ -240,18 +239,17 @@ int main_cfo_estimation_test()
         }
 
         // Phy channel mapping
-        chan->userid = 0x01;
         chan->payload_len = tbs/8;
         chan->data = payload;
 
         before = clock();
-        phy_map_dlslot(phy_bs, chan, 0, mcs);
+        phy_map_dlslot(phy_bs, chan, 0, 0x01, mcs);
         chan->data += tbs/8;
-        phy_map_dlslot(phy_bs, chan, 1, mcs);
+        phy_map_dlslot(phy_bs, chan, 1, 0x01, mcs);
         chan->data += tbs/8;
-        phy_map_dlslot(phy_bs, chan, 2, mcs);
+        phy_map_dlslot(phy_bs, chan, 2, 0x01, mcs);
         chan->data += tbs/8;
-        phy_map_dlslot(phy_bs, chan, 3, mcs);
+        phy_map_dlslot(phy_bs, chan, 3, 0x01, mcs);
 
         phy_write_subframe(phy_bs, buf_in);
         elapsed_tx += (clock() - before)*1000.0/CLOCKS_PER_SEC;
@@ -339,7 +337,7 @@ int main_sync_cfo_estimation()
     PhyBS phy_bs = phy_init_bs();
     phy_ue = phy_init_ue();
     phy_ue->common->userid = 0x01;
-    phy_ue_set_mac_cb(phy_ue, mac_callback_cfo_test);
+    phy_ue_set_mac_interface(phy_ue, mac_callback_cfo_test, NULL);
     phy_ue_set_mcs_dl(phy_ue, mcs);
 
     LogicalChannel chan = malloc(sizeof(LogicalChannel_s));
@@ -354,18 +352,17 @@ int main_sync_cfo_estimation()
          }
 
          // Phy channel mapping
-         chan->userid = 0x01;
          chan->payload_len = tbs/8;
          chan->data = payload;
 
          before = clock();
-         phy_map_dlslot(phy_bs, chan, 0, mcs);
+         phy_map_dlslot(phy_bs, chan, 0, 0x01, mcs);
          chan->data += tbs/8;
-         phy_map_dlslot(phy_bs, chan, 1, mcs);
+         phy_map_dlslot(phy_bs, chan, 1, 0x01, mcs);
          chan->data += tbs/8;
-         phy_map_dlslot(phy_bs, chan, 2, mcs);
+         phy_map_dlslot(phy_bs, chan, 2, 0x01, mcs);
          chan->data += tbs/8;
-         phy_map_dlslot(phy_bs, chan, 3, mcs);
+         phy_map_dlslot(phy_bs, chan, 3, 0x01, mcs);
 
          phy_write_subframe(phy_bs, buf_in);
          elapsed_tx += (clock() - before)*1000.0/CLOCKS_PER_SEC;

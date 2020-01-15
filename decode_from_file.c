@@ -43,7 +43,7 @@ int main()
 
     phy_ue = phy_init_ue();
     phy_ue->common->userid = 0x01;
-    phy_ue_set_mac_cb(phy_ue, mac_callback);
+    phy_ue_set_mac_interface(phy_ue, mac_callback, NULL);
     phy_ue_set_mcs_dl(phy_ue, mcs);
 
     LogicalChannel chan = malloc(sizeof(LogicalChannel_s));

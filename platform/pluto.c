@@ -7,6 +7,7 @@
 
 
 #include "pluto.h"
+#include <errno.h>
 
 /* helper macros */
 #define MHZ(x) ((long long)(x*1000000.0 + .5))
@@ -160,12 +161,12 @@ bool cfg_ad9361_streaming_ch(struct iio_context *ctx, struct stream_cfg *cfg, en
 	return true;
 }
 
-void init_pluto_platform()
+void init_pluto_platform(uint buf_len)
 {
 	// RX stream config
 	rxcfg.bw_hz = 1703632;   // Analog filter corner freq. Calculated by matlab filter tool
 	rxcfg.fs_hz = KHZ(256*8);   // 8*256khz, decimation is done after this stage
-	rxcfg.lo_hz = MHZ(430); // 430Mhz rf frequency
+	rxcfg.lo_hz = KHZ(430001); // 430Mhz rf frequency
 	rxcfg.rfport = "A_BALANCED"; // port A (select for rf freq.)
 
 	// TX stream config
@@ -175,7 +176,7 @@ void init_pluto_platform()
 	txcfg.rfport = "A"; // port A (select for rf freq.)
 
 	printf("* Acquiring IIO context\n");
-	ASSERT((ctx = iio_create_default_context()) && "No context");
+	ASSERT((ctx = iio_create_local_context()) && "No context");
 	ASSERT(iio_context_get_devices_count(ctx) > 0 && "No devices");
 
 	printf("* Acquiring AD9361 streaming devices\n");
@@ -202,7 +203,7 @@ void init_pluto_platform()
 
 	// Enable dec/int stage of cf-ad9361-lpc / cf-ad9361-dds-core-lpc
 	wr_ch_lli(rx0_i,"sampling_frequency",rxcfg.fs_hz/8);
-	wr_ch_lli(tx0_i,"sampling_frequency",rxcfg.fs_hz/8);
+	wr_ch_lli(tx0_i,"sampling_frequency",txcfg.fs_hz/8);
 
 	printf("* Set TX gain\n");
     // Set TX gain
@@ -220,13 +221,13 @@ void init_pluto_platform()
 	iio_channel_enable(tx0_q);
 
 
-	printf("* Creating non-cyclic IIO buffers with 1 MiS\n");
-	rxbuf = iio_device_create_buffer(rx, (NFFT+CP_LEN)*SUBFRAME_LEN, false);
+	printf("* Creating non-cyclic IIO buffers\n");
+	rxbuf = iio_device_create_buffer(rx, buf_len, false);
 	if (!rxbuf) {
 		perror("Could not create RX buffer");
 		shutdown();
 	}
-	txbuf = iio_device_create_buffer(tx, (NFFT+CP_LEN)*SUBFRAME_LEN, false);
+	txbuf = iio_device_create_buffer(tx, buf_len, false);
 	if (!txbuf) {
 		perror("Could not create TX buffer");
 		shutdown();
@@ -246,7 +247,6 @@ int pluto_prep_tx(float complex* buf_tx, uint buflen)
 	p_end = iio_buffer_end(txbuf);
 	uint i=0;
 	for (p_dat = (char *)iio_buffer_first(txbuf, tx0_i); p_dat < p_end; p_dat += p_inc) {
-		// Example: fill with zeros
 		// 12-bit sample needs to be MSB alligned so shift by 4
 		// https://wiki.analog.com/resources/eval/user-guides/ad-fmcomms2-ebz/software/basic_iq_datafiles#binary_format
 		((int16_t*)p_dat)[0] = (int16_t)(8196.0*creal(buf_tx[i])); // Real (I)
@@ -261,11 +261,11 @@ int pluto_prep_tx(float complex* buf_tx, uint buflen)
 
 // Flushes the TX buffer and transfers data to FPGA
 // so that they will be sent
-void pluto_transmit()
+void pluto_transmit(uint num_samps)
 {
 	ssize_t nbytes_tx;
 	// Schedule TX buffer
-	nbytes_tx = iio_buffer_push(txbuf);
+	nbytes_tx = iio_buffer_push_partial(txbuf, num_samps);
 	if (nbytes_tx < 0) { printf("Error pushing buf %d\n", (int) nbytes_tx); }
 }
 
@@ -277,7 +277,6 @@ int pluto_receive(float complex* buf_rx, uint max_samps)
 	ssize_t nbytes_rx;
 	char *p_dat, *p_start;
 	ptrdiff_t p_inc;
-
 
 	// Refill RX buffer
 	nbytes_rx = iio_buffer_refill(rxbuf);
