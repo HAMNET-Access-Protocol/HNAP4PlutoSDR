@@ -4,10 +4,17 @@
 
 // callback for OFDM RACH receiver object
 // is called for every symbol that is received
-int _ofdm_rx_rach_cb(float complex* X,unsigned char* p, uint M, void* rach_buffer) {
-	memcpy((uint8_t*)rach_buffer,X,sizeof(float complex)*NFFT);
+int _ofdm_rx_rach_cb(float complex* X,unsigned char* p, uint M, void* userd)
+{
+	PhyBS phy = (PhyBS)userd;
+	memcpy(phy->rach_buffer,X,sizeof(float complex)*NFFT);
+	phy_bs_proc_rach(phy, phy->rach_timing);
+
 	return 0;
 }
+
+// callback declaration
+int _bs_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd);
 
 PhyBS phy_init_bs()
 {
@@ -19,15 +26,26 @@ PhyBS phy_init_bs()
 	phy->fg = ofdmframegen_create(NFFT, CP_LEN, 0, phy->common->pilot_sc);
 
 	// Create OFDM receiver
-	for (int i=0; i<MAX_USER; i++) {
-		phy->fs[i] = NULL;
-	}
+	//TODO: use different ofdmframesync structs for different users
+	phy->fs = ofdmframesync_create(NFFT,CP_LEN,0,phy->common->pilot_sc,_bs_rx_symbol_cb, phy);
 	phy->fs_rach = NULL;;
 
     // alloc buffer for dl control slot
     phy->dlctrl_buf = calloc((NFFT-NUM_GUARD)*DLCTRL_LEN/8, 1);
 
-    phy->rach_buffer = calloc((NFFT-NUM_GUARD)/8, 1);
+	// Alloc memory for slot assignments
+	phy->ulslot_assignments = malloc(2*sizeof(uint8_t*));
+	phy->ulctrl_assignments = malloc(2*sizeof(uint8_t*));
+
+	for (int i=0; i<2; i++) {
+		phy->ulslot_assignments[i] = calloc(sizeof(uint8_t),NUM_SLOT);
+		phy->ulctrl_assignments[i] = calloc(sizeof(uint8_t),NUM_ULCTRL_SLOT);
+	}
+
+    // Set RX position
+    phy->common->rx_symbol = SUBFRAME_LEN - DL_UL_SHIFT;
+    phy->common->rx_subframe = FRAME_LEN -1;
+    phy->rach_timing = 0;
 
     return phy;
 }
@@ -45,6 +63,7 @@ void phy_make_syncsig(PhyBS phy, float complex* txbuf_time)
 
 // Write one slot into time domain buffer
 // do fft of subcarrier allocation
+// Deprecated! use write_symbol()
 void phy_write_subframe(PhyBS phy, float complex* txbuf_time)
 {
 	PhyCommon common = phy->common;
@@ -55,7 +74,7 @@ void phy_write_subframe(PhyBS phy, float complex* txbuf_time)
 	// do ofdm modulation
 	for (int i=0; i<SUBFRAME_LEN; i++) {
 		// check if we have to add synch sequence in this subframe
-		if (common->subframe == 0 && i>=SUBFRAME_LEN-SYNC_SYMBOLS) {
+		if (common->tx_subframe == 0 && i>=SUBFRAME_LEN-SYNC_SYMBOLS) {
 			phy_make_syncsig(phy, txbuf_time);
 			break;
 		}
@@ -67,9 +86,6 @@ void phy_write_subframe(PhyBS phy, float complex* txbuf_time)
 		}
 		txbuf_time += NFFT+CP_LEN;
 	}
-
-	common->subframe = (common->subframe + 1) % FRAME_LEN;
-
 }
 
 
@@ -153,6 +169,9 @@ void phy_map_dlctrl(PhyBS phy)
 
 void phy_assign_dlctrl_ud(PhyBS phy, uint8_t* slot_assignment)
 {
+	uint sfn = (phy->common->tx_subframe +1) %2;
+	memcpy(phy->ulslot_assignments[sfn], slot_assignment, NUM_SLOT);
+
 	for (int i=0; i<NUM_SLOT; i+=2) {
 	    phy->dlctrl_buf[NUM_SLOT/2+i/2].h4 = slot_assignment[i];
 	    phy->dlctrl_buf[NUM_SLOT/2+i/2].l4 = slot_assignment[i+1];
@@ -161,6 +180,9 @@ void phy_assign_dlctrl_ud(PhyBS phy, uint8_t* slot_assignment)
 
 void phy_assign_dlctrl_uc(PhyBS phy, uint8_t* slot_assignment)
 {
+	uint sfn = (phy->common->tx_subframe +1) %2;
+	memcpy(phy->ulslot_assignments[sfn], slot_assignment, NUM_ULCTRL_SLOT);
+
 	for (int i=0; i<NUM_ULCTRL_SLOT; i+=2) {
 	    phy->dlctrl_buf[NUM_SLOT+i/2].h4 = slot_assignment[i];
 	    phy->dlctrl_buf[NUM_SLOT+i/2].l4 = slot_assignment[i+1];
@@ -193,6 +215,132 @@ int phy_assign_caich_uc_user(PhyBS phy, uint8_t* assigned_slots, uint userid)
 	return 0;
 }
 
+// Decode a PHY ul slot and call the MAC callback function
+void phy_bs_proc_slot(PhyBS phy, uint slotnr)
+{
+	PhyCommon common = phy->common;
+	uint sfn = common->rx_subframe %2;
+	//get user that was supposed to send in this slot
+	uint userid =  phy->ulslot_assignments[sfn][slotnr];
+	uint mcs = phy->mac->UE[userid]->ul_mcs; // TODO create method to fetch this?
+	uint32_t blocksize = get_tbs_size(common, mcs);
+
+	uint buf_len = 8*fec_get_enc_msg_length(common->mcs_fec_scheme[mcs],blocksize/8);
+	uint8_t* demod_buf = malloc(buf_len);
+
+	// demodulate signal
+	uint written_samps = 0;
+	uint first_symb = (SLOT_LEN+1)*slotnr;
+	uint last_symb = (SLOT_LEN+1)*(slotnr+1)-2; //TODO use more constants and explain how to calc this
+	// slot 3 and 4 are shifted back since the ULCTRL lies between slot 2 and 3
+	if(slotnr>=2) {
+		first_symb += 4;
+		last_symb +=4;
+	}
+	phy_demod_soft(common, 0, NFFT-1, first_symb, last_symb, mcs,
+				   demod_buf, buf_len, &written_samps);
+
+	// decoding
+	uint8_t* interleaved_b = malloc(blocksize/8);
+	fec_decode_soft(common->mcs_fec[mcs], blocksize/8, demod_buf, interleaved_b);
+
+	//deinterleaving
+	LogicalChannel chan = lchan_create(blocksize/8,CRC16);
+	interleaver_decode(common->mcs_interlvr[mcs],interleaved_b,chan->data);
+
+	// pass to upper layer
+	mac_bs_rx_channel(phy->mac,chan, userid);
+	free(interleaved_b);
+	free(demod_buf);
+}
+
+// Decode a PHY ul ctrl slot and call the MAC callback function
+void phy_bs_proc_ulctrl(PhyBS phy, uint slotnr)
+{
+	PhyCommon common = phy->common;
+	uint sfn = common->rx_subframe %2;
+
+	//get user that was supposed to send in this slot
+	uint userid =  phy->ulctrl_assignments[sfn][slotnr];
+	uint mcs = 0; // CTRL slots use MCS 0
+	uint32_t blocksize = get_ulctrl_slot_size(common);
+
+	uint buf_len = 8*fec_get_enc_msg_length(common->mcs_fec_scheme[mcs],blocksize/8);
+	uint8_t* demod_buf = malloc(buf_len);
+
+	// demodulate signal
+	uint written_samps = 0;
+	uint first_symb = (SLOT_LEN+1)*2 + 2*slotnr;
+	uint last_symb  = (SLOT_LEN+1)*2 + 2*slotnr; //TODO use more constants and explain how to calc this
+
+	phy_demod_soft(common, 0, NFFT-1, first_symb, last_symb, mcs,
+				   demod_buf, buf_len, &written_samps);
+
+	// decoding
+	uint8_t* interleaved_b = malloc(blocksize/8);
+	fec_decode_soft(common->mcs_fec[mcs], blocksize/8, demod_buf, interleaved_b);
+
+	//deinterleaving
+	LogicalChannel chan = lchan_create(blocksize/8,CRC8);
+	interleaver_decode(common->mcs_interlvr[mcs],interleaved_b,chan->data);
+
+	// pass to upper layer
+	mac_bs_rx_channel(phy->mac,chan, userid);
+	free(interleaved_b);
+	free(demod_buf);
+}
+
+// callback for OFDM receiver
+// is called for every symbol that is received
+int _bs_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd)
+{
+	PhyBS phy = (PhyBS)userd;
+	PhyCommon common = phy->common;
+
+	memcpy(common->rxdata_f[common->rx_symbol++],X,sizeof(float complex)*NFFT);
+
+	switch (common->rx_symbol) {
+	case (SLOT_LEN):
+		// finished receiving one of the UL slots
+		phy_bs_proc_slot(phy, 0);
+		break;
+	case (2*SLOT_LEN+1):
+		// finished receiving one of the UL slots
+		phy_bs_proc_slot(phy, 1);
+		break;
+	case 2*(SLOT_LEN+1)+1:
+		// finished receiving first ULCTRL slot
+		phy_bs_proc_ulctrl(phy, 0);
+		break;
+	case 2*(SLOT_LEN+1)+3:
+		// finished receiving second ULCTRL slot
+		phy_bs_proc_ulctrl(phy,1);
+		break;
+	case 2*(SLOT_LEN+1)+4+SLOT_LEN:
+		// finished receiving one of the UL slots
+		phy_ue_proc_slot(phy,2);
+		break;
+	case 3*(SLOT_LEN+1)+4+SLOT_LEN:
+		// finished receiving one of the UL slots
+		phy_ue_proc_slot(phy,3);
+		break;
+	default:
+		break;
+	}
+
+	// Debug log
+	char name[30];
+	sprintf(name,"rxF/rxF_%d_%d.m",common->rx_subframe,common->rx_symbol-1);
+	if (common->rx_symbol == 5) {
+	LOG_MATLAB_FC(DEBUG,X, NFFT, name);
+	}
+	if (common->rx_symbol > NFFT-1) {
+		common->rx_symbol = 0;
+		common->rx_subframe = (common->rx_subframe + 1) % FRAME_LEN;
+	}
+
+	return 0;
+}
 
 int phy_bs_rx_subframe(PhyBS phy, float complex* rxbuf_time)
 {
@@ -201,7 +349,7 @@ int phy_bs_rx_subframe(PhyBS phy, float complex* rxbuf_time)
 	common->rx_symbol = 0;
 
 	uint sf_len = SUBFRAME_LEN;
-	if (common->subframe == FRAME_LEN-1) {
+	if (common->tx_subframe == FRAME_LEN-1) {
 		sf_len -= SYNC_SYMBOLS;
 	}
 
@@ -220,65 +368,118 @@ int phy_bs_rx_subframe(PhyBS phy, float complex* rxbuf_time)
 	return 0;
 }
 
-// Main Phy BS send function
-// generate one OFDM symbol of samples
-void phy_bs_do_tx(PhyBS phy, float complex** txbuf_time, uint num_samples)
+// Create one OFDM symbol in time domain
+// Subcarriers in frequency have to be set beforehand!
+void phy_bs_write_symbol(PhyBS phy, float complex* txbuf_time)
 {
-	phy->common->
-}
-// Main PHY receive function
-//receive an arbitrary number of samples and process slots once they are received
-void phy_bs_do_rx(PhyBS phy, float complex* rxbuf_time, uint num_samples)
-{
-	uint remaining_samps = num_samples;
 	PhyCommon common = phy->common;
-
-	while (remaining_samps > 0) {
-		// find sync sequence
-		if (!ofdmframesync_is_synced(phy->fs)) {
-			int offset = phy_ue_initial_sync(phy,rxbuf_time,remaining_samps);
-			if (offset!=-1) {
-				remaining_samps -= offset;
-				rxbuf_time += offset;
-				phy->rx_offset =  NFFT+CP_LEN - remaining_samps;
-			} else {
-				remaining_samps = 0;
-			}
+	uint tx_symb = common->tx_symbol;
+	if (common->tx_active) {
+		// check if we have to add synch sequence in this subframe
+		if (common->tx_subframe == 0 && tx_symb == SUBFRAME_LEN-SYNC_SYMBOLS) {
+			ofdmframegen_reset(phy->fg);
+			ofdmframegen_write_S0a(phy->fg, txbuf_time);
+		} else if (common->tx_subframe == 0 && tx_symb == SUBFRAME_LEN-SYNC_SYMBOLS+1) {
+			ofdmframegen_write_S0b(phy->fg, txbuf_time);
+		} else if (common->tx_subframe == 0 && tx_symb == SUBFRAME_LEN-SYNC_SYMBOLS+2) {
+			ofdmframegen_write_S1(phy->fg, txbuf_time);
+		} else if (common->pilot_symbols[tx_symb] == PILOT) {
+		    ofdmframegen_writesymbol(phy->fg, common->txdata_f[tx_symb],txbuf_time);
 		} else {
-			// receive symbols
-			uint rx_sym = fmin(NFFT+CP_LEN,remaining_samps);
-			if (common->pilot_symbols[common->rx_symbol] == PILOT) {
-				ofdmframesync_execute(phy->fs,rxbuf_time,rx_sym);
-			} else {
-				ofdmframesync_execute_nopilot(phy->fs,rxbuf_time,rx_sym);
-			}
-			remaining_samps -= rx_sym;
-			rxbuf_time += rx_sym;
+			ofdmframegen_writesymbol_nopilot(phy->fg, common->txdata_f[tx_symb],txbuf_time);
 		}
 	}
+
+	// Update subframe and symbol counter
+	common->tx_symbol++;
+	if (common->tx_symbol>=SUBFRAME_LEN) {
+		common->tx_symbol = 0;
+		common->tx_subframe = (common->tx_subframe+1) % FRAME_LEN;
+	}
 }
 
-int phy_bs_rx_rach(PhyBS phy, float complex* rxbuf_time)
+// Main PHY receive function
+//receive one ofdm symbol amount of samples and process them
+// NOTE: in constrast to the phyUE receive function, the amount of processed
+// 		 samples per call is fixed
+void phy_bs_rx_symbol(PhyBS phy, float complex* rxbuf_time)
 {
-	// create new sync context and try to receive sync sequence
-	phy->fs_rach = ofdmframesync_create(NFFT,CP_LEN,0,phy->common->pilot_sc,_ofdm_rx_rach_cb, phy->rach_buffer);
-	uint offset = ofdmframesync_find_data_start(phy->fs_rach, rxbuf_time,(NFFT+CP_LEN)*(SLOT_LEN)); //TODO correct length
-	if (offset == -1) {
-		// no transmission detected
+	PhyCommon common = phy->common;
+	uint rx_sym = NFFT+CP_LEN;
+
+	// If we are in Random Access slot, check for new users
+	if (common->rx_subframe == 0 && common->rx_symbol==NFFT-SLOT_LEN-2) {
+		// create rach receiver object and sync
 		ofdmframesync_destroy(phy->fs_rach);
-		return 0;
+		phy->fs_rach = ofdmframesync_create(NFFT,CP_LEN,0,phy->common->pilot_sc,_ofdm_rx_rach_cb, phy);
+
+		if (phy->fs_rach && !ofdmframesync_is_synced(phy->fs_rach)) {
+			uint offset = ofdmframesync_find_data_start(phy->fs_rach, rxbuf_time, rx_sym);
+			if (offset != -1) {
+				phy->rach_timing = offset + (NFFT+CP_LEN)*(common->rx_symbol-(SUBFRAME_LEN-SLOT_LEN));
+				// rach can be unaligned to symbol boundaries. receive rx_sym-offset samps
+				ofdmframesync_execute(phy->fs_rach, rxbuf_time+offset,rx_sym-offset);
+			}
+		} else if (phy->fs_rach){
+			// receive the last samps of the association request
+			ofdmframesync_execute(phy->fs_rach, rxbuf_time, phy->rach_timing % (NFFT+CP_LEN));
+		}
+		// during rach we have to manually update the counters
+		common->rx_symbol++;
+		if (common->rx_symbol == SUBFRAME_LEN) {
+			common->rx_subframe++;
+			common->rx_symbol = 0;
+		}
 	}
 
-	// get timing advance
-	uint diff = offset - (NFFT+CP_LEN)*SYNC_SYMBOLS;
+	// not in RA slot. Do normal receive
+	if (common->pilot_symbols[common->rx_symbol] == PILOT) {
+		ofdmframesync_execute(phy->fs,rxbuf_time,rx_sym);
+	} else {
+		ofdmframesync_execute_nopilot(phy->fs,rxbuf_time,rx_sym);
+	}
+}
 
-	// receive control message
-	ofdmframesync_execute(phy->fs_rach, rxbuf_time, NFFT+CP_LEN);
+int phy_bs_proc_rach(PhyBS phy, uint timing_diff)
+{
+	PhyCommon common = phy->common;
 
-	// rx_rach callback has filled phy->rach_buffer. Decode here
+	uint mcs = 0; // CTRL slots use MCS 0
+	uint32_t blocksize = get_ulctrl_slot_size(common);
 
-	uint8_t rach_userid = phy->rach_buffer[0];
+	uint buf_len = 8*fec_get_enc_msg_length(common->mcs_fec_scheme[mcs],blocksize/8);
+	uint8_t* demod_buf = malloc(buf_len);
 
-	mac_bs_add_new_ue(phy->mac,rach_userid, phy->fs_rach); //TODO correct mac call
+	// demodulate signal
+	uint written_samps = 0, symbol = 0;
+	for (int i=0; i<NFFT; i++) {
+		if (common->pilot_sc[i] == OFDMFRAME_SCTYPE_DATA) {
+			modem_demodulate_soft(common->mcs_modem[mcs], phy->rach_buffer[i], &symbol, &demod_buf[written_samps]);
+			written_samps += modem_get_bps(common->mcs_modem[mcs]);
+		}
+	}
+
+	// decoding
+	uint8_t* interleaved_b = malloc(blocksize/8);
+	fec_decode_soft(common->mcs_fec[mcs], blocksize/8, demod_buf, interleaved_b);
+
+	//deinterleaving
+	LogicalChannel chan = lchan_create(blocksize/8,CRC8);
+	interleaver_decode(common->mcs_interlvr[mcs],interleaved_b,chan->data);
+
+	free(interleaved_b);
+	free(demod_buf);
+
+	// TODO Fix definition of Associate Request message
+	if (lchan_verify_crc(chan)) {
+		uint8_t rach_userid = chan->data[0];
+		mac_bs_add_new_ue(phy->mac,rach_userid, phy->fs_rach, timing_diff);
+	}
+	lchan_destroy(chan);
+
+	// TODO correctly handle the framesync object
+	phy->fs = phy->fs_rach;
+	//set to NULL to ensure RA procedure does not use sync object anymore
+	phy->fs_rach = NULL;
 	return 1;
 }

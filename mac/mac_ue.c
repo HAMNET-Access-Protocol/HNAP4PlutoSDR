@@ -39,7 +39,8 @@ int mac_ue_handle_message(MacUE mac, MacMessage msg)
 		// Check whether we were successfully added
 		if (msg->hdr.AssociateResponse.response == assoc_resp_success) {
 			mac->is_associated = 1;
-			LOG(INFO,"[MAC UE] successfully associated!\n");
+			mac->userid = msg->hdr.AssociateResponse.userid;
+			LOG(INFO,"[MAC UE] successfully associated! userid: %d\n",mac->userid);
 		} else {
 			LOG(INFO,"[MAC UE] NACK for assoc req: response is %d\n",msg->hdr.AssociateResponse.response);
 		}
@@ -57,7 +58,8 @@ int mac_ue_handle_message(MacUE mac, MacMessage msg)
 		// TODO generate answer
 		break;
 	case timing_advance:
-		// TODO implement timing advance
+		mac->timing_advance = msg->hdr.TimingAdvance.timingAdvance;
+		LOG(INFO,"[MAC UE] Updated TimingAdvance to: %d\n",mac->timing_advance);
 		break;
 	case dl_data:
 		frame = mac_assmbl_reassemble(mac->reassembler, msg);
@@ -165,4 +167,9 @@ void mac_ue_rx_channel(MacUE mac, LogicalChannel chan)
 int mac_ue_add_txdata(MacUE mac, MacDataFrame frame)
 {
 	return mac_frag_add_frame(mac->fragmenter, frame);
+}
+
+int mac_ue_is_associated(MacUE mac)
+{
+	return mac->is_associated;
 }

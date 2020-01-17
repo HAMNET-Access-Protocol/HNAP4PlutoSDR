@@ -25,6 +25,7 @@ typedef struct {
 	MacFrag fragmenter;
 	MacAssmbl reassembler;
 
+	uint timingadvance;
 	uint8_t dl_mcs;				// The mcs schemes used for the user
 	uint8_t ul_mcs;
 }user_s;
@@ -49,8 +50,10 @@ typedef struct MacBS_s* MacBS;
 MacBS mac_bs_init();
 void mac_bs_destroy(MacBS mac);
 
-void mac_bs_add_new_ue(MacBS mac, uint8_t rachuserid, ofdmframesync fs);
+void mac_bs_add_new_ue(MacBS mac, uint8_t rachuserid, ofdmframesync fs, uint timingadvance);
+void mac_bs_set_timingadvance(MacBS mac, uint userid, uint timingadvance);
 int mac_bs_add_txdata(MacBS mac, uint8_t destUserID, MacDataFrame frame);
+void mac_bs_rx_channel(MacBS mac, LogicalChannel chan, uint userid);
 void mac_bs_run_scheduler(MacBS mac);
 
 #endif /* MAC_MAC_BS_H_ */

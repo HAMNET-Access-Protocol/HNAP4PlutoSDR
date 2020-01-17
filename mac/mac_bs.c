@@ -27,7 +27,7 @@ void mac_bs_destroy(MacBS mac)
 	// TODO mac bs destroy
 }
 
-void mac_bs_add_new_ue(MacBS mac, uint8_t rachuserid, ofdmframesync fs)
+void mac_bs_add_new_ue(MacBS mac, uint8_t rachuserid, ofdmframesync fs, uint timingadvance)
 {
 	MacMessage response;
 	// find the first unused userid
@@ -51,10 +51,16 @@ void mac_bs_add_new_ue(MacBS mac, uint8_t rachuserid, ofdmframesync fs)
 		new_ue->fs = fs;
 		mac->UE[userid] = new_ue;
 		response = mac_msg_create_associate_response(userid,rachuserid, assoc_resp_success);
+
+		// Inform the UE of its TA
+		mac_bs_update_timingadvance(mac, userid, timingadvance);
 	}
 
 	// Response will be sent via broadcast channel
-	ringbuf_put(mac->broadcast_ctrl_queue,(void*)response);
+	ringbuf_put(mac->broadcast_ctrl_queue, response);
+
+
+
 }
 
 
@@ -74,6 +80,19 @@ int mac_bs_add_txdata(MacBS mac, uint8_t destUserID, MacDataFrame frame)
 		return 0;
 	}
 	return 1;
+}
+
+// Set new timing advance parameter and generate a control message
+// to inform the UE
+void mac_bs_update_timingadvance(MacBS mac, uint userid, uint timingadvance)
+{
+	if (mac->UE[userid]) {
+		mac->UE[userid]->timingadvance = timingadvance;
+		MacMessage msg = mac_msg_create_timing_advance(timingadvance);
+		ringbuf_put(mac->UE[userid]->msg_control_queue, msg);
+	} else {
+		LOG(ERR,"[MAC BS] cannot set TA for user %d. Does not exist\n",userid);
+	}
 }
 
 // Handle incoming messages from PHY layer
@@ -109,7 +128,28 @@ int mac_bs_handle_message(MacBS mac, MacMessage msg, uint8_t userID)
 	return 1;
 }
 
+// Main interface function that is called from PHY when receiving a
+// logical channel. Function will extract messages and call
+// the message handler
+void mac_bs_rx_channel(MacBS mac, LogicalChannel chan, uint userid)
+{
+	// Verify the CRC
+	if(!lchan_verify_crc(chan)) {
+		LOG(INFO, "[MAC BS] lchan CRC invalid. Dropping.\n");
+		return;
+	}
 
+	MacMessage msg = NULL;
+	// Get all messages from the logical channel and handle them
+	do {
+		lchan_parse_next_msg(chan, 1);
+		if (msg) {
+			mac_bs_handle_message(mac,msg, userid);
+		}
+	} while (msg != NULL);
+
+	lchan_destroy(chan);
+}
 
 user_s* get_next_user(MacBS mac, uint curr_user)
 {
@@ -189,7 +229,7 @@ void mac_bs_run_scheduler(MacBS mac)
 
 	// Assign UL ctrl slots
 	// TODO correctly assign UL ctrl slots. This assigns to userids that are inactive
-	uint id = mac->phy->common->subframe *2;
+	uint id = mac->phy->common->tx_subframe *2;
 	mac->ul_ctrl_assignments[0] = id;
 	mac->ul_ctrl_assignments[1] = id+1;
 
@@ -218,6 +258,8 @@ void mac_bs_run_scheduler(MacBS mac)
 	// 5.2 set UL assignments
 	phy_assign_dlctrl_ud(mac->phy, mac->ul_data_assignments);
 	phy_assign_dlctrl_uc(mac->phy, mac->ul_ctrl_assignments);
+	// write the Downlink control channel to the subcarriers
+	phy_map_dlctrl(mac->phy);
 
 	// Log schedule
 	LOG(DEBUG,"[MAC BS] Scheduler user assignments:\n");

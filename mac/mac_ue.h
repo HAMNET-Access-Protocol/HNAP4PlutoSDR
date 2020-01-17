@@ -25,7 +25,7 @@ struct MacUE_s {
 	MacFrag fragmenter;
 	MacAssmbl reassembler;
 
-	uint8_t ul_ctrl_assignments[MAC_ULCTRL_SLOTS];
+	uint8_t ul_ctrl_assignments[MAC_ULCTRL_SLOTS]; //TODO the assignments are already defined in PHY instance
 	uint8_t ul_data_assignments[MAC_DLDATA_SLOTS];
 	uint8_t dl_data_assignments[MAC_ULDATA_SLOTS];
 
@@ -44,5 +44,6 @@ void mac_ue_set_phy_interface(MacUE mac, PhyUE phy);
 void mac_ue_run_scheduler(MacUE mac);
 void mac_ue_rec_channel(MacUE mac, LogicalChannel chan);
 int  mac_ue_add_txdata(MacUE mac, MacDataFrame frame);
+int  mac_ue_is_associated(MacUE mac);
 
 #endif /* MAC_MAC_UE_H_ */
