@@ -8,6 +8,10 @@
 #include "phy_ue.h"
 
 #include "../log.h"
+#include <pthread.h>
+
+// callback declaration
+int _ue_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd);
 
 // Init the PhyUE struct
 PhyUE phy_init_ue()
@@ -20,11 +24,18 @@ PhyUE phy_init_ue()
 	phy->fg = ofdmframegen_create(NFFT, CP_LEN, 0, phy->common->pilot_sc);
 
 	// Create OFDM receiver
-	phy->fs = ofdmframesync_create(NFFT, CP_LEN, 0, phy->common->pilot_sc, _ofdm_rx_symbol_cb, phy);
+	phy->fs = ofdmframesync_create(NFFT, CP_LEN, 0, phy->common->pilot_sc, _ue_rx_symbol_cb, phy);
 
-	phy->dlslot_assignments = calloc(1,NUM_SLOT);
-	phy->ulslot_assignments = calloc(1,NUM_SLOT);
-	phy->ulctrl_assignments = calloc(1,NUM_ULCTRL_SLOT);
+	// Alloc memory for slot assignments
+	phy->dlslot_assignments = malloc(2*sizeof(uint8_t*));
+	phy->ulslot_assignments = malloc(2*sizeof(uint8_t*));
+	phy->ulctrl_assignments = malloc(2*sizeof(uint8_t*));
+
+	for (int i=0; i<2; i++) {
+		phy->dlslot_assignments[i] = calloc(sizeof(uint8_t),NUM_SLOT);
+		phy->ulslot_assignments[i] = calloc(sizeof(uint8_t),NUM_SLOT);
+		phy->ulctrl_assignments[i] = calloc(sizeof(uint8_t),NUM_ULCTRL_SLOT);
+	}
 
 	phy->mac_rx_cb = NULL;
 
@@ -33,6 +44,10 @@ PhyUE phy_init_ue()
 	phy->prev_cfo = 0.0;
 
 	phy->rx_offset = 0;
+
+	// Init mutexes etc
+	phy->tx_sync_cond = (pthread_cond_t)PTHREAD_COND_INITIALIZER;
+	phy->tx_sync_lock = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER;
 
     return phy;
 }
@@ -61,6 +76,9 @@ int phy_ue_initial_sync(PhyUE phy, float complex* rxbuf_time, uint num_samples)
 	if (offset!=-1) {
 		common->rx_symbol = NFFT - 1; //there is one more guard symbol in this subframe to receive
 		common->rx_subframe = 0;
+		common->tx_subframe = 0;
+		common->tx_symbol = NFFT - 1 - DL_UL_SHIFT;
+		common->tx_active = 1;
 
 		//apply filtering of coarse CFO estimation if we have old estimates
 		if (phy->has_synced_once == 0) {
@@ -82,6 +100,7 @@ int phy_ue_proc_dlctrl(PhyUE phy)
 {
 	const PhyCommon common = phy->common;
 	uint dlctrl_size = (NUM_SLOT*2 + NUM_ULCTRL_SLOT)/2;
+	uint sfn = common->rx_subframe % 2; // even or uneven subframe?
 
 	// demodulate signal.
 	uint llr_len = 2*DLCTRL_LEN*(NFFT-NUM_GUARD);
@@ -102,16 +121,16 @@ int phy_ue_proc_dlctrl(PhyUE phy)
 	// pass DL Ctrl slot data to mac control
 	uint idx = 0;
 	for (int i=0; i<NUM_SLOT/2; i++) {
-		phy->dlslot_assignments[2*i  ] = (dlctrl_buf[idx].h4 == common->userid) ? 1 : 0;
-		phy->dlslot_assignments[2*i+1] = (dlctrl_buf[idx++].l4 == common->userid) ? 1 : 0;
+		phy->dlslot_assignments[sfn][2*i  ] = (dlctrl_buf[idx].h4 == common->userid) ? 1 : 0;
+		phy->dlslot_assignments[sfn][2*i+1] = (dlctrl_buf[idx++].l4 == common->userid) ? 1 : 0;
 	}
 	for (int i=0; i<NUM_SLOT/2; i++) {
-		phy->ulslot_assignments[2*i  ] = (dlctrl_buf[idx].h4 == common->userid) ? 1 : 0;
-		phy->ulslot_assignments[2*i+1] = (dlctrl_buf[idx++].l4 == common->userid) ? 1 : 0;
+		phy->ulslot_assignments[sfn][2*i  ] = (dlctrl_buf[idx].h4 == common->userid) ? 1 : 0;
+		phy->ulslot_assignments[sfn][2*i+1] = (dlctrl_buf[idx++].l4 == common->userid) ? 1 : 0;
 	}
 	for (int i=0; i<NUM_ULCTRL_SLOT/2; i++) {
-		phy->ulctrl_assignments[2*i  ] = (dlctrl_buf[idx].h4 == common->userid) ? 1 : 0;
-		phy->ulctrl_assignments[2*i+1] = (dlctrl_buf[idx++].l4 == common->userid) ? 1 : 0;
+		phy->ulctrl_assignments[sfn][2*i  ] = (dlctrl_buf[idx].h4 == common->userid) ? 1 : 0;
+		phy->ulctrl_assignments[sfn][2*i+1] = (dlctrl_buf[idx++].l4 == common->userid) ? 1 : 0;
 	}
 
 	free(llr_buf);
@@ -123,8 +142,7 @@ int phy_ue_proc_dlctrl(PhyUE phy)
 void phy_ue_proc_slot(PhyUE phy, uint slotnr)
 {
 	PhyCommon common = phy->common;
-
-	if (phy->dlslot_assignments[slotnr] == 1) {
+	if (phy->dlslot_assignments[common->rx_subframe%2][slotnr] == 1) {
 
 		uint32_t blocksize = get_tbs_size(common, phy->mcs_dl);
 
@@ -226,7 +244,7 @@ void phy_ue_proc_slot(PhyUE phy, uint slotnr)
 
 // callback for OFDM receiver
 // is called for every symbol that is received
-int _ofdm_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd)
+int _ue_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd)
 {
 	PhyUE phy = (PhyUE)userd;
 	PhyCommon common = phy->common;
@@ -277,8 +295,49 @@ int _ofdm_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd)
 		common->rx_subframe = (common->rx_subframe + 1) % FRAME_LEN;
 	}
 
-
 	return 0;
+}
+
+// Create one OFDM symbol in time domain
+// Subcarriers in frequency have to be set beforehand!
+void phy_ue_write_symbol(PhyUE phy, float complex* txbuf_time)
+{
+	PhyCommon common = phy->common;
+	uint tx_symb = common->tx_symbol;
+	uint sfn = common->tx_subframe %2;
+	// ensure that DL has achieved sync
+	if (common->tx_active) {
+		// check for MAC layer sync state
+		if(!mac_ue_is_associated(phy->mac)) {
+			// Not associated yet. Use Random Access slot to get association
+			if (common->tx_subframe == 0 && tx_symb == SUBFRAME_LEN-SLOT_LEN-1) {
+				ofdmframegen_reset(phy->fg);
+				ofdmframegen_write_S0a(phy->fg, txbuf_time);
+			} else if (common->tx_subframe == 0 && tx_symb == SUBFRAME_LEN-SLOT_LEN) {
+				ofdmframegen_write_S0b(phy->fg, txbuf_time);
+			} else if (common->tx_subframe == 0 && tx_symb == SUBFRAME_LEN-SLOT_LEN+1) {
+				ofdmframegen_write_S1(phy->fg, txbuf_time);
+			} else {
+				// send zeros
+				memset(txbuf_time, 0, sizeof(float complex)*(NFFT+CP_LEN));
+			}
+		} else {
+			// MAC is associated, might send data.
+			if (common->pilot_symbols[tx_symb] == PILOT) {
+				ofdmframegen_reset(phy->fg); // TODO we use the same msequence in every pilot symbol sent. Fix this
+				ofdmframegen_writesymbol(phy->fg, common->txdata_f[sfn][tx_symb],txbuf_time);
+			} else {
+				ofdmframegen_writesymbol_nopilot(phy->fg, common->txdata_f[sfn][tx_symb],txbuf_time);
+			}
+		}
+	}
+
+	// Update subframe and symbol counter
+	common->tx_symbol++;
+	if (common->tx_symbol>=SUBFRAME_LEN) {
+		common->tx_symbol = 0;
+		common->tx_subframe = (common->tx_subframe+1) % FRAME_LEN;
+	}
 }
 
 // Main PHY receive function
@@ -295,7 +354,7 @@ void phy_ue_do_rx(PhyUE phy, float complex* rxbuf_time, uint num_samples)
 			if (offset!=-1) {
 				remaining_samps -= offset;
 				rxbuf_time += offset;
-				phy->rx_offset =  NFFT+CP_LEN - remaining_samps;
+				phy->rx_offset =  num_samples - remaining_samps;
 			} else {
 				remaining_samps = 0;
 			}
@@ -392,29 +451,66 @@ int phy_map_ulslot(PhyUE phy, LogicalChannel chan, uint8_t slot_nr, uint mcs)
 	return 0;
 }
 
-/*void phy_ue_write_subframe(PhyUE phy, float complex* txbuf_time)
+//
+void thread_phy_ue_rx(PhyUE phy, platform hw, pthread_cond_t* sched_sync)
 {
-	PhyCommon common = phy->common;
+	float complex* rxbuf_time = calloc(sizeof(float complex),NFFT+CP_LEN);
 
-	// write the Downlink control channel to the subcarriers
-	phy_map_dlctrl(phy);
-
-	// do ofdm modulation
-	for (int i=0; i<SUBFRAME_LEN; i++) {
-		// check if we have to add synch sequence in this subframe
-		if (common->subframe == 0 && i>=SUBFRAME_LEN-SYNC_SYMBOLS) {
-			phy_make_syncsig(phy, txbuf_time);
-			break;
-		}
-
-		if (common->pilot_symbols[i] == PILOT) {
-		    ofdmframegen_writesymbol(phy->fg, common->txdata_f[i],txbuf_time);
-		} else {
-			ofdmframegen_writesymbol_nopilot(phy->fg, common->txdata_f[i],txbuf_time);
-		}
-		txbuf_time += NFFT+CP_LEN;
+	// get initial sync
+	int offset = -1;
+	while (offset == -1) {
+		hw->platform_rx(hw, rxbuf_time);
+		offset = phy_ue_initial_sync(phy, rxbuf_time, NFFT+CP_LEN);
 	}
+	LOG(INFO,"[PHY UE] rx thread got sync!\n");
+	// start the tx thread
+	pthread_cond_signal(&phy->tx_sync_cond);
 
-	common->subframe = (common->subframe + 1) % FRAME_LEN;
+	// Main RX loop
+	while (1) {
+		// fill buffer
+		hw->platform_rx(hw, rxbuf_time);
+		// process samples
+		phy_ue_do_rx(phy, rxbuf_time, NFFT+CP_LEN);
 
-}*/
+		// Run scheduler after DLCTRL slot was received
+		if (phy->common->rx_symbol == DLCTRL_LEN) {
+			pthread_cond_signal(sched_sync);
+		}
+	}
+}
+
+void thread_phy_ue_tx(PhyUE phy, platform hw)
+{
+	float complex* txbuf_time = calloc(sizeof(float complex),NFFT+CP_LEN);
+	uint offset, num_samples;
+
+	// wait until rx thread has achieved sync
+	pthread_mutex_lock(&phy->tx_sync_lock);
+	pthread_cond_wait(&phy->tx_sync_cond, &phy->tx_sync_lock);
+
+	LOG(INFO,"[PHY UE] tx thread started!\n");
+	offset = phy->rx_offset;
+	num_samples = NFFT+CP_LEN-offset;
+
+	while (1) {
+		// push buffer
+		hw->platform_tx_push(hw);
+
+		// create tx time data
+		// first add the last samples from the previous generated symbol
+		hw->platform_tx_prep(hw, txbuf_time, 0, offset);
+		// create new symbol
+		phy_ue_write_symbol(phy, txbuf_time);
+
+		// prepare first part of the new symbol
+		hw->platform_tx_prep(hw, txbuf_time, offset, num_samples);
+
+		// update offset
+		if (phy->common->tx_symbol == 0 && phy->common->tx_subframe == 0) {
+			offset = phy->rx_offset;
+			num_samples = NFFT+CP_LEN-offset;
+		}
+	}
+	hw->end(hw);
+}

@@ -13,12 +13,17 @@ PhyCommon phy_init_common()
 {
 	PhyCommon phy = malloc(sizeof(PhyCommon_s));
 
+	// TX buffer has 2 entries for even/uneven subframes
+	phy->txdata_f = malloc(sizeof(float complex**)*2);
+
     // alloc buffer for one subframe of symbols in frequency domain
-	phy->txdata_f = malloc(sizeof(float complex*)*SUBFRAME_LEN);
-	phy->rxdata_f = malloc(sizeof(float complex*)*SUBFRAME_LEN);
+	phy->txdata_f[0] = malloc(sizeof(float complex*)*SUBFRAME_LEN);
+	phy->txdata_f[1] = malloc(sizeof(float complex*)*SUBFRAME_LEN);
+	phy->rxdata_f    = malloc(sizeof(float complex*)*SUBFRAME_LEN);
     for (int i=0; i<SUBFRAME_LEN; i++) {
-    	phy->txdata_f[i] = malloc(sizeof(float complex)*(NFFT));
-    	phy->rxdata_f[i] = malloc(sizeof(float complex)*(NFFT));
+    	phy->txdata_f[0][i] = malloc(sizeof(float complex)*(NFFT));
+    	phy->txdata_f[1][i] = malloc(sizeof(float complex)*(NFFT));
+    	phy->rxdata_f[i]    = malloc(sizeof(float complex)*(NFFT));
     }
 
     // alloc buffer for subcarrier definitions
@@ -108,6 +113,7 @@ int get_tbs_size(PhyCommon phy, uint mcs)
 	}
 }
 
+// returns the size of the ULCTRL slots in bits
 int get_ulctrl_slot_size(PhyCommon phy)
 {
 	uint symbols = NUM_DATA_SC;
@@ -120,12 +126,13 @@ int get_ulctrl_slot_size(PhyCommon phy)
 void phy_mod(PhyCommon common, uint first_sc, uint last_sc, uint first_symb, uint last_symb,
 			 uint mcs, uint8_t* data, uint buf_len, uint* written_samps)
 {
+	uint sfn = common->tx_subframe % 2;
 	*written_samps = 0;
 	for (int sym_idx=first_symb; sym_idx<=last_symb; sym_idx++) {
 		for (int i=first_sc; i<=last_sc; i++) {
 			if ((common->pilot_symbols[sym_idx] == NO_PILOT && !(common->pilot_sc[i] == OFDMFRAME_SCTYPE_NULL)) ||
 			    (common->pilot_sc[i] == OFDMFRAME_SCTYPE_DATA)) {
-				modem_modulate(common->mcs_modem[mcs],(uint)data[(*written_samps)++], &common->txdata_f[sym_idx][i]);
+				modem_modulate(common->mcs_modem[mcs],(uint)data[(*written_samps)++], &common->txdata_f[sfn][sym_idx][i]);
 				if (*written_samps >= buf_len) {
 					return;
 				}

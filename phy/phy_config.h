@@ -24,6 +24,6 @@
 #define DLCTRL_LEN 2		// number of OFDM symbols for DL control info
 #define SYNC_SYMBOLS 4		// number of OFDM symbols for synch signaling
 #define FRAME_LEN 8			// number of subframes per frame
-
+#define DL_UL_SHIFT 34		// number of ofdm symbols the UL is shifted behind
 #define MAX_USER 16
 #endif /* PHY_CONFIG_H_ */

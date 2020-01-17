@@ -9,6 +9,7 @@
 #define PHY_UE_H_
 
 #include "phy_common.h"
+#include "../platform/platform.h"
 
 typedef enum {NO_SYNC, HAS_SYNC} phy_states;
 
@@ -21,9 +22,11 @@ struct PhyUE_s {
 	ofdmframesync fs;	// OFDM frame receiver object
 
 	// Variables to store the decoded slot assignments
-	uint8_t* dlslot_assignments;
-	uint8_t* ulslot_assignments;
-	uint8_t* ulctrl_assignments;
+	// 1. array index: 0 for even subframes, 1 for uneven subframe
+	// 2. array index: slot index
+	uint8_t** dlslot_assignments;
+	uint8_t** ulslot_assignments;
+	uint8_t** ulctrl_assignments;
 
 	// Currently used modulation scheme for RX
 	uint mcs_dl;
@@ -39,6 +42,10 @@ struct PhyUE_s {
 
 	// Sample offset between buffer start and start of subframe
 	int rx_offset;
+
+	// Locks and Condition variables for RX/TX thread sync
+	pthread_mutex_t tx_sync_lock;
+	pthread_cond_t tx_sync_cond;
 };
 
 typedef struct PhyUE_s* PhyUE;
@@ -59,7 +66,6 @@ int phy_ue_initial_sync(PhyUE phy, float complex* rxbuf_time, uint num_samples);
 int phy_ue_proc_dlctrl(PhyUE phy);
 void phy_ue_proc_slot(PhyUE phy, uint slotnr);
 //void phy_ue_rx_subframe(PhyUE phy, float complex* rxbuf_time);
-int _ofdm_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd);
 void phy_ue_do_rx(PhyUE phy, float complex* rxbuf_time, uint num_samples);
 
 

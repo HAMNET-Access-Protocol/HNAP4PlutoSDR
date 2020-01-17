@@ -34,14 +34,19 @@ typedef struct {
 	uint rx_symbol;
 	uint tx_subframe;
 	uint tx_symbol;
+	uint tx_active;	// for UEs, TX is only activated after sync is established
 
 	uint8_t* pilot_sc;	// defines which subcarriers are used for pilots
 	uint8_t* pilot_symbols; // stores whether the ofdm symbols within a slot contain pilots
 
-	// hold subcarrier data in frequency domain
-	// 1. Index: ofdm symbol idx.
-	// 2. Index: subcarrier idx.
-	float complex** txdata_f;
+	// hold TX data in frequency domain
+	// 1. Index: subframe index: 0 for even subframes, 1 for uneven
+	// 2. Index: ofdm symbol idx.
+	// 3. Index: subcarrier idx.
+	float complex*** txdata_f;
+	// hold RX data in frequency domain
+	// 1. Index: ofdm symbol number
+	// 2. Index subcarrier idx
 	float complex** rxdata_f;
 
 	modem mcs_modem[8];	// array of modems for different mcs
