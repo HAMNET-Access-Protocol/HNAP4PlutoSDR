@@ -161,7 +161,7 @@ bool cfg_ad9361_streaming_ch(struct iio_context *ctx, struct stream_cfg *cfg, en
 	return true;
 }
 
-void init_pluto_platform(uint buf_len)
+platform init_pluto_platform(uint buf_len)
 {
 	// RX stream config
 	rxcfg.bw_hz = 1703632;   // Analog filter corner freq. Calculated by matlab filter tool
@@ -232,50 +232,55 @@ void init_pluto_platform(uint buf_len)
 		perror("Could not create TX buffer");
 		shutdown();
 	}
+
+	// Generate platform interface
+	platform pluto = malloc(sizeof(struct platform_s));
+	pluto->platform_rx = pluto_receive;
+	pluto->platform_tx_prep = pluto_prep_tx;
+	pluto->platform_tx_push = pluto_receive;
+	pluto->end = shutdown;
+	return pluto;
 }
 
 // Push samples to TX buffer object
 // returns the number of samples that have been pushed
-int pluto_prep_tx(float complex* buf_tx, uint buflen)
+int pluto_prep_tx(platform hw, float complex* buf_tx, uint offset, uint num_samples)
 {
-	char *p_dat, *p_end;
+	char *p_dat, *p_end, p, *p_start;
 	ptrdiff_t p_inc;
 
 
 	// WRITE: Get pointers to TX buf and write IQ to TX buf port 0
 	p_inc = iio_buffer_step(txbuf);
+	p_start = iio_buffer_first(txbuf, tx0_i) + offset*p_inc;
 	p_end = iio_buffer_end(txbuf);
 	uint i=0;
-	for (p_dat = (char *)iio_buffer_first(txbuf, tx0_i); p_dat < p_end; p_dat += p_inc) {
-		// 12-bit sample needs to be MSB alligned so shift by 4
+	for (p_dat = p_start; p_dat < p_end && i<num_samples; p_dat += p_inc) {
+		// 12-bit sample needs to be MSB alligned
 		// https://wiki.analog.com/resources/eval/user-guides/ad-fmcomms2-ebz/software/basic_iq_datafiles#binary_format
 		((int16_t*)p_dat)[0] = (int16_t)(8196.0*creal(buf_tx[i])); // Real (I)
 		((int16_t*)p_dat)[1] = (int16_t)(8196.0*cimag(buf_tx[i++])); // Imag (Q)
-		if (i>=buflen) {
-			break;
-		}
 	}
 	return i;
-
 }
 
-// Flushes the TX buffer and transfers data to FPGA
-// so that they will be sent
-void pluto_transmit(uint num_samps)
+// Flushes the TX buffer and transfers data to Kernel buffer
+// so that samples will be sent
+void pluto_transmit(platform hw)
 {
 	ssize_t nbytes_tx;
 	// Schedule TX buffer
-	nbytes_tx = iio_buffer_push_partial(txbuf, num_samps);
+	nbytes_tx = iio_buffer_push(txbuf);
 	if (nbytes_tx < 0) { printf("Error pushing buf %d\n", (int) nbytes_tx); }
 }
 
 
-// Receive samples from FPGA buffer
+// Receive samples from Kernel buffer
 // returns the number of received samples
-int pluto_receive(float complex* buf_rx, uint max_samps)
+int pluto_receive(platform hw, float complex* buf_rx)
 {
 	ssize_t nbytes_rx;
-	char *p_dat, *p_start;
+	char *p_dat, *p_start, *p_end;
 	ptrdiff_t p_inc;
 
 	// Refill RX buffer
@@ -285,9 +290,10 @@ int pluto_receive(float complex* buf_rx, uint max_samps)
 	// READ: Get pointers to RX buf and read IQ from RX buf port 0
 	p_start = iio_buffer_first(rxbuf, rx0_i);
 	p_inc = iio_buffer_step(rxbuf);
+	p_end = iio_buffer_end(rxbuf);
 
 	uint i=0;
-	for (p_dat = p_start; (p_dat < p_start + nbytes_rx) && (i<max_samps); p_dat += p_inc) {
+	for (p_dat = p_start; p_dat < p_end; p_dat += p_inc) {
 		buf_rx[i++] = ((int16_t*)p_dat)[0]/2048.0 + I*((int16_t*)p_dat)[1]/2048.0;
 	}
 	return i;
