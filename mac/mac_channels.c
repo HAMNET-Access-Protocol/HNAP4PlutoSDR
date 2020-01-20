@@ -26,7 +26,7 @@ LogicalChannel lchan_create(uint size, uint crc_len)
 	}
 
 	LogicalChannel chan = malloc(sizeof(LogicalChannel_s));
-	chan->data = malloc(size);
+	chan->data = calloc(size,1);
 	chan->writepos = 0;
 	chan->payload_len = size;
 	chan->crc_type = crc;
@@ -61,6 +61,10 @@ MacMessage lchan_parse_next_msg(LogicalChannel chan, uint ul_flag)
 	uint8_t* data_start = chan->data+chan->writepos;
 	uint remaining_bytes = chan->payload_len - chan->writepos - chan->crc_type;
 	msg = mac_msg_parse(data_start,remaining_bytes, ul_flag);
+	if (msg!=NULL)
+		chan->writepos += msg->hdr_len + msg->payload_len;
+	else
+		chan->writepos = chan->payload_len;
 	return msg;
 }
 
@@ -75,24 +79,25 @@ int lchan_unused_bytes(LogicalChannel chan)
 // at the end of the payload
 void lchan_calc_crc(LogicalChannel chan)
 {
-	crc_scheme crc_scheme;
-	if (chan->crc_type == CRC16)
-		crc_scheme = LIQUID_CRC_16;
-	else
-		crc_scheme = LIQUID_CRC_8;
-	uint16_t crc = crc_generate_key(crc_scheme, chan->data, chan->payload_len-chan->crc_type);
-	memcpy(&chan->data[chan->payload_len-chan->crc_type],&crc,chan->crc_type);
+	if (chan->crc_type*8 == CRC16) {
+		uint16_t crc = crc_generate_key(LIQUID_CRC_16, chan->data, chan->payload_len-chan->crc_type);
+		chan->data[chan->payload_len-2] = (crc >> 8) & 0xFF; // upper byte
+		chan->data[chan->payload_len-1] = crc & 0xFF; // lower byte
+	} else {
+		uint16_t crc = crc_generate_key(LIQUID_CRC_8, chan->data, chan->payload_len-chan->crc_type);
+		chan->data[chan->payload_len-1] = crc & 0xFF;
+	}
 }
 
 // Verify the CRC
 int lchan_verify_crc(LogicalChannel chan)
 {
-	crc_scheme crc_scheme;
-	if (chan->crc_type == CRC8)
-		crc_scheme = LIQUID_CRC_16;
-	else
-		crc_scheme = LIQUID_CRC_8;
-	uint16_t crc;
-	memcpy(&crc, &chan->data[chan->payload_len-chan->crc_type], chan->crc_type);
-	return crc_validate_message(crc_scheme, chan->data, chan->payload_len-2, crc);
+	if (chan->crc_type*8 == CRC16) {
+		uint16_t crc = (chan->data[chan->payload_len-2] << 8); //upper byte
+		crc |= chan->data[chan->payload_len-1] & 0xFF; // lower byte
+		return crc_validate_message(LIQUID_CRC_16, chan->data, chan->payload_len-chan->crc_type, crc);
+	} else {
+		uint16_t crc = chan->data[chan->payload_len-1];
+		return crc_validate_message(LIQUID_CRC_8, chan->data, chan->payload_len-chan->crc_type, crc);
+	}
 }
