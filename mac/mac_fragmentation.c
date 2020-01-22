@@ -117,6 +117,7 @@ MacMessage mac_frag_get_fragment(MacFrag frag, uint max_frag_size, uint is_uplin
 	if (final_flag) {
 		free(frag->curr_frame->data);
 		free(frag->curr_frame);
+		frag->curr_frame = NULL;
 	}
 
 	return fragment;
@@ -152,6 +153,7 @@ MacDataFrame mac_assmbl_reassemble(MacAssmbl assmbl, MacMessage fragment)
 		assmbl->fragments[assmbl->fragNr] = malloc(fragment->payload_len);
 		memcpy(assmbl->fragments[assmbl->fragNr],fragment->data,fragment->payload_len);
 		assmbl->fragments_len[assmbl->fragNr] = fragment->payload_len;
+		assmbl->frame_len += fragment->payload_len;
 		assmbl->fragNr++;
 	} else {
 		// reset reassembler state
