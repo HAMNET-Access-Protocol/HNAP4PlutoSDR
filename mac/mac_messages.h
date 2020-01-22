@@ -22,6 +22,7 @@
 // bit 4 indicates wether its a DL (0) or UL (1) message
 // e.g. ul_req= 0b1001 -> 1 for UL and 0b001 is ul_req ctrl ID
 typedef enum {
+	msg_none = 0,
 	associate_response = 1,
 	dl_mcs_info,
 	ul_mcs_info,
@@ -41,67 +42,69 @@ enum {
 };
 
 typedef struct {
-	uint16_t ctrl_id :3;
-	uint16_t userid :4;
-	uint16_t rachuserid :4;
-	uint16_t response :3;
-	uint16_t protoVersion : 2;
+	uint32_t ctrl_id :3;
+	uint32_t userid :4;
+	uint32_t rachuserid :4;
+	uint32_t response :3;
+	uint32_t protoVersion : 2;
 } MacAssociateResponse;
 
 typedef struct {
-	uint8_t ctrl_id :3;
-	uint8_t mcs:5;
+	uint32_t ctrl_id :3;
+	uint32_t mcs:5;
 } MacDLMCSInfo;
 
 typedef struct {
-	uint8_t ctrl_id :3;
-	uint8_t mcs:5;
+	uint32_t ctrl_id :3;
+	uint32_t mcs:5;
 } MacULMCSInfo;
 
 typedef struct {
-	uint16_t ctrl_id :3;
-	uint16_t timingAdvance :13;
+	uint32_t ctrl_id :3;
+	uint32_t timingAdvance :13;
 } MacTimingAdvance;
 
 typedef struct {
-	uint16_t ctrl_id :3;
-	uint16_t data_length : 12;
-	uint16_t final_flag :1;
-	uint8_t seqNr : 3;
-	uint8_t fragNr : 5;
+	uint32_t ctrl_id :3;
+	uint32_t data_length : 12;
+	uint32_t final_flag :1;
+	uint32_t seqNr : 3;
+	uint32_t fragNr : 5;
 } MacDLdata;
 
 typedef struct {
-	uint16_t ctrl_id :3;
-	uint16_t packetqueuesize :13;
+	uint32_t ctrl_id :3;
+	uint32_t packetqueuesize :13;
 } MacULreq;
 
 typedef struct {
-	uint8_t ctrl_id :3;
-	uint8_t channel_quality :5; // TODO to be defined
+	uint32_t ctrl_id :3;
+	uint32_t channel_quality :5; // TODO to be defined
 } MacChannelQuality;
 
 typedef struct {
-	uint8_t ctrl_id :3;
-	uint8_t reserved : 5;
+	uint32_t ctrl_id :3;
+	uint32_t reserved : 5;
 } MacKeepalive;
 
 typedef struct {
-	uint8_t ctrl_id :3;
-	uint8_t acked_ctrl_id :3;
+	uint32_t ctrl_id :3;
+	uint32_t acked_ctrl_id :3;
 } MacControlAck;
 
 typedef struct {
-	uint16_t ctrl_id :3;
-	uint16_t data_length : 12;
-	uint16_t final_flag :1;
-	uint8_t seqNr : 3;
-	uint8_t fragNr : 5;
+	uint32_t ctrl_id :3;
+	uint32_t data_length : 12;
+	uint32_t final_flag :1;
+	uint32_t seqNr : 3;
+	uint32_t fragNr : 5;
 } MacULdata;
 
 // Generic struct for Mac Message exchange between Modules
 typedef struct {
+	uint8_t hdr_bin[4];	// max header len fixed to 4 bytes. Can be changed
 	union {
+		uint8_t ctrl_id:3;
 		MacAssociateResponse AssociateResponse;
 		MacDLMCSInfo DLMCSInfo;
 		MacULMCSInfo ULMCSInfo;
