@@ -6,10 +6,13 @@
  */
 #include "pluto.h"
 #include "../log.h"
+#include "../phy/phy_config.h"
+
 #include <string.h>
 #include <signal.h>
 #include <time.h>
 #include <liquid/liquid.h>
+#include <stdbool.h>
 
 static bool stop;
 

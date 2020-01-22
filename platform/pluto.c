@@ -8,6 +8,9 @@
 
 #include "pluto.h"
 #include <errno.h>
+#include "../phy/phy_config.h"
+#include <stdio.h>
+#include <iio.h>
 
 /* helper macros */
 #define MHZ(x) ((long long)(x*1000000.0 + .5))

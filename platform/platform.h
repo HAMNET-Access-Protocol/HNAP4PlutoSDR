@@ -36,7 +36,7 @@
 
 struct platform_s {
 	int (*platform_tx_push)(struct platform_s*);
-	int (*platform_tx_prep)(struct platform_s*, float complex*, uint offset, uint num_samples);
+	int (*platform_tx_prep)(struct platform_s*, float complex*, unsigned int offset, unsigned int num_samples);
 	int (*platform_rx)(struct platform_s*, float complex*);
 	void (*end)(struct platform_s*);
 	void* data;	// Pointer to store some data if necessary for some platform

@@ -5,12 +5,15 @@
  *      Author: lukas
  */
 
-#include "platform.h"
 #include "platform_simulation.h"
 #include "../phy/phy_config.h"
+#include "../log.h"
+
 #include <liquid/liquid.h>
 #include <math.h>
-#include "../log.h"
+#include <stdlib.h>
+
+#define USE_GSM_MULTIPATH 0
 
 // Struct which stores data necessary for simulation
 // i.e. two buffers and a channel object
@@ -19,33 +22,38 @@ struct simu_data_s {
 	float complex* tx_prep_buf;	// buffer to hold prepared tx data
 	float complex* tx_dest;		// pointer to a remote rx buffer
 	float complex* rxbuf;		// buffer to hold rx data
+	pthread_cond_t rx_cond;		// condition in order to wait for a remote tx thread to fill the buffer
+	pthread_mutex_t rx_lock;
 	uint buflen;
 };
 
 typedef struct simu_data_s* simu_data;
 
-void simulation_receive(platform p, float complex* buf)
+int simulation_receive(platform p, float complex* buf)
 {
 	simu_data data = ((simu_data)p->data);
 	memcpy(buf,data->rxbuf,data->buflen*sizeof(float complex));
+	return 1;
 }
 
-void simulation_prep_tx(platform p, float complex* buf, uint offset, uint num_samples)
+int simulation_prep_tx(platform p, float complex* buf, uint offset, uint num_samples)
 {
 	simu_data data = ((simu_data)p->data);
 	if (data->buflen<offset+num_samples) {
 		LOG(ERR,"[PLATFORM] Buffer boundary violation when writing to %d in buf.\n",offset+num_samples);
-		return;
+		return 0;
 	}
 	memcpy(data->tx_prep_buf+offset,buf,num_samples*sizeof(float complex));
+	return 1;
 }
 
-void simulation_tx(platform p, float complex* buf)
+int simulation_tx(platform p)
 {
 	simu_data data = ((simu_data)p->data);
 	if (data->tx_dest) {
 		channel_cccf_execute_block(data->tx_channel, data->tx_prep_buf, data->buflen, data->tx_dest);
 	}
+	return 1;
 }
 
 void sim_end(platform p)
@@ -91,11 +99,12 @@ platform platform_init_simulation(uint buflen)
 
     // AWGN
     float noise_floor = -60.0;
-    float SNR = 19;
+    float SNR = 25;
     channel_cccf_add_awgn(channel,noise_floor, SNR);
 
     // Multipath
     // GSM typical urban 12 tap scenario 1
+	#if USE_GSM_MULTIPATH
     float complex gsmTUx12c1[] = {   0.0010 + 0.0013i,
     		   0.0020 + 0.0079i,
     		  -0.0092 - 0.0218i,
@@ -116,15 +125,17 @@ platform platform_init_simulation(uint buflen)
     		   0.0000 + 0.0000i
     };
     uint gsmTUx12c1_len = 18;
-    //float complex hc[] = {1, 0, 0, 0};
-    //uint hc_len = 4;		// number of channel filter taps
     channel_cccf_add_multipath(channel, gsmTUx12c1, gsmTUx12c1_len);
-
+	#else
+    float complex hc[] = {.1, 1, 0, .1};
+    uint hc_len = 4;		// number of channel filter taps
+    channel_cccf_add_multipath(channel, hc, hc_len);
+	#endif
     // frequency offset
-    float cfo = 0;	// frequency offset in Hertz
-    float dphi = (2*M_PI*cfo)/256000.0;	//frequency offset in radians/sample
-    float phi = 2;		// phase offset in radians
-    channel_cccf_add_carrier_offset(channel, dphi, phi);
+    //float cfo = 0;	// frequency offset in Hertz
+    //float dphi = (2*3.1415*cfo)/256000.0;	//frequency offset in radians/sample
+    //float phi = 2;		// phase offset in radians
+    //channel_cccf_add_carrier_offset(channel, dphi, phi);
 
     // slow-flat fading
     //float sigma = 1;	// standard deviation for log-normal shadowing
