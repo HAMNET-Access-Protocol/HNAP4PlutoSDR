@@ -41,8 +41,9 @@ MacUE mac_ue_init();
 void mac_ue_set_phy_interface(MacUE mac, PhyUE phy);
 
 /************** MAC INTERFACE FUNCTIONS *************************/
+void mac_ue_set_assignments(MacUE mac, uint8_t* dlslot, uint8_t* ulslot, uint8_t* ulctrl);
 void mac_ue_run_scheduler(MacUE mac);
-void mac_ue_rec_channel(MacUE mac, LogicalChannel chan);
+void mac_ue_rx_channel(MacUE mac, LogicalChannel chan);
 int  mac_ue_add_txdata(MacUE mac, MacDataFrame frame);
 int  mac_ue_is_associated(MacUE mac);
 

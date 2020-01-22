@@ -8,13 +8,14 @@
 #include "phy_ue.h"
 
 #include "../log.h"
+#include "../mac/mac_config.h"
 #include <pthread.h>
 
 // callback declaration
 int _ue_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd);
 
 // Init the PhyUE struct
-PhyUE phy_init_ue()
+PhyUE phy_ue_init()
 {
 	PhyUE phy = malloc(sizeof(struct PhyUE_s));
 
@@ -45,6 +46,9 @@ PhyUE phy_init_ue()
 
 	phy->rx_offset = 0;
 
+	phy->rachuserid = -1;
+	phy->userid = -1;
+
 	// Init mutexes etc
 	phy->tx_sync_cond = (pthread_cond_t)PTHREAD_COND_INITIALIZER;
 	phy->tx_sync_lock = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER;
@@ -54,7 +58,7 @@ PhyUE phy_init_ue()
 
 // Sets the callback function that is called after a phy slot was received
 // and the Mac UE instance
-void phy_ue_set_mac_interface(PhyUE phy, void (*mac_rx_cb)(LogicalChannel), struct MacUE_s* mac)
+void phy_ue_set_mac_interface(PhyUE phy, void (*mac_rx_cb)(struct MacUE_s*, LogicalChannel), struct MacUE_s* mac)
 {
 	phy->mac_rx_cb = mac_rx_cb;
 	phy->mac = mac;
@@ -74,16 +78,19 @@ int phy_ue_initial_sync(PhyUE phy, float complex* rxbuf_time, uint num_samples)
 
 	int offset = ofdmframesync_find_data_start(phy->fs,rxbuf_time,num_samples);
 	if (offset!=-1) {
-		common->rx_symbol = NFFT - 1; //there is one more guard symbol in this subframe to receive
+		common->rx_symbol = SUBFRAME_LEN - 1; //there is one more guard symbol in this subframe to receive
 		common->rx_subframe = 0;
-		common->tx_subframe = 0;
-		common->tx_symbol = NFFT - 1 - DL_UL_SHIFT;
-		common->tx_active = 1;
 
 		//apply filtering of coarse CFO estimation if we have old estimates
 		if (phy->has_synced_once == 0) {
+			// init TX counters once
+			common->tx_active = 1;
+			common->tx_symbol = SUBFRAME_LEN - DL_UL_SHIFT; //TODO clarify what happens for offset=0
+			common->tx_subframe = 0;
+
 			phy->has_synced_once = 1;
 			phy->prev_cfo = ofdmframesync_get_cfo(phy->fs);
+			LOG(INFO,"[PHY UE] Got sync! cfo: %.3fHz offset: %d samps\n",phy->prev_cfo*SAMPLERATE/6.28,offset);
 		} else {
 			float new_cfo = ofdmframesync_get_cfo(phy->fs);
 			float cfo_filt = 0.1*phy->prev_cfo + (1-0.1)*new_cfo;
@@ -118,20 +125,30 @@ int phy_ue_proc_dlctrl(PhyUE phy)
 		return 0; // CRC not valid
 	}
 
-	// pass DL Ctrl slot data to mac control
+	// Set the decoded user assignments in the phy struct
 	uint idx = 0;
 	for (int i=0; i<NUM_SLOT/2; i++) {
-		phy->dlslot_assignments[sfn][2*i  ] = (dlctrl_buf[idx].h4 == common->userid) ? 1 : 0;
-		phy->dlslot_assignments[sfn][2*i+1] = (dlctrl_buf[idx++].l4 == common->userid) ? 1 : 0;
+		phy->dlslot_assignments[sfn][2*i  ] = (dlctrl_buf[idx].h4 == phy->userid ||
+											   dlctrl_buf[idx].h4 == USER_BROADCAST) ? 1 : 0;
+		phy->dlslot_assignments[sfn][2*i+1] = (dlctrl_buf[idx].l4 == phy->userid ||
+											   dlctrl_buf[idx].l4 == USER_BROADCAST) ? 1 : 0;
+		idx++;
 	}
 	for (int i=0; i<NUM_SLOT/2; i++) {
-		phy->ulslot_assignments[sfn][2*i  ] = (dlctrl_buf[idx].h4 == common->userid) ? 1 : 0;
-		phy->ulslot_assignments[sfn][2*i+1] = (dlctrl_buf[idx++].l4 == common->userid) ? 1 : 0;
+		phy->ulslot_assignments[sfn][2*i  ] = (dlctrl_buf[idx].h4 == phy->userid) ? 1 : 0;
+		phy->ulslot_assignments[sfn][2*i+1] = (dlctrl_buf[idx].l4 == phy->userid) ? 1 : 0;
+		idx++;
 	}
 	for (int i=0; i<NUM_ULCTRL_SLOT/2; i++) {
-		phy->ulctrl_assignments[sfn][2*i  ] = (dlctrl_buf[idx].h4 == common->userid) ? 1 : 0;
-		phy->ulctrl_assignments[sfn][2*i+1] = (dlctrl_buf[idx++].l4 == common->userid) ? 1 : 0;
+		phy->ulctrl_assignments[sfn][2*i  ] = (dlctrl_buf[idx].h4 == phy->userid) ? 1 : 0;
+		phy->ulctrl_assignments[sfn][2*i+1] = (dlctrl_buf[idx].l4 == phy->userid) ? 1 : 0;
+		idx++;
 	}
+
+	// Pass slot assignment to MAC
+	mac_ue_set_assignments(phy->mac,phy->dlslot_assignments[sfn],
+									phy->ulslot_assignments[sfn],
+									phy->ulctrl_assignments[sfn]);
 
 	free(llr_buf);
 	free(dlctrl_buf);
@@ -162,11 +179,10 @@ void phy_ue_proc_slot(PhyUE phy, uint slotnr)
 
 		//deinterleaving
 		LogicalChannel chan = lchan_create(blocksize/8,CRC16);
-		//chan->writepos = slotnr; //TODO: this is only for simulation to ind the slot nr
 		interleaver_decode(common->mcs_interlvr[phy->mcs_dl],interleaved_b,chan->data);
 
 		// pass to upper layer
-		phy->mac_rx_cb(chan);
+		phy->mac_rx_cb(phy->mac, chan);
 
 		free(interleaved_b);
 		free(demod_buf);
@@ -287,15 +303,63 @@ int _ue_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd)
 	// Debug log
 	char name[30];
 	sprintf(name,"rxF/rxF_%d_%d.m",common->rx_subframe,common->rx_symbol-1);
-	if (common->rx_symbol == 5) {
+	if (common->rx_symbol<64) {
 	LOG_MATLAB_FC(DEBUG,X, NFFT, name);
 	}
-	if (common->rx_symbol > NFFT-1) {
+	if (common->rx_symbol >= SUBFRAME_LEN) {
 		common->rx_symbol = 0;
 		common->rx_subframe = (common->rx_subframe + 1) % FRAME_LEN;
 	}
 
 	return 0;
+}
+
+// Create the symbol containing association request data
+void phy_ue_create_assoc_request(PhyUE phy, float complex* txbuf_time)
+{
+	PhyCommon common = phy->common;
+
+	uint8_t* repacked_b;
+	uint bytes_written=0;
+
+	uint mcs=0;
+	// fixed MCS 0: r=1/2, bps=2, 16tail bits.
+	uint32_t blocksize = get_ulctrl_slot_size(phy->common);
+
+	// TODO generate a defined struct for Association Request message
+	LogicalChannel chan = lchan_create(blocksize/8, CRC8);
+	if (phy->rachuserid == -1) {
+		// RA procedure hasnt started. Select a random ID first
+		phy->rachuserid = rand() % MAX_USER;
+	}
+	chan->data[0] = (uint8_t)phy->rachuserid;
+	lchan_calc_crc(chan);
+
+	// encode channel
+	uint enc_len = fec_get_enc_msg_length(common->mcs_fec_scheme[mcs],blocksize/8);
+	uint8_t* enc_b = malloc(enc_len);
+	fec_encode(common->mcs_fec[mcs], blocksize/8, chan->data, enc_b);
+
+	// repack bytes so that each array entry can be mapped to one symbol
+	int num_repacked = enc_len*8/modem_get_bps(common->mcs_modem[mcs]);
+	repacked_b = malloc(num_repacked);
+	liquid_repack_bytes(enc_b,8,enc_len,repacked_b,modem_get_bps(common->mcs_modem[mcs]),num_repacked,&bytes_written);
+
+
+	// modulate signal
+	uint written_samps = 0;
+	float complex subcarriers[NFFT];
+	for (int i=0; i<=NFFT; i++) {
+		if (common->pilot_sc[i] == OFDMFRAME_SCTYPE_DATA) {
+			modem_modulate(common->mcs_modem[mcs],(uint)repacked_b[written_samps++], &subcarriers[i]);
+		}
+	}
+	// write symbol in time domain buffer
+	ofdmframegen_writesymbol(phy->fg,subcarriers,txbuf_time);
+
+	lchan_destroy(chan);
+	free(enc_b);
+	free(repacked_b);
 }
 
 // Create one OFDM symbol in time domain
@@ -310,13 +374,15 @@ void phy_ue_write_symbol(PhyUE phy, float complex* txbuf_time)
 		// check for MAC layer sync state
 		if(!mac_ue_is_associated(phy->mac)) {
 			// Not associated yet. Use Random Access slot to get association
-			if (common->tx_subframe == 0 && tx_symb == SUBFRAME_LEN-SLOT_LEN-1) {
+			if (common->tx_subframe == 0 && tx_symb == SUBFRAME_LEN-SLOT_LEN) {
 				ofdmframegen_reset(phy->fg);
 				ofdmframegen_write_S0a(phy->fg, txbuf_time);
-			} else if (common->tx_subframe == 0 && tx_symb == SUBFRAME_LEN-SLOT_LEN) {
-				ofdmframegen_write_S0b(phy->fg, txbuf_time);
 			} else if (common->tx_subframe == 0 && tx_symb == SUBFRAME_LEN-SLOT_LEN+1) {
+				ofdmframegen_write_S0b(phy->fg, txbuf_time);
+			} else if (common->tx_subframe == 0 && tx_symb == SUBFRAME_LEN-SLOT_LEN+2) {
 				ofdmframegen_write_S1(phy->fg, txbuf_time);
+			} else if (common->tx_subframe == 0 && tx_symb == SUBFRAME_LEN-SLOT_LEN+3) {
+				phy_ue_create_assoc_request(phy, txbuf_time);
 			} else {
 				// send zeros
 				memset(txbuf_time, 0, sizeof(float complex)*(NFFT+CP_LEN));
@@ -363,6 +429,7 @@ void phy_ue_do_rx(PhyUE phy, float complex* rxbuf_time, uint num_samples)
 			uint rx_sym = fmin(NFFT+CP_LEN,remaining_samps);
 			if (common->pilot_symbols[common->rx_symbol] == PILOT) {
 				ofdmframesync_execute(phy->fs,rxbuf_time,rx_sym);
+				LOG(DEBUG,"[PHY UE] cfo updated: %.3f Hz\n",ofdmframesync_get_cfo(phy->fs)*SAMPLERATE/6.28);
 			} else {
 				ofdmframesync_execute_nopilot(phy->fs,rxbuf_time,rx_sym);
 			}
@@ -373,7 +440,7 @@ void phy_ue_do_rx(PhyUE phy, float complex* rxbuf_time, uint num_samples)
 }
 
 // create phy ctrl slot
-int phy_map_ulctrl(PhyUE phy, LogicalChannel chan, uint8_t slot_nr)
+int phy_map_ulctrl(PhyUE phy, LogicalChannel chan, uint subframe, uint8_t slot_nr)
 {
 	PhyCommon common = phy->common;
 
@@ -400,10 +467,11 @@ int phy_map_ulctrl(PhyUE phy, LogicalChannel chan, uint8_t slot_nr)
 	liquid_repack_bytes(enc_b,8,enc_len,repacked_b,modem_get_bps(common->mcs_modem[mcs]),num_repacked,&bytes_written);
 
 	uint total_samps = 0;
-	uint first_symb = 2*slot_nr;	// slot 0 is mapped to symbol 0, slot 1 is mapped to symb 2.
+	uint first_symb = 2*(SLOT_LEN+1) + 2*slot_nr;	// slot 0 is mapped to symbol 30, slot 1 is mapped to symb 32.
 
 	// modulate signal
-	phy_mod(phy->common,0,NFFT-1,first_symb,first_symb, mcs, repacked_b, num_repacked, &total_samps);
+	uint sfn = subframe % 2;
+	phy_mod(phy->common,sfn,0,NFFT-1,first_symb,first_symb, mcs, repacked_b, num_repacked, &total_samps);
 
 	free(enc_b);
 	free(repacked_b);
@@ -411,7 +479,7 @@ int phy_map_ulctrl(PhyUE phy, LogicalChannel chan, uint8_t slot_nr)
 }
 
 // create phy data slot in frequency domain
-int phy_map_ulslot(PhyUE phy, LogicalChannel chan, uint8_t slot_nr, uint mcs)
+int phy_map_ulslot(PhyUE phy, LogicalChannel chan, uint subframe, uint8_t slot_nr, uint mcs)
 {
 	PhyCommon common = phy->common;
 
@@ -443,7 +511,8 @@ int phy_map_ulslot(PhyUE phy, LogicalChannel chan, uint8_t slot_nr, uint mcs)
 	uint last_symb = DLCTRL_LEN+2+(SLOT_LEN+1)*(slot_nr+1)-2;
 
 	// modulate signal
-	phy_mod(phy->common,0,NFFT-1,first_symb,last_symb, mcs, repacked_b, num_repacked, &total_samps);
+	uint sfn = subframe % 2;
+	phy_mod(phy->common,sfn, 0,NFFT-1,first_symb,last_symb, mcs, repacked_b, num_repacked, &total_samps);
 
 	free(interleaved_b);
 	free(enc_b);
@@ -451,7 +520,7 @@ int phy_map_ulslot(PhyUE phy, LogicalChannel chan, uint8_t slot_nr, uint mcs)
 	return 0;
 }
 
-//
+// Main Thread for UE receive
 void thread_phy_ue_rx(PhyUE phy, platform hw, pthread_cond_t* sched_sync)
 {
 	float complex* rxbuf_time = calloc(sizeof(float complex),NFFT+CP_LEN);
@@ -464,7 +533,7 @@ void thread_phy_ue_rx(PhyUE phy, platform hw, pthread_cond_t* sched_sync)
 	}
 	LOG(INFO,"[PHY UE] rx thread got sync!\n");
 	// start the tx thread
-	pthread_cond_signal(&phy->tx_sync_cond);
+	//pthread_cond_signal(&phy->tx_sync_cond);
 
 	// Main RX loop
 	while (1) {
@@ -480,16 +549,22 @@ void thread_phy_ue_rx(PhyUE phy, platform hw, pthread_cond_t* sched_sync)
 	}
 }
 
+// Main Thread for UE transmit
 void thread_phy_ue_tx(PhyUE phy, platform hw)
 {
 	float complex* txbuf_time = calloc(sizeof(float complex),NFFT+CP_LEN);
 	uint offset, num_samples;
 
 	// wait until rx thread has achieved sync
-	pthread_mutex_lock(&phy->tx_sync_lock);
-	pthread_cond_wait(&phy->tx_sync_cond, &phy->tx_sync_lock);
+	//pthread_mutex_lock(&phy->tx_sync_lock);
+	//pthread_cond_wait(&phy->tx_sync_cond, &phy->tx_sync_lock);
 
-	LOG(INFO,"[PHY UE] tx thread started!\n");
+	while (!phy->has_synced_once) {
+		hw->platform_tx_push(hw);
+		hw->platform_tx_prep(hw, txbuf_time, 0, NFFT+CP_LEN);
+	}
+
+	LOG(INFO,"[PHY UE] main tx thread started!\n");
 	offset = phy->rx_offset;
 	num_samples = NFFT+CP_LEN-offset;
 

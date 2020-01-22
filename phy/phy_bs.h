@@ -10,6 +10,8 @@
 
 #include "phy_common.h"
 #include "../mac/mac_bs.h"
+#include "../platform/platform.h"
+#include <pthread.h>
 
 // forward declaration of mac struct
 struct MacBS_s;
@@ -31,26 +33,31 @@ struct PhyBS_s {
 	// buffer stores data which is sent by users during RACH procedure
 	float complex rach_buffer[NFFT];
 
-	// since multiple ofdmframesync objects are used
-	// we have to keep track of the ofdm symbol timing ourselves
-	uint rach_timing;
+	// stores timing offset of a received RA message
+	int rach_timing;
+	// we have to store the remaining samps that have to be received after sync with a new user is achieved
+	int rach_remaining_samps;
 
 	struct MacBS_s* mac;
 };
 
 typedef struct PhyBS_s* PhyBS;
 
-PhyBS phy_init_bs();
+PhyBS phy_bs_init();
+void phy_bs_set_mac_interface(PhyBS phy, struct MacBS_s* mac);
 
 void phy_make_syncsig(PhyBS phy, float complex* txbuf_time);
 void phy_write_subframe(PhyBS phy, float complex* txbuf_time);
-int phy_map_dlslot(PhyBS phy, LogicalChannel chan, uint8_t slot_nr, uint userid, uint mcs);
-void phy_map_dlctrl(PhyBS phy);
-void phy_assign_dlctrl_ud(PhyBS phy, uint8_t* slot_assignment);
-void phy_assign_dlctrl_uc(PhyBS phy, uint8_t* slot_assignment);
+int phy_map_dlslot(PhyBS phy, LogicalChannel chan, uint subframe, uint8_t slot_nr, uint userid, uint mcs);
+void phy_map_dlctrl(PhyBS phy, uint subframe);
+void phy_assign_dlctrl_dd(PhyBS phy, uint8_t* slot_assignment);
+void phy_assign_dlctrl_ud(PhyBS phy, uint subframe, uint8_t* slot_assignment);
+void phy_assign_dlctrl_uc(PhyBS phy, uint subframe, uint8_t* slot_assignment);
 int phy_assign_dlctrl_ud_user(PhyBS phy, uint8_t* assigned_slots, uint userid);
 int phy_assign_dlctrl_uc_user(PhyBS phy, uint8_t* assigned_slots, uint userid);
 int phy_bs_rx_subframe(PhyBS phy, float complex* rxbuf_time);
+void phy_bs_rx_symbol(PhyBS phy, float complex* rxbuf_time);
 void phy_bs_write_symbol(PhyBS phy, float complex* txbuf_time);
+int phy_bs_proc_rach(PhyBS phy, int timing_diff);
 
 #endif /* PHY_BS_H_ */

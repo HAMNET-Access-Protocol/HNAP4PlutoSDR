@@ -12,7 +12,7 @@
 #define MAX_USER 16
 
 // Number of data/control slots per subframe
-#define MAC_DLDATA_SLOTS 4
+#define MAC_DLDATA_SLOTS 4 //TODO double definition of the same variable here and in phy_config
 #define MAC_ULDATA_SLOTS 4
 #define MAC_ULCTRL_SLOTS 2
 

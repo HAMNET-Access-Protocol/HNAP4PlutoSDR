@@ -41,6 +41,8 @@ int mac_ue_handle_message(MacUE mac, MacMessage msg)
 			mac->is_associated = 1;
 			mac->userid = msg->hdr.AssociateResponse.userid;
 			LOG(INFO,"[MAC UE] successfully associated! userid: %d\n",mac->userid);
+			mac->phy->userid = mac->userid; // Notify phy about the userid. TODO define interface functions?
+			phy_ue_proc_dlctrl(mac->phy);	// Decode CTRL slot again, since we now know our userid
 		} else {
 			LOG(INFO,"[MAC UE] NACK for assoc req: response is %d\n",msg->hdr.AssociateResponse.response);
 		}
@@ -64,7 +66,7 @@ int mac_ue_handle_message(MacUE mac, MacMessage msg)
 	case dl_data:
 		frame = mac_assmbl_reassemble(mac->reassembler, msg);
 		if (frame != NULL) {
-			printf("[MAC UE] rec %d bytes: %s\n",frame->size,frame->data);
+			printf("[MAC UE] received dataframe of %d bytes\n",frame->size);
 			//TODO forward received frame to higher layer
 			dataframe_destroy(frame);
 		}
@@ -77,6 +79,14 @@ int mac_ue_handle_message(MacUE mac, MacMessage msg)
 	return 1;
 }
 
+// Set the channel assignments which were decoded in the DLCTRL slot
+void mac_ue_set_assignments(MacUE mac, uint8_t* dlslot, uint8_t* ulslot, uint8_t* ulctrl)
+{
+	memcpy(mac->dl_data_assignments, dlslot, MAC_DLDATA_SLOTS);
+	memcpy(mac->ul_data_assignments, ulslot, MAC_ULDATA_SLOTS);
+	memcpy(mac->ul_ctrl_assignments, ulctrl, MAC_ULCTRL_SLOTS);
+}
+
 // UE scheduler. Is called once per subframe
 // Will check the ctrl message and data message queues and try
 // to map it to slots. Before running the scheduler, ensure that
@@ -85,7 +95,15 @@ void mac_ue_run_scheduler(MacUE mac)
 {
 	uint queuesize = mac_frag_get_buffersize(mac->fragmenter);
 	uint slotsize = get_tbs_size(mac->phy->common,mac->ul_mcs)/8;
-	int num_assigned = num_slot_assigned(mac->ul_data_assignments,MAC_ULDATA_SLOTS,mac->userid);
+	int num_assigned = num_slot_assigned(mac->ul_data_assignments,MAC_ULDATA_SLOTS,1);
+	uint next_sfn = (mac->phy->common->tx_subframe+1) % 2; // subframe for which the scheduler is run
+	// Log schedule
+	LOG(DEBUG,"[MAC UE] Scheduler user assignments:\n");
+	LOG(DEBUG,"         DL data slots: %4d %4d %4d %4d\n", mac->dl_data_assignments[0],
+			mac->dl_data_assignments[1],mac->dl_data_assignments[2],mac->dl_data_assignments[3]);
+	LOG(DEBUG,"         UL data slots: %4d %4d %4d %4d\n", mac->ul_data_assignments[0],
+			mac->ul_data_assignments[1],mac->ul_data_assignments[2],mac->ul_data_assignments[3]);
+	LOG(DEBUG,"         UL ctrl slots: %4d %4d\n", mac->ul_ctrl_assignments[0],mac->ul_ctrl_assignments[1]);
 
 	// ensure association
 	if (mac->is_associated == 0) {
@@ -98,7 +116,7 @@ void mac_ue_run_scheduler(MacUE mac)
 			// TODO check if we can transmit all our data or if we have
 			// to request more slots
 			for (int i=0; i<MAC_ULDATA_SLOTS; i++) {
-				if (mac->ul_data_assignments[i] == mac->userid && queuesize>0) {
+				if (mac->ul_data_assignments[i] == 1 && queuesize>0) {
 					LogicalChannel chan = lchan_create(slotsize, CRC16);
 					lchan_add_all_msgs(chan, mac->msg_control_queue);
 					MacMessage msg = mac_frag_get_fragment(mac->fragmenter,
@@ -106,7 +124,7 @@ void mac_ue_run_scheduler(MacUE mac)
 					lchan_add_message(chan, msg);
 					mac_msg_destroy(msg);
 					lchan_calc_crc(chan);
-					phy_map_ulslot(mac->phy,chan,i, mac->ul_mcs);
+					phy_map_ulslot(mac->phy,chan,next_sfn, i, mac->ul_mcs);
 					lchan_destroy(chan);
 					queuesize = mac_frag_get_buffersize(mac->fragmenter);
 				}
@@ -118,7 +136,7 @@ void mac_ue_run_scheduler(MacUE mac)
 		}
 	}
 	// UL ctrl slot available?
-	if (num_slot_assigned(mac->ul_ctrl_assignments, MAC_ULCTRL_SLOTS, mac->userid)>0) {
+	if (num_slot_assigned(mac->ul_ctrl_assignments, MAC_ULCTRL_SLOTS, 1)>0) {
 		// if there are no ctrl messages to be sent we have to create keepalive
 		if (ringbuf_isempty(mac->msg_control_queue)) {
 			MacMessage msg = mac_msg_create_keepalive();
@@ -131,8 +149,8 @@ void mac_ue_run_scheduler(MacUE mac)
 		lchan_calc_crc(chan);
 		// find the ulctrl slot in which we can transmit
 		for (int i=0; i<MAC_ULCTRL_SLOTS; i++) {
-			if (mac->ul_ctrl_assignments[i] == mac->userid) {
-				phy_map_ulctrl(mac->phy,chan,i);
+			if (mac->ul_ctrl_assignments[i] == 1) {
+				phy_map_ulctrl(mac->phy,chan,next_sfn,i);
 				break;
 			}
 		}
@@ -154,8 +172,8 @@ void mac_ue_rx_channel(MacUE mac, LogicalChannel chan)
 	MacMessage msg = NULL;
 	// Get all messages from the logical channel and handle them
 	do {
-		lchan_parse_next_msg(chan, 0);
-		if (msg) {
+		msg = lchan_parse_next_msg(chan, 0);
+		if (msg!=NULL) {
 			mac_ue_handle_message(mac,msg);
 		}
 	} while (msg != NULL);

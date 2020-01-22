@@ -21,7 +21,8 @@ struct PhyUE_s {
 	ofdmframegen fg;	// OFDM frame generator object
 	ofdmframesync fs;	// OFDM frame receiver object
 
-	// Variables to store the decoded slot assignments
+	// Variables to store the decoded slot assignments.
+	// Set to 1 if the corresponding slot is allocated for this client, 0 otherwise
 	// 1. array index: 0 for even subframes, 1 for uneven subframe
 	// 2. array index: slot index
 	uint8_t** dlslot_assignments;
@@ -32,7 +33,7 @@ struct PhyUE_s {
 	uint mcs_dl;
 
 	// MAC layer function that will be called when a slot was received
-	void (*mac_rx_cb)(LogicalChannel);
+	void (*mac_rx_cb)(struct MacUE_s*, LogicalChannel);
 	struct MacUE_s* mac;	// Pointer to MAC layer. Needed to call mac interface function
 
 	// old cfo estimate for filtering
@@ -43,6 +44,11 @@ struct PhyUE_s {
 	// Sample offset between buffer start and start of subframe
 	int rx_offset;
 
+	// random userid which is used during RA procedure
+	int rachuserid;
+	// assigned userid
+	int userid;
+
 	// Locks and Condition variables for RX/TX thread sync
 	pthread_mutex_t tx_sync_lock;
 	pthread_cond_t tx_sync_cond;
@@ -51,14 +57,15 @@ struct PhyUE_s {
 typedef struct PhyUE_s* PhyUE;
 
 /************ GENERAL PHY CONFIG FUNCTIONS **********************/
-PhyUE phy_init_ue();
-void phy_ue_set_mac_interface(PhyUE phy, void (*mac_rx_cb)(LogicalChannel), struct MacUE_s* mac);
+PhyUE phy_ue_init();
+void phy_ue_set_mac_interface(PhyUE phy, void (*mac_rx_cb)(struct MacUE_s*, LogicalChannel), struct MacUE_s* mac);
 void phy_ue_set_mcs_dl(PhyUE phy, uint mcs);
 
 /***************** PHY TX FUNCTIONS *****************************/
-int phy_map_ulslot(PhyUE phy, LogicalChannel chan, uint8_t slot_nr, uint mcs);
-int phy_map_ulctrl(PhyUE phy, LogicalChannel chan, uint8_t slot_nr);
+int phy_map_ulslot(PhyUE phy, LogicalChannel chan, uint subframe, uint8_t slot_nr, uint mcs);
+int phy_map_ulctrl(PhyUE phy, LogicalChannel chan, uint subframe, uint8_t slot_nr);
 void phy_ue_write_subframe(PhyUE phy, float complex* rxbuf_time);
+void phy_ue_write_symbol(PhyUE phy, float complex* txbuf_time);
 
 
 /***************** PHY RX FUNCTIONS *****************************/

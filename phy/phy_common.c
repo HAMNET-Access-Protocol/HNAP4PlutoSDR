@@ -72,7 +72,7 @@ void phy_destroy_common(PhyCommon phy)
 {
     // free buffer for symbols in frequency domain
     for (int i=0; i<SUBFRAME_LEN; i++) {
-    	free(phy->txdata_f[i]);
+    	free(phy->txdata_f[i]); // TODO properly free txdata
     	free(phy->rxdata_f[i]);
     }
 	free(phy->txdata_f);
@@ -121,18 +121,29 @@ int get_ulctrl_slot_size(PhyCommon phy)
 	return (enc_bits-16)*fec_get_rate(phy->mcs_fec_scheme[0]); // real tbs size. Subtract 16bit for conv encoding
 
 }
-// Modulate the given data to the frequency domain data of the Phy object
-// returns the number of symbols that have been generated
-void phy_mod(PhyCommon common, uint first_sc, uint last_sc, uint first_symb, uint last_symb,
+/* Modulate the given data to the frequency domain data of the Phy object
+ * returns the number of symbols that have been generated
+ * Params:	common: 	pointer to the common phy struct
+ *			subframe:	subframe number. Currently only even and uneven (0/1) is defined
+ *			first_sc:	index of the first subcarrier that shall be used
+ *			last_sc:	index of the last subcarrier that shall be used.
+ *			first_symb:	index of the first symbol within the subframe that shall be mapped to
+ *			last_symb:	index of the last symbol
+ *			mcs:		the MCS index that shall be used
+ *			data:		array of symbols that will be modulated
+ *			buf_len:	length of the data array
+ *
+ * Returns:	written_samps:	the number of symbols that have been generated
+ */
+void phy_mod(PhyCommon common, uint subframe, uint first_sc, uint last_sc, uint first_symb, uint last_symb,
 			 uint mcs, uint8_t* data, uint buf_len, uint* written_samps)
 {
-	uint sfn = common->tx_subframe % 2;
 	*written_samps = 0;
 	for (int sym_idx=first_symb; sym_idx<=last_symb; sym_idx++) {
 		for (int i=first_sc; i<=last_sc; i++) {
 			if ((common->pilot_symbols[sym_idx] == NO_PILOT && !(common->pilot_sc[i] == OFDMFRAME_SCTYPE_NULL)) ||
 			    (common->pilot_sc[i] == OFDMFRAME_SCTYPE_DATA)) {
-				modem_modulate(common->mcs_modem[mcs],(uint)data[(*written_samps)++], &common->txdata_f[sfn][sym_idx][i]);
+				modem_modulate(common->mcs_modem[mcs],(uint)data[(*written_samps)++], &common->txdata_f[subframe][sym_idx][i]);
 				if (*written_samps >= buf_len) {
 					return;
 				}

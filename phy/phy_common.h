@@ -11,6 +11,7 @@
 #include "phy_config.h"
 #include "../mac/mac_channels.h"
 
+#include <liquid/liquid.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -55,8 +56,6 @@ typedef struct {
 
 	interleaver mcs_interlvr[8]; // array of interleavers for different mcs
 
-	uint8_t userid;
-
 } PhyCommon_s;
 
 typedef PhyCommon_s* PhyCommon;
@@ -74,7 +73,7 @@ int get_ulctrl_slot_size(PhyCommon phy);
 
 // Modulate the given data to the frequency domain data of the Phy object
 // returns the number of symbols that have been generated
-void phy_mod(PhyCommon common, uint first_sc, uint last_sc, uint first_symb, uint last_symb,
+void phy_mod(PhyCommon common, uint subframe, uint first_sc, uint last_sc, uint first_symb, uint last_symb,
 			 uint mcs, uint8_t* data, uint buf_len, uint* written_samps);
 
 // Symbol demapper with soft decision

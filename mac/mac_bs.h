@@ -48,10 +48,11 @@ struct MacBS_s {
 typedef struct MacBS_s* MacBS;
 
 MacBS mac_bs_init();
+void mac_bs_set_phy_interface(MacBS mac, struct PhyBS_s* phy);
 void mac_bs_destroy(MacBS mac);
 
-void mac_bs_add_new_ue(MacBS mac, uint8_t rachuserid, ofdmframesync fs, uint timingadvance);
-void mac_bs_set_timingadvance(MacBS mac, uint userid, uint timingadvance);
+void mac_bs_add_new_ue(MacBS mac, uint8_t rachuserid, ofdmframesync fs, int timing_diff);
+void mac_bs_update_timingadvance(MacBS mac, uint userid, int timing_diff);
 int mac_bs_add_txdata(MacBS mac, uint8_t destUserID, MacDataFrame frame);
 void mac_bs_rx_channel(MacBS mac, LogicalChannel chan, uint userid);
 void mac_bs_run_scheduler(MacBS mac);
