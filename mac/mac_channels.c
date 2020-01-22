@@ -46,10 +46,15 @@ int lchan_add_message(LogicalChannel chan, MacMessage msg)
 {
 	uint msg_len = msg->hdr_len + msg->payload_len;
 	uint buf_len = lchan_unused_bytes(chan);
-	if ( msg_len < buf_len) {
+	if ( msg_len <= buf_len) {
 		mac_msg_generate(msg,chan->data+chan->writepos, buf_len);
 		chan->writepos +=msg_len;
 		return 1;
+	}
+	if (msg_len < buf_len) {
+		// Force next byte to 0, so if this is the last message
+		// in the channel, the parser can properly detect the end
+		chan->data[chan->writepos] = 0;
 	}
 	return 0;
 }
