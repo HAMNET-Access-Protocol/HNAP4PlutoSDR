@@ -120,7 +120,7 @@ void mac_ue_run_scheduler(MacUE mac)
 					LogicalChannel chan = lchan_create(slotsize, CRC16);
 					lchan_add_all_msgs(chan, mac->msg_control_queue);
 					MacMessage msg = mac_frag_get_fragment(mac->fragmenter,
-													chan->payload_len-chan->writepos,1);
+													lchan_unused_bytes(chan),1);
 					lchan_add_message(chan, msg);
 					mac_msg_destroy(msg);
 					lchan_calc_crc(chan);
@@ -130,9 +130,12 @@ void mac_ue_run_scheduler(MacUE mac)
 				}
 			}
 		} else {
-			// We have data but no UL data slot. add request
-			MacMessage msg = mac_msg_create_ul_req(queuesize);
-			ringbuf_put(mac->msg_control_queue, msg);
+			// We have data but no UL data slot. add request.
+			// to avoid ul_req flooding, only create one if we can send it directly
+			if (num_slot_assigned(mac->ul_ctrl_assignments, MAC_ULCTRL_SLOTS, 1)>0) {
+				MacMessage msg = mac_msg_create_ul_req(queuesize);
+				ringbuf_put(mac->msg_control_queue, msg);
+			}
 		}
 	}
 	// UL ctrl slot available?
