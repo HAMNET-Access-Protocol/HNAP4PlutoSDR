@@ -160,7 +160,7 @@ MacDataFrame mac_assmbl_reassemble(MacAssmbl assmbl, MacMessage fragment)
 		LOG(DEBUG,"[MAC ASSMBL] seq/frag Nr does not match: Got seqNr %d fragNr %d, "
 				  "expect %d:%d\n",data->seqNr,data->fragNr,assmbl->seqNr,assmbl->fragNr);
 		for (int i=0; i<assmbl->fragNr; i++) {
-			free(assmbl->fragments);
+			free(assmbl->fragments[i]);
 		}
 		assmbl->frame_open = 0;
 		assmbl->frame_len = 0;
