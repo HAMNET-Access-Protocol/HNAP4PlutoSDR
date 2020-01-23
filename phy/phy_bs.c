@@ -21,6 +21,7 @@ PhyBS phy_bs_init()
 	PhyBS phy = malloc(sizeof(struct PhyBS_s));
 
 	phy->common = phy_init_common();
+	gen_pilot_symbols(phy->common, 1);
 
 	// Create OFDM frame generator: nFFt, CPlen, taperlen, subcarrier alloc
 	phy->fg = ofdmframegen_create(NFFT, CP_LEN, 0, phy->common->pilot_sc);
@@ -86,7 +87,7 @@ void phy_write_subframe(PhyBS phy, float complex* txbuf_time)
 			break;
 		}
 
-		if (common->pilot_symbols[i] == PILOT) {
+		if (common->pilot_symbols_tx[i] == PILOT) {
 		    ofdmframegen_writesymbol(phy->fg, common->txdata_f[sfn][i],txbuf_time);
 		} else {
 			ofdmframegen_writesymbol_nopilot(phy->fg, common->txdata_f[sfn][i],txbuf_time);
@@ -364,7 +365,7 @@ int phy_bs_rx_subframe(PhyBS phy, float complex* rxbuf_time)
 	}
 
 	for (int i=0; i<sf_len; i++) {
-		if (common->pilot_symbols[i] == PILOT) {
+		if (common->pilot_symbols_rx[i] == PILOT) {
 			ofdmframesync_execute(phy->fs, rxbuf_time,(NFFT+CP_LEN));
 		} else {
 			ofdmframesync_execute_nopilot(phy->fs, rxbuf_time, NFFT+CP_LEN);
@@ -394,7 +395,7 @@ void phy_bs_write_symbol(PhyBS phy, float complex* txbuf_time)
 		ofdmframegen_write_S0b(phy->fg, txbuf_time);
 	} else if (common->tx_subframe == 0 && tx_symb == SUBFRAME_LEN-SYNC_SYMBOLS+2) {
 		ofdmframegen_write_S1(phy->fg, txbuf_time);
-	} else if (common->pilot_symbols[tx_symb] == PILOT) {
+	} else if (common->pilot_symbols_tx[tx_symb] == PILOT) {
 		ofdmframegen_writesymbol(phy->fg, common->txdata_f[sfn][tx_symb],txbuf_time);
 	} else {
 		ofdmframegen_writesymbol_nopilot(phy->fg, common->txdata_f[sfn][tx_symb],txbuf_time);
@@ -447,7 +448,7 @@ void phy_bs_rx_symbol(PhyBS phy, float complex* rxbuf_time)
 		}
 	} else {
 		// not in RA slot. Do normal receive
-		if (common->pilot_symbols[common->rx_symbol] == PILOT) {
+		if (common->pilot_symbols_rx[common->rx_symbol] == PILOT) {
 			ofdmframesync_reset_msequence(phy->fs); // TODO Uplink pilot definition
 			ofdmframesync_execute(phy->fs,rxbuf_time,rx_sym);
 		} else {

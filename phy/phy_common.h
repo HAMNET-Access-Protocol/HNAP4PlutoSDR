@@ -38,7 +38,8 @@ typedef struct {
 	uint tx_active;	// for UEs, TX is only activated after sync is established
 
 	uint8_t* pilot_sc;	// defines which subcarriers are used for pilots
-	uint8_t* pilot_symbols; // stores whether the ofdm symbols within a slot contain pilots
+	uint8_t* pilot_symbols_rx; // stores which OFDM symbols in a subframe contain pilots.
+	uint8_t* pilot_symbols_tx;
 
 	// hold TX data in frequency domain
 	// 1. Index: subframe index: 0 for even subframes, 1 for uneven
@@ -86,6 +87,9 @@ void phy_demod_soft(PhyCommon common, uint first_sc, uint last_sc, uint first_sy
  * struct.
  */
 void gen_sc_alloc(PhyCommon phy);
-
+/*
+ * Define which OFDM symbols whithin a subframe contain pilots
+ */
+void gen_pilot_symbols(PhyCommon phy, uint is_bs);
 
 #endif /* PHY_COMMON_H_ */

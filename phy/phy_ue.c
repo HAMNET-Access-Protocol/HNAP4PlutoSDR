@@ -20,6 +20,7 @@ PhyUE phy_ue_init()
 	PhyUE phy = malloc(sizeof(struct PhyUE_s));
 
 	phy->common = phy_init_common();
+	gen_pilot_symbols(phy->common, 0);
 
 	// Create OFDM frame generator: nFFt, CPlen, taperlen, subcarrier alloc
 	phy->fg = ofdmframegen_create(NFFT, CP_LEN, 0, phy->common->pilot_sc);
@@ -389,7 +390,7 @@ void phy_ue_write_symbol(PhyUE phy, float complex* txbuf_time)
 			}
 		} else {
 			// MAC is associated, might send data.
-			if (common->pilot_symbols[tx_symb] == PILOT) {
+			if (common->pilot_symbols_tx[tx_symb] == PILOT) {
 				ofdmframegen_reset(phy->fg); // TODO we use the same msequence in every pilot symbol sent. Fix this
 				ofdmframegen_writesymbol(phy->fg, common->txdata_f[sfn][tx_symb],txbuf_time);
 			} else {
@@ -427,7 +428,7 @@ void phy_ue_do_rx(PhyUE phy, float complex* rxbuf_time, uint num_samples)
 		} else {
 			// receive symbols
 			uint rx_sym = fmin(NFFT+CP_LEN,remaining_samps);
-			if (common->pilot_symbols[common->rx_symbol] == PILOT) {
+			if (common->pilot_symbols_rx[common->rx_symbol] == PILOT) {
 				ofdmframesync_execute(phy->fs,rxbuf_time,rx_sym);
 				LOG(DEBUG,"[PHY UE] cfo updated: %.3f Hz\n",ofdmframesync_get_cfo(phy->fs)*SAMPLERATE/6.28);
 			} else {

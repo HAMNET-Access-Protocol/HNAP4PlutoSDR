@@ -28,7 +28,8 @@ PhyCommon phy_init_common()
 
     // alloc buffer for subcarrier definitions
     phy->pilot_sc = malloc(NFFT);
-    phy->pilot_symbols = malloc(SUBFRAME_LEN);
+    phy->pilot_symbols_rx = malloc(SUBFRAME_LEN);
+    phy->pilot_symbols_tx = malloc(SUBFRAME_LEN);
     gen_sc_alloc(phy);
 
     // init modulator objects
@@ -80,7 +81,8 @@ void phy_destroy_common(PhyCommon phy)
 
     // free buffer for subcarrier definitions
     free(phy->pilot_sc);
-    free(phy->pilot_symbols);
+    free(phy->pilot_symbols_rx);
+    free(phy->pilot_symbols_tx);
 
     // delete modulator objects
     modem_destroy(phy->mcs_modem[0]);
@@ -141,7 +143,7 @@ void phy_mod(PhyCommon common, uint subframe, uint first_sc, uint last_sc, uint 
 	*written_samps = 0;
 	for (int sym_idx=first_symb; sym_idx<=last_symb; sym_idx++) {
 		for (int i=first_sc; i<=last_sc; i++) {
-			if ((common->pilot_symbols[sym_idx] == NO_PILOT && !(common->pilot_sc[i] == OFDMFRAME_SCTYPE_NULL)) ||
+			if ((common->pilot_symbols_tx[sym_idx] == NO_PILOT && !(common->pilot_sc[i] == OFDMFRAME_SCTYPE_NULL)) ||
 			    (common->pilot_sc[i] == OFDMFRAME_SCTYPE_DATA)) {
 				modem_modulate(common->mcs_modem[mcs],(uint)data[(*written_samps)++], &common->txdata_f[subframe][sym_idx][i]);
 				if (*written_samps >= buf_len) {
@@ -164,7 +166,7 @@ void phy_demod_soft(PhyCommon common, uint first_sc, uint last_sc, uint first_sy
 	uint symbol = 0;
 	for (int sym_idx=first_symb; sym_idx<=last_symb; sym_idx++) {
 		for (int i=first_sc; i<=last_sc; i++) {
-			if ((common->pilot_symbols[sym_idx] == NO_PILOT && !(common->pilot_sc[i] == OFDMFRAME_SCTYPE_NULL)) ||
+			if ((common->pilot_symbols_rx[sym_idx] == NO_PILOT && !(common->pilot_sc[i] == OFDMFRAME_SCTYPE_NULL)) ||
 			    (common->pilot_sc[i] == OFDMFRAME_SCTYPE_DATA)) {
 				modem_demodulate_soft(common->mcs_modem[mcs], common->rxdata_f[sym_idx][i], &symbol, &llr[*written_samps]);
 				*written_samps+=bps;
@@ -176,7 +178,7 @@ void phy_demod_soft(PhyCommon common, uint first_sc, uint last_sc, uint first_sy
 	}
 }
 
-// generate the allocation info for the subcarriers and OFDM symbols within a slot
+// generate the allocation info for the subcarriers
 void gen_sc_alloc(PhyCommon phy)
 {
     // initialize as NULL
@@ -202,14 +204,37 @@ void gen_sc_alloc(PhyCommon phy)
     phy->pilot_sc[NFFT-1-7] = OFDMFRAME_SCTYPE_PILOT;
     phy->pilot_sc[NFFT-1-12] = OFDMFRAME_SCTYPE_PILOT;
     phy->pilot_sc[NFFT-1-17] = OFDMFRAME_SCTYPE_PILOT;
+}
+
+void gen_pilot_symbols(PhyCommon phy, uint is_bs)
+{
+	// UE transmits in UL and RXs in DL, BS the other way around
+	// define pilots accordingly
+	uint8_t* pilot_ul,*pilot_dl;
+	if (is_bs) {
+		pilot_dl = phy->pilot_symbols_tx;
+		pilot_ul = phy->pilot_symbols_rx;
+	} else {
+		pilot_dl = phy->pilot_symbols_rx;
+		pilot_ul = phy->pilot_symbols_tx;
+	}
 
     // Pilot definition in time domain:
     for (int i=0; i<SUBFRAME_LEN; i++) {
-    	phy->pilot_symbols[i] = NO_PILOT;
+    	pilot_dl[i] = NO_PILOT;
+    	pilot_ul[i] = NO_PILOT;
     }
-    // first OFDM symbol of each data slot shall be pilot
-    phy->pilot_symbols[0] = PILOT;
+    // DL: first OFDM symbol of each data slot shall be pilot
+    pilot_dl[0] = PILOT;
     for (int i=0; i<NUM_SLOT; i++) {
-    	phy->pilot_symbols[DLCTRL_LEN+2+(SLOT_LEN+1)*i] = PILOT;
+    	pilot_dl[DLCTRL_LEN+2+(SLOT_LEN+1)*i] = PILOT;
     }
+
+    // UL: ulctrl slots and first symbol of uldata slots have pilots
+    pilot_ul[2*(SLOT_LEN+1)] = PILOT;
+    pilot_ul[2*(SLOT_LEN+1)+2] = PILOT;
+    pilot_ul[0] = PILOT;
+    pilot_ul[SLOT_LEN+1] = PILOT;
+    pilot_ul[2*(SLOT_LEN+1)+4] = PILOT;
+    pilot_ul[3*(SLOT_LEN+1)+4] = PILOT;
 }
