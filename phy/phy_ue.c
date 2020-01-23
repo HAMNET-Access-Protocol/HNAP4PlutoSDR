@@ -508,8 +508,13 @@ int phy_map_ulslot(PhyUE phy, LogicalChannel chan, uint subframe, uint8_t slot_n
 	liquid_repack_bytes(enc_b,8,enc_len,repacked_b,modem_get_bps(common->mcs_modem[mcs]),num_repacked,&bytes_written);
 
 	uint total_samps = 0;
-	uint first_symb = DLCTRL_LEN+2+(SLOT_LEN+1)*slot_nr;
-	uint last_symb = DLCTRL_LEN+2+(SLOT_LEN+1)*(slot_nr+1)-2;
+	uint first_symb = (SLOT_LEN+1)*slot_nr;
+	uint last_symb = (SLOT_LEN+1)*(slot_nr+1)-2; //TODO implement generic function to calc all slot allocations
+	// slot 3 and 4 are shifted back since the ULCTRL lies between slot 2 and 3
+	if(slot_nr>=2) {
+		first_symb += 4;
+		last_symb +=4;
+	}
 
 	// modulate signal
 	uint sfn = subframe % 2;
