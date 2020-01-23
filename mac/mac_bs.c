@@ -186,9 +186,9 @@ void mac_bs_run_scheduler(MacBS mac)
 	if (mac->phy->common->tx_symbol==0) {
 		// subframe just started. schedule for this one.
 		// TODO set rules when the scheduler should run
-		next_sfn = mac->phy->common->tx_subframe % 2;
+		next_sfn = mac->phy->common->tx_subframe;
 	} else {
-		next_sfn = (mac->phy->common->tx_subframe+1) % 2;
+		next_sfn = (mac->phy->common->tx_subframe+1) % FRAME_LEN;
 	}
 	// 1. Assign UL ctrl slots
 	// TODO correctly assign UL ctrl slots. This assigns to userids that are inactive
@@ -206,7 +206,7 @@ void mac_bs_run_scheduler(MacBS mac)
 		mac->dl_data_assignments[slot_idx] = USER_BROADCAST;
 		// Map slot
 		lchan_calc_crc(bchan);
-        phy_map_dlslot(mac->phy, bchan, next_sfn, slot_idx, USER_BROADCAST, 0);
+        phy_map_dlslot(mac->phy, bchan, next_sfn%2, slot_idx, USER_BROADCAST, 0);
         lchan_destroy(bchan);
         slot_idx++;
 	}
@@ -239,6 +239,11 @@ void mac_bs_run_scheduler(MacBS mac)
 			break; // no other active user found. stop
 		}
 	}
+	// assure that the sync slot is not assigned for user traffic
+	if (next_sfn==0) {
+		mac->dl_data_assignments[MAC_DLDATA_SLOTS-1] = USER_UNUSED;
+	}
+	// TODO assure that no data slot is assigned during RA slot?
 
 	// 4. iterate over each UL slot and assign it
 	// TODO check that assignment do not overlap with DL slots
@@ -267,6 +272,10 @@ void mac_bs_run_scheduler(MacBS mac)
 			user_id = ue->userid; // update last active user
 		}
 	}
+	// force RA slot to be not assigned.
+	if (next_sfn==0) {
+		mac->ul_data_assignments[MAC_ULDATA_SLOTS-1] = USER_UNUSED;
+	}
 
 	// 5. Generate DL slot data
 	for (int slot=0; slot<MAC_DLDATA_SLOTS; slot++) {
@@ -286,16 +295,16 @@ void mac_bs_run_scheduler(MacBS mac)
 			mac_msg_destroy(msg);
 		}
 		lchan_calc_crc(chan);
-        phy_map_dlslot(mac->phy, chan, next_sfn, slot, ue->userid, ue->dl_mcs);
+        phy_map_dlslot(mac->phy, chan, next_sfn%2, slot, ue->userid, ue->dl_mcs);
         lchan_destroy(chan);
 	}
 
 	// 5.2 set slot assignments in PHY
 	phy_assign_dlctrl_dd(mac->phy, mac->dl_data_assignments);
-	phy_assign_dlctrl_ud(mac->phy, next_sfn, mac->ul_data_assignments);
-	phy_assign_dlctrl_uc(mac->phy, next_sfn, mac->ul_ctrl_assignments);
+	phy_assign_dlctrl_ud(mac->phy, next_sfn%2, mac->ul_data_assignments);
+	phy_assign_dlctrl_uc(mac->phy, next_sfn%2, mac->ul_ctrl_assignments);
 	// write the Downlink control channel to the subcarriers
-	phy_map_dlctrl(mac->phy, next_sfn);
+	phy_map_dlctrl(mac->phy, next_sfn%2);
 
 	// Log schedule
 	LOG(DEBUG,"[MAC BS] Scheduler user assignments:\n");
