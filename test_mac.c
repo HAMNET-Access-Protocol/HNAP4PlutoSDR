@@ -17,6 +17,7 @@ int main()
 {
 	// Setup the hardware
 	uint buflen = NFFT+CP_LEN;
+	uint subframe_cnt = 0;
 	// offset stores the currently compensated TX advance
 	// tx_shift stores the shift within the buffer that is caused by the offset
 	int offset=0, tx_shift=0, num_samples=buflen;
@@ -37,19 +38,24 @@ int main()
 
 	// Main simulation thread
 	float complex* dl_data = calloc(sizeof(float complex),NFFT+CP_LEN);
-	float complex* ul_data = calloc(sizeof(float complex),NFFT+CP_LEN);
+	float complex* ul_data_tx = calloc(sizeof(float complex),NFFT+CP_LEN);
+	float complex* ul_data_rx = calloc(sizeof(float complex),NFFT+CP_LEN);
 
 	while (1)
 	{
+		LOG(INFO,"Prepare frame %d\n",subframe_cnt);
 		// add some data to send
-		MacDataFrame dl_frame = dataframe_create(100);
-		for (int i=0; i<100; i++)
-			dl_frame->data[i] = rand() & 0xFF;
-		mac_bs_add_txdata(mac_bs, 2, dl_frame);
+		//MacDataFrame dl_frame = dataframe_create(100);
+		//for (int i=0; i<100; i++)
+		//	dl_frame->data[i] = rand() & 0xFF;
+		//memcpy(dl_frame->data,&subframe_cnt,sizeof(uint));
+		//mac_bs_add_txdata(mac_bs, 2, dl_frame);
 		// add some data to send for client
 		MacDataFrame ul_frame = dataframe_create(100);
 		for (int i=0; i<100; i++)
 			ul_frame->data[i] = rand() & 0xFF;
+		memcpy(ul_frame->data,&subframe_cnt,sizeof(uint));
+
 		if(!mac_ue_add_txdata(mac_ue, ul_frame)) {
 			dataframe_destroy(ul_frame);
 		}
@@ -87,12 +93,12 @@ int main()
 				// --------- TX ------------
 				// create tx time data
 				// first add the last samples from the previous generated symbol
-				client->platform_tx_prep(client, ul_data, 0, tx_shift);
+				client->platform_tx_prep(client, ul_data_tx+num_samples, 0, tx_shift);
 				// create new symbol
-				phy_ue_write_symbol(phy_ue, ul_data);
+				phy_ue_write_symbol(phy_ue, ul_data_tx);
 
 				// prepare first part of the new symbol
-				client->platform_tx_prep(client, ul_data, tx_shift, num_samples);
+				client->platform_tx_prep(client, ul_data_tx, tx_shift, num_samples);
 
 				// push buffer
 				client->platform_tx_push(client);
@@ -101,7 +107,7 @@ int main()
 				if (phy_ue->common->tx_symbol == 29 && phy_ue->common->tx_subframe == 0) {
 					// check if offset has changed
 					int new_offset = phy_ue->mac->timing_advance;
-					if (abs(new_offset-offset)>2) {
+					if (abs(new_offset-offset)>0) {
 						// if offset diff is >0, we have to skip ofdm symbols
 						while (new_offset-offset > 0) {
 							phy_ue->common->tx_symbol++;
@@ -115,10 +121,11 @@ int main()
 			} // end(client RXTX)
 
 			// BS RX
-			bs->platform_rx(bs, ul_data);
-			phy_bs_rx_symbol(phy_bs, ul_data);
+			bs->platform_rx(bs, ul_data_rx);
+			phy_bs_rx_symbol(phy_bs, ul_data_rx);
 
 		} // end{for}
+		subframe_cnt++;
 	}
 
 	client->end(client);
