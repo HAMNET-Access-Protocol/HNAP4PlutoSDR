@@ -68,6 +68,9 @@ int mac_ue_handle_message(MacUE mac, MacMessage msg)
 		if (frame != NULL) {
 			printf("[MAC UE] received dataframe of %d bytes\n",frame->size);
 			//TODO forward received frame to higher layer
+			static uint sfn=0;
+			sfn++;
+			LOG(INFO,"[MAC UE] total received: %d\n",sfn);
 			dataframe_destroy(frame);
 		}
 		break;
@@ -109,37 +112,46 @@ void mac_ue_run_scheduler(MacUE mac)
 	if (mac->is_associated == 0) {
 		return;
 	}
-	// check data queue
-	if (queuesize > 0) {
-		// check if an UL data slot is available
-		if (num_assigned>0) {
-			// TODO check if we can transmit all our data or if we have
-			// to request more slots
-			for (int i=0; i<MAC_ULDATA_SLOTS; i++) {
-				if (mac->ul_data_assignments[i] == 1 && queuesize>0) {
-					LogicalChannel chan = lchan_create(slotsize, CRC16);
-					lchan_add_all_msgs(chan, mac->msg_control_queue);
+	// reset symbol allocation. Will be set during phy modulation
+	phy_ue_reset_symbol_allocation(mac->phy, next_sfn%2);
+
+	// iterate over slots and check if the client is assigned to one
+	// TODO check if we can transmit all our data or if we have
+	// to request more slots
+	if (num_assigned>0) {
+		for (int i=0; i<MAC_ULDATA_SLOTS; i++) {
+			if (mac->ul_data_assignments[i] == 1) {
+				LogicalChannel chan = lchan_create(slotsize, CRC16);
+				lchan_add_all_msgs(chan, mac->msg_control_queue);
+				if (queuesize>0) {
+					// client is assigned to slot and has data
 					MacMessage msg = mac_frag_get_fragment(mac->fragmenter,
 													lchan_unused_bytes(chan),1);
 					lchan_add_message(chan, msg);
 					mac_msg_destroy(msg);
-					lchan_calc_crc(chan);
-					phy_map_ulslot(mac->phy,chan,next_sfn, i, mac->ul_mcs);
-					lchan_destroy(chan);
-					queuesize = mac_frag_get_buffersize(mac->fragmenter);
+				} else {
+					// client is assigned to slot but has no data
+					// send keepalive instead.
+					MacMessage msg = mac_msg_create_keepalive();
+					lchan_add_message(chan, msg);
+					mac_msg_destroy(msg);
 				}
-			}
-		} else {
-			// We have data but no UL data slot. add request.
-			// to avoid ul_req flooding, only create one if we can send it directly
-			if (num_slot_assigned(mac->ul_ctrl_assignments, MAC_ULCTRL_SLOTS, 1)>0) {
-				MacMessage msg = mac_msg_create_ul_req(queuesize);
-				ringbuf_put(mac->msg_control_queue, msg);
+				lchan_calc_crc(chan);
+				phy_map_ulslot(mac->phy,chan,next_sfn, i, mac->ul_mcs);
+				lchan_destroy(chan);
+				queuesize = mac_frag_get_buffersize(mac->fragmenter);
 			}
 		}
 	}
-	// UL ctrl slot available?
+
+	// check for ULctrl slots
 	if (num_slot_assigned(mac->ul_ctrl_assignments, MAC_ULCTRL_SLOTS, 1)>0) {
+		// check if we have to create ul_req
+		if (queuesize>0) {
+			MacMessage msg = mac_msg_create_ul_req(queuesize);
+			ringbuf_put(mac->msg_control_queue, msg);
+		}
+
 		// if there are no ctrl messages to be sent we have to create keepalive
 		if (ringbuf_isempty(mac->msg_control_queue)) {
 			MacMessage msg = mac_msg_create_keepalive();
