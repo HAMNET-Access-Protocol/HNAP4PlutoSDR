@@ -12,8 +12,8 @@
 #include <string.h>
 #include <stdlib.h>
 
+#include "../util/log.h"
 #include "mac_messages.h"
-#include "../log.h"
 
 // Define CRC types
 #define CRC8 8

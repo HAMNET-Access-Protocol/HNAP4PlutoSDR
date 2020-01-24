@@ -5,7 +5,12 @@
  *      Author: lukas
  */
 #include "mac_bs.h"
-#include "../log.h"
+#include "../util/log.h"
+
+// log makro to log with subframe number
+#define LOG_SFN(level, ...) do { if (level>=LOG_LEVEL) \
+	{ printf("[%2d %2d]",mac->phy->common->rx_subframe,mac->phy->common->rx_symbol); \
+	  printf(__VA_ARGS__); }} while(0);
 
 
 MacBS mac_bs_init()
@@ -86,7 +91,6 @@ int mac_bs_add_txdata(MacBS mac, uint8_t destUserID, MacDataFrame frame)
 
 	if (destUser == NULL) {
 		LOG(WARN,"[MAC BS] add_txdata: user %d does not exist!\n",destUserID);
-		dataframe_destroy(frame); // TODO better be handled by caller function?
 		return 0;
 	}
 
@@ -115,32 +119,41 @@ void mac_bs_update_timingadvance(MacBS mac, uint userid, int timing_diff)
 // Handle incoming messages from PHY layer
 int mac_bs_handle_message(MacBS mac, MacMessage msg, uint8_t userID)
 {
+
 	user_s* user = mac->UE[userID];
+	if (user==NULL) {
+		mac_msg_destroy(msg);
+		return 0;
+		LOG_SFN(WARN,"[MAC BS] received message for unassociated user %d. Drop\n",userID);
+	}
 	MacDataFrame frame;
 	switch (msg->type) {
 	case ul_req:
 		// Update the user uplink queue state
 		user->ul_queue=msg->hdr.ULreq.packetqueuesize;
-		LOG(DEBUG,"[MAC BS] ul_req from user %d. Queuesize: %d\n",userID,user->ul_queue);
+		LOG_SFN(DEBUG,"[MAC BS] ul_req from user %d. Queuesize: %d\n", userID,user->ul_queue);
 		break;
 	case channel_quality:
-		LOG(DEBUG, "[MAC BS] channel quality measurement not implemented yet\n");
+		LOG_SFN(DEBUG, "[MAC BS] channel quality measurement not implemented yet\n");
 		break;
 	case keepalive:
-		LOG(DEBUG,"[MAC BS] keepalive from user %d\n",userID);
+		LOG_SFN(DEBUG,"[MAC BS] keepalive from user %d\n",userID);
 		break;
 	case control_ack:
 		break;
 	case ul_data:
 		frame = mac_assmbl_reassemble(user->reassembler,msg);
 		if (frame != NULL) {
-			printf("[MAC BS] rec %d bytes: %s\n",frame->size,frame->data);
+			LOG_SFN(INFO,"[MAC BS] received frame with %d bytes!\n",frame->size);
 			//TODO forward received frame to higher layer
+			uint sfn;
+			memcpy(&sfn, frame->data,sizeof(uint));
+			LOG(INFO,"[MAC BS] received frame ID: %d\n",sfn);
 			dataframe_destroy(frame);
 		}
 		break;
 	default:
-		LOG(WARN,"[MAC BS] unexpected MacMsg ID: %d\n",msg->type);
+		LOG_SFN(WARN,"[MAC BS] unexpected MacMsg ID: %d\n",msg->type);
 		mac_msg_destroy(msg);
 		return 0;
 	}
@@ -155,7 +168,7 @@ void mac_bs_rx_channel(MacBS mac, LogicalChannel chan, uint userid)
 {
 	// Verify the CRC
 	if(!lchan_verify_crc(chan)) {
-		LOG(INFO, "[MAC BS] lchan CRC invalid. Dropping.\n");
+		LOG_SFN(INFO, "[MAC BS] lchan CRC%d invalid. Dropping.\n",8*chan->crc_type);
 		lchan_destroy(chan);
 		return;
 	}
@@ -200,6 +213,7 @@ void mac_bs_run_scheduler(MacBS mac)
 	} else {
 		next_sfn = (mac->phy->common->tx_subframe+1) % FRAME_LEN;
 	}
+
 	// 1. Assign UL ctrl slots
 	// TODO correctly assign UL ctrl slots. This assigns to userids that are inactive
 	uint id = mac->phy->common->tx_subframe *2;
@@ -278,8 +292,9 @@ void mac_bs_run_scheduler(MacBS mac)
 		} else if (ue->userid == user_id) {
 			// no other active user found. assign to
 			// current user even if there is no ul req
-			mac->ul_data_assignments[slot_idx++] = ue->userid;
-			user_id = ue->userid; // update last active user
+			//mac->ul_data_assignments[slot_idx++] = ue->userid;
+			//user_id = ue->userid; // update last active user
+			break; //Disable proactive assignment
 		}
 	}
 	// force RA slot to be not assigned.

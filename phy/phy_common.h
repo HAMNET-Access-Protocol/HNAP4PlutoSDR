@@ -28,7 +28,6 @@ typedef union {
 
 enum {NO_PILOT, PILOT};		// definition for pilot_symbols variable
 
-
 // Struct contains PHY variables common to UE and BS Phy layer
 typedef struct {
 	uint rx_subframe;
@@ -62,9 +61,9 @@ typedef struct {
 typedef PhyCommon_s* PhyCommon;
 
 // Create the common phy struct
-PhyCommon phy_init_common();
+PhyCommon phy_common_init();
 
-int _ofdm_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd);
+void phy_common_destroy(PhyCommon phy);
 
 // returns the Transport Block size of a UL/DL data slot in bits
 int get_tbs_size(PhyCommon phy, uint mcs);
@@ -82,14 +81,7 @@ void phy_mod(PhyCommon common, uint subframe, uint first_sc, uint last_sc, uint 
 void phy_demod_soft(PhyCommon common, uint first_sc, uint last_sc, uint first_symb, uint last_symb,
 					uint mcs, uint8_t* llr, uint num_llr, uint* written_samps);
 
-/*
- * Generate the subcarrier allocation table and set corresponding variables in the phy
- * struct.
- */
-void gen_sc_alloc(PhyCommon phy);
-/*
- * Define which OFDM symbols whithin a subframe contain pilots
- */
+// Define which OFDM symbols whithin a subframe contain pilots
 void gen_pilot_symbols(PhyCommon phy, uint is_bs);
 
 #endif /* PHY_COMMON_H_ */

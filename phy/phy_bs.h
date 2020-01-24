@@ -49,21 +49,19 @@ struct PhyBS_s {
 
 typedef struct PhyBS_s* PhyBS;
 
+/*************** Initializer functions *********************/
 PhyBS phy_bs_init();
 void phy_bs_set_mac_interface(PhyBS phy, struct MacBS_s* mac);
 
-void phy_make_syncsig(PhyBS phy, float complex* txbuf_time);
-void phy_write_subframe(PhyBS phy, float complex* txbuf_time);
+/************* TX mapper functions *************************/
 int phy_map_dlslot(PhyBS phy, LogicalChannel chan, uint subframe, uint8_t slot_nr, uint userid, uint mcs);
 void phy_map_dlctrl(PhyBS phy, uint subframe);
 void phy_assign_dlctrl_dd(PhyBS phy, uint8_t* slot_assignment);
 void phy_assign_dlctrl_ud(PhyBS phy, uint subframe, uint8_t* slot_assignment);
 void phy_assign_dlctrl_uc(PhyBS phy, uint subframe, uint8_t* slot_assignment);
-int phy_assign_dlctrl_ud_user(PhyBS phy, uint8_t* assigned_slots, uint userid);
-int phy_assign_dlctrl_uc_user(PhyBS phy, uint8_t* assigned_slots, uint userid);
-int phy_bs_rx_subframe(PhyBS phy, float complex* rxbuf_time);
+
+/************** Main RX/TX functions ***********************/
 void phy_bs_rx_symbol(PhyBS phy, float complex* rxbuf_time);
 void phy_bs_write_symbol(PhyBS phy, float complex* txbuf_time);
-int phy_bs_proc_rach(PhyBS phy, int timing_diff);
 
 #endif /* PHY_BS_H_ */

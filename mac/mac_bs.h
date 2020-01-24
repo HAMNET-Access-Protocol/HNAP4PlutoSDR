@@ -47,6 +47,7 @@ struct MacBS_s {
 
 typedef struct MacBS_s* MacBS;
 
+// ---------------------- Generic MAC ------------------------ //
 MacBS mac_bs_init();
 void mac_bs_destroy(MacBS mac);
 void mac_bs_set_phy_interface(MacBS mac, struct PhyBS_s* phy);

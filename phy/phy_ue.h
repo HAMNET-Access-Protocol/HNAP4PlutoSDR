@@ -13,6 +13,8 @@
 
 typedef enum {NO_SYNC, HAS_SYNC} phy_states;
 
+enum {NOT_USED, DATA, RAMP_UP, RAMP_DOWN}; // definition for tx_symbol allocation variable
+
 // forward declaration of Mac struct
 struct MacUE_s;
 
@@ -65,22 +67,27 @@ typedef struct PhyUE_s* PhyUE;
 /************ GENERAL PHY CONFIG FUNCTIONS **********************/
 PhyUE phy_ue_init();
 void phy_ue_set_mac_interface(PhyUE phy, void (*mac_rx_cb)(struct MacUE_s*, LogicalChannel), struct MacUE_s* mac);
+
+
+/************* MAC INTERFACE FUNCTIONS *************************/
+// Configuration
 void phy_ue_set_mcs_dl(PhyUE phy, uint mcs);
 void phy_ue_reset_symbol_allocation(PhyUE phy, uint subframe);
 
-/***************** PHY TX FUNCTIONS *****************************/
+// PHY data mapping
 int phy_map_ulslot(PhyUE phy, LogicalChannel chan, uint subframe, uint8_t slot_nr, uint mcs);
 int phy_map_ulctrl(PhyUE phy, LogicalChannel chan, uint subframe, uint8_t slot_nr);
-void phy_ue_write_subframe(PhyUE phy, float complex* rxbuf_time);
+
+// PHY slot processing
+int phy_ue_proc_dlctrl(PhyUE phy);
+
+
+/***************** PHY RX/TX FUNCTIONS *****************************/
+int phy_ue_initial_sync(PhyUE phy, float complex* rxbuf_time, uint num_samples);
+void phy_ue_do_rx(PhyUE phy, float complex* rxbuf_time, uint num_samples);
+
 void phy_ue_write_symbol(PhyUE phy, float complex* txbuf_time);
 
-
-/***************** PHY RX FUNCTIONS *****************************/
-int phy_ue_initial_sync(PhyUE phy, float complex* rxbuf_time, uint num_samples);
-int phy_ue_proc_dlctrl(PhyUE phy);
-void phy_ue_proc_slot(PhyUE phy, uint slotnr);
-//void phy_ue_rx_subframe(PhyUE phy, float complex* rxbuf_time);
-void phy_ue_do_rx(PhyUE phy, float complex* rxbuf_time, uint num_samples);
 
 
 #endif /* PHY_UE_H_ */

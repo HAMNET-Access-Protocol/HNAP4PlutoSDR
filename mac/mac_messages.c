@@ -6,7 +6,8 @@
  */
 
 #include "mac_messages.h"
-#include "../log.h"
+
+#include "../util/log.h"
 
 /* Local Helper functions */
 

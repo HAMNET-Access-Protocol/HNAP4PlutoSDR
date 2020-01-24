@@ -5,8 +5,8 @@
  *      Author: lukas
  */
 
-#ifndef LOG_H_
-#define LOG_H_
+#ifndef UTIL_LOG_H_
+#define UTIL_LOG_H_
 
 #include <math.h>
 #include <stdint.h>
@@ -39,4 +39,4 @@ void log_matlab_f(float* floats, int num_samps, char* filename);
 void log_matlab_i(int* buf, int num_samps, char* filename);
 void log_bin(uint8_t* buf, uint buf_len, char* filename, char* mode);
 
-#endif /* LOG_H_ */
+#endif /* UTIL_LOG_H_ */

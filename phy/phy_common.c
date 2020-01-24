@@ -7,9 +7,36 @@
 
 #include "phy_common.h"
 
+// generate the allocation info for the subcarriers
+void gen_sc_alloc(PhyCommon phy)
+{
+    // initialize as NULL
+    for (int i=0; i<NFFT; i++)
+        phy->pilot_sc[i] = OFDMFRAME_SCTYPE_NULL;
+
+    // upper band
+    for (int i=0; i<(NUM_DATA_SC+NUM_PILOT)/2; i++) {
+        phy->pilot_sc[i] = OFDMFRAME_SCTYPE_DATA;
+    }
+
+    // lower band
+    for (int i=0; i<(NUM_DATA_SC+NUM_PILOT)/2; i++) {
+        phy->pilot_sc[NFFT-1-i] = OFDMFRAME_SCTYPE_DATA;
+    }
+
+    // set pilots
+    phy->pilot_sc[2] = OFDMFRAME_SCTYPE_PILOT;
+    phy->pilot_sc[7] = OFDMFRAME_SCTYPE_PILOT;
+    phy->pilot_sc[12] = OFDMFRAME_SCTYPE_PILOT;
+    phy->pilot_sc[17] = OFDMFRAME_SCTYPE_PILOT;
+    phy->pilot_sc[NFFT-1-2] = OFDMFRAME_SCTYPE_PILOT;
+    phy->pilot_sc[NFFT-1-7] = OFDMFRAME_SCTYPE_PILOT;
+    phy->pilot_sc[NFFT-1-12] = OFDMFRAME_SCTYPE_PILOT;
+    phy->pilot_sc[NFFT-1-17] = OFDMFRAME_SCTYPE_PILOT;
+}
 
 // Init the PHY instance
-PhyCommon phy_init_common()
+PhyCommon phy_common_init()
 {
 	PhyCommon phy = malloc(sizeof(PhyCommon_s));
 
@@ -69,15 +96,19 @@ PhyCommon phy_init_common()
     return phy;
 }
 
-void phy_destroy_common(PhyCommon phy)
+void phy_common_destroy(PhyCommon phy)
 {
     // free buffer for symbols in frequency domain
     for (int i=0; i<SUBFRAME_LEN; i++) {
-    	free(phy->txdata_f[i]); // TODO properly free txdata
+    	free(phy->txdata_f[0][i]);
+    	free(phy->txdata_f[1][i]);
     	free(phy->rxdata_f[i]);
     }
-	free(phy->txdata_f);
+	free(phy->txdata_f[0]);
+	free(phy->txdata_f[1]);
+
 	free(phy->rxdata_f);
+	free(phy->txdata_f);
 
     // free buffer for subcarrier definitions
     free(phy->pilot_sc);
@@ -123,6 +154,8 @@ int get_ulctrl_slot_size(PhyCommon phy)
 	return (enc_bits-16)*fec_get_rate(phy->mcs_fec_scheme[0]); // real tbs size. Subtract 16bit for conv encoding
 
 }
+
+
 /* Modulate the given data to the frequency domain data of the Phy object
  * returns the number of symbols that have been generated
  * Params:	common: 	pointer to the common phy struct
@@ -178,33 +211,6 @@ void phy_demod_soft(PhyCommon common, uint first_sc, uint last_sc, uint first_sy
 	}
 }
 
-// generate the allocation info for the subcarriers
-void gen_sc_alloc(PhyCommon phy)
-{
-    // initialize as NULL
-    for (int i=0; i<NFFT; i++)
-        phy->pilot_sc[i] = OFDMFRAME_SCTYPE_NULL;
-
-    // upper band
-    for (int i=0; i<(NUM_DATA_SC+NUM_PILOT)/2; i++) {
-        phy->pilot_sc[i] = OFDMFRAME_SCTYPE_DATA;
-    }
-
-    // lower band
-    for (int i=0; i<(NUM_DATA_SC+NUM_PILOT)/2; i++) {
-        phy->pilot_sc[NFFT-1-i] = OFDMFRAME_SCTYPE_DATA;
-    }
-
-    // set pilots
-    phy->pilot_sc[2] = OFDMFRAME_SCTYPE_PILOT;
-    phy->pilot_sc[7] = OFDMFRAME_SCTYPE_PILOT;
-    phy->pilot_sc[12] = OFDMFRAME_SCTYPE_PILOT;
-    phy->pilot_sc[17] = OFDMFRAME_SCTYPE_PILOT;
-    phy->pilot_sc[NFFT-1-2] = OFDMFRAME_SCTYPE_PILOT;
-    phy->pilot_sc[NFFT-1-7] = OFDMFRAME_SCTYPE_PILOT;
-    phy->pilot_sc[NFFT-1-12] = OFDMFRAME_SCTYPE_PILOT;
-    phy->pilot_sc[NFFT-1-17] = OFDMFRAME_SCTYPE_PILOT;
-}
 
 void gen_pilot_symbols(PhyCommon phy, uint is_bs)
 {

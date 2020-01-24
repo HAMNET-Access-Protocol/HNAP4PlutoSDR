@@ -7,11 +7,12 @@
 
 #include "phy_ue.h"
 
-#include "../log.h"
+#include "../util/log.h"
 #include "../mac/mac_config.h"
 #include <pthread.h>
 
-// callback declaration
+// Declarations of local functions
+void phy_ue_proc_slot(PhyUE phy, uint slotnr);
 int _ue_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd);
 
 // Init the PhyUE struct
@@ -19,7 +20,7 @@ PhyUE phy_ue_init()
 {
 	PhyUE phy = malloc(sizeof(struct PhyUE_s));
 
-	phy->common = phy_init_common();
+	phy->common = phy_common_init();
 	gen_pilot_symbols(phy->common, 0);
 
 	// Create OFDM frame generator: nFFt, CPlen, taperlen, subcarrier alloc
@@ -195,74 +196,6 @@ void phy_ue_proc_slot(PhyUE phy, uint slotnr)
 
 	}
 }
-/*void phy_ue_rx_subframe(PhyUE phy, float complex* rxbuf_time)
-{
-	const PhyCommon common = phy->common;
-
-	if (common->rx_symbol != DLCTRL_LEN)
-		printf("[PHY] error, unexpected rxsymbol index: %d\n",common->rx_symbol);
-
-	uint subframe_len = SUBFRAME_LEN;
-	if (common->subframe == FRAME_LEN-1) {
-		subframe_len -= SYNC_SYMBOLS;
-	}
-	rxbuf_time += DLCTRL_LEN*(NFFT+CP_LEN);
-	for (int i=DLCTRL_LEN; i<subframe_len; i++) {
-		if (common->pilot_symbols[i] == PILOT) {
-			ofdmframesync_execute(phy->fs, rxbuf_time,(NFFT+CP_LEN));
-		} else {
-			ofdmframesync_execute_nopilot(phy->fs, rxbuf_time, NFFT+CP_LEN);
-		}
-		rxbuf_time += NFFT+CP_LEN;
-	}
-
-	if (common->rx_symbol != subframe_len)
-		printf("[PHY] Error: did not receive all ofdm symbols!\n");
-
-	if (common->subframe == FRAME_LEN-1) {
-		ofdmframesync_reset(phy->fs);
-		int offset = ofdmframesync_find_data_start(phy->fs,rxbuf_time,(NFFT+CP_LEN)*SYNC_SYMBOLS);
-		printf("Sync seq offset: %d \n",offset);
-		if (offset == -1) {
-			printf("[PHY] Did not find sync seq!\n");
-			return;
-		}
-
-	}
-
-	uint32_t blocksize = get_tbs_size(common, phy->mcs_dl);
-
-	// TODO: fix allocation size. currently hardcoded additional bytes
-	uint buf_len = 8*fec_get_enc_msg_length(common->mcs_fec_scheme[phy->mcs_dl],blocksize/8);
-	uint8_t* demod_buf = malloc(buf_len);
-
-	for (int i=0; i<NUM_SLOT; i++) {
-		if (phy->dlslot_assignments[i] == 1) {
-			LogicalChannel chan = malloc(sizeof(LogicalChannel_s));
-
-			// demodulate signal
-			uint written_samps = 0;
-			uint first_symb = DLCTRL_LEN+2+(SLOT_LEN+1)*i;
-			uint last_symb = DLCTRL_LEN+2+(SLOT_LEN+1)*(i+1)-2;
-			phy_demod_soft(common, 0, NFFT-1, first_symb, last_symb, phy->mcs_dl,
-						   demod_buf, buf_len, &written_samps);
-
-			// decoding
-			chan->userid = common->userid;
-			chan->payload_len = blocksize/8;
-			chan->writepos = i; //TODO: this is only for simulation to ind the slot nr
-			chan->data = malloc(blocksize/8);
-			fec_decode_soft(common->mcs_fec[phy->mcs_dl], blocksize/8, demod_buf, chan->data);
-
-			// pass to upper layer
-			phy->mac_rx_cb(chan);
-		}
-	}
-
-	free(demod_buf);
-
-	common->subframe = (common->subframe + 1) % FRAME_LEN;
-}*/
 
 // callback for OFDM receiver
 // is called for every symbol that is received
@@ -307,11 +240,11 @@ int _ue_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd)
 	}
 
 	// Debug log
-	char name[30];
+	/*char name[30];
 	sprintf(name,"rxF/rxF_%d_%d.m",common->rx_subframe,common->rx_symbol-1);
 	if (common->rx_symbol<64) {
 	LOG_MATLAB_FC(DEBUG,X, NFFT, name);
-	}
+	}*/
 	if (common->rx_symbol >= SUBFRAME_LEN) {
 		common->rx_symbol = 0;
 		common->rx_subframe = (common->rx_subframe + 1) % FRAME_LEN;

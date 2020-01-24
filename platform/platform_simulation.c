@@ -7,11 +7,10 @@
 
 #include "platform_simulation.h"
 #include "../phy/phy_config.h"
-#include "../log.h"
-
 #include <liquid/liquid.h>
 #include <math.h>
-#include <stdlib.h>
+#include <string.h>
+#include "../util/log.h"
 
 #define USE_GSM_MULTIPATH 0
 

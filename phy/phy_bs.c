@@ -1,5 +1,9 @@
 #include "phy_bs.h"
 
+// Forward declarations of local helper functions
+int phy_bs_proc_rach(PhyBS phy, int timing_diff);
+int _bs_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd);
+
 
 // callback for OFDM RACH receiver object
 // is called for every symbol that is received
@@ -12,14 +16,11 @@ int _ofdm_rx_rach_cb(float complex* X,unsigned char* p, uint M, void* userd)
 	return 0;
 }
 
-// callback declaration
-int _bs_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd);
-
 PhyBS phy_bs_init()
 {
 	PhyBS phy = malloc(sizeof(struct PhyBS_s));
 
-	phy->common = phy_init_common();
+	phy->common = phy_common_init();
 	gen_pilot_symbols(phy->common, 1);
 
 	// Create OFDM frame generator: nFFt, CPlen, taperlen, subcarrier alloc
@@ -60,46 +61,6 @@ void phy_bs_set_mac_interface(PhyBS phy, struct MacBS_s* mac)
 {
 	phy->mac = mac;
 }
-
-// generate two ofdm symbols for sync
-void phy_make_syncsig(PhyBS phy, float complex* txbuf_time)
-{
-	ofdmframegen_reset(phy->fg);
-    ofdmframegen_write_S0a(phy->fg, txbuf_time);
-    txbuf_time += NFFT+CP_LEN;
-    ofdmframegen_write_S0b(phy->fg, txbuf_time);
-    txbuf_time += NFFT+CP_LEN;
-    ofdmframegen_write_S1(phy->fg, txbuf_time);
-}
-
-// Write one slot into time domain buffer
-// do fft of subcarrier allocation
-// Deprecated! use write_symbol()
-void phy_write_subframe(PhyBS phy, float complex* txbuf_time)
-{
-	PhyCommon common = phy->common;
-	uint sfn = common->tx_subframe %2;
-
-	// write the Downlink control channel to the subcarriers
-	phy_map_dlctrl(phy, sfn);
-
-	// do ofdm modulation
-	for (int i=0; i<SUBFRAME_LEN; i++) {
-		// check if we have to add synch sequence in this subframe
-		if (common->tx_subframe == 0 && i>=SUBFRAME_LEN-SYNC_SYMBOLS) {
-			phy_make_syncsig(phy, txbuf_time);
-			break;
-		}
-
-		if (common->pilot_symbols_tx[i] == PILOT) {
-		    ofdmframegen_writesymbol(phy->fg, common->txdata_f[sfn][i],txbuf_time);
-		} else {
-			ofdmframegen_writesymbol_nopilot(phy->fg, common->txdata_f[sfn][i],txbuf_time);
-		}
-		txbuf_time += NFFT+CP_LEN;
-	}
-}
-
 
 // create phy data channel in frequency domain
 int phy_map_dlslot(PhyBS phy, LogicalChannel chan, uint subframe, uint8_t slot_nr, uint userid, uint mcs)
@@ -215,32 +176,6 @@ void phy_assign_dlctrl_uc(PhyBS phy, uint subframe, uint8_t* slot_assignment)
 
 }
 
-int phy_assign_dlctrl_ud_user(PhyBS phy, uint8_t* assigned_slots, uint userid)
-{
-	for (int i=0; i<NUM_SLOT; i+=2) {
-		if (assigned_slots[i] == 1) {
-	        phy->dlctrl_buf[NUM_SLOT/2+i/2].h4 = userid;
-		}
-		if (assigned_slots[i+1] == 1) {
-	        phy->dlctrl_buf[NUM_SLOT/2+i/2].l4 = userid;
-		}
-	}
-	return 0;
-}
-
-int phy_assign_caich_uc_user(PhyBS phy, uint8_t* assigned_slots, uint userid)
-{
-	for (int i=0; i<NUM_ULCTRL_SLOT; i+=2) {
-		if (assigned_slots[i] == 1) {
-	        phy->dlctrl_buf[NUM_SLOT+i/2].h4 = userid;
-		}
-		if (assigned_slots[i+1] == 1) {
-	        phy->dlctrl_buf[NUM_SLOT+i/2].l4 = userid;
-		}
-	}
-	return 0;
-}
-
 // Decode a PHY ul slot and call the MAC callback function
 void phy_bs_proc_slot(PhyBS phy, uint slotnr)
 {
@@ -321,6 +256,47 @@ void phy_bs_proc_ulctrl(PhyBS phy, uint slotnr)
 	free(demod_buf);
 }
 
+
+int phy_bs_proc_rach(PhyBS phy, int timing_diff)
+{
+	PhyCommon common = phy->common;
+
+	uint mcs = 0; // CTRL slots use MCS 0
+	uint32_t blocksize = get_ulctrl_slot_size(common);
+
+	uint buf_len = 8*fec_get_enc_msg_length(common->mcs_fec_scheme[mcs],blocksize/8);
+	uint8_t* demod_buf = malloc(buf_len);
+
+	// demodulate signal
+	uint written_samps = 0, symbol = 0;
+	for (int i=0; i<NFFT; i++) {
+		if (common->pilot_sc[i] == OFDMFRAME_SCTYPE_DATA) {
+			modem_demodulate_soft(common->mcs_modem[mcs], phy->rach_buffer[i], &symbol, &demod_buf[written_samps]);
+			written_samps += modem_get_bps(common->mcs_modem[mcs]);
+		}
+	}
+
+	// decoding
+	LogicalChannel chan = lchan_create(blocksize/8,CRC8);
+	fec_decode_soft(common->mcs_fec[mcs], blocksize/8, demod_buf, chan->data);
+
+	free(demod_buf);
+
+	// TODO Fix definition of Associate Request message
+	if (lchan_verify_crc(chan)) {
+		uint8_t rach_userid = chan->data[0];
+		mac_bs_add_new_ue(phy->mac,rach_userid, phy->fs_rach, timing_diff);
+	}
+	lchan_destroy(chan);
+
+	// TODO correctly handle the framesync object
+	phy->fs = phy->fs_rach;
+	ofdmframesync_set_cb(phy->fs,_bs_rx_symbol_cb,phy);
+	//set to NULL to ensure RA procedure does not use sync object anymore
+	phy->fs_rach = NULL;
+	return 1;
+}
+
 // callback for OFDM receiver
 // is called for every symbol that is received
 int _bs_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd)
@@ -362,35 +338,9 @@ int _bs_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd)
 	// Debug log
 	char name[30];
 	sprintf(name,"rxF/rxF_%d_%d.m",common->rx_subframe,common->rx_symbol-1);
-	if (common->rx_symbol == 5) {
+	if (common->rx_symbol!=-1) {
 	LOG_MATLAB_FC(DEBUG,X, NFFT, name);
 	}
-
-	return 0;
-}
-
-int phy_bs_rx_subframe(PhyBS phy, float complex* rxbuf_time)
-{
-	PhyCommon common = phy->common;
-
-	common->rx_symbol = 0;
-
-	uint sf_len = SUBFRAME_LEN;
-	if (common->tx_subframe == FRAME_LEN-1) {
-		sf_len -= SYNC_SYMBOLS;
-	}
-
-	for (int i=0; i<sf_len; i++) {
-		if (common->pilot_symbols_rx[i] == PILOT) {
-			ofdmframesync_execute(phy->fs, rxbuf_time,(NFFT+CP_LEN));
-		} else {
-			ofdmframesync_execute_nopilot(phy->fs, rxbuf_time, NFFT+CP_LEN);
-		}
-		rxbuf_time += NFFT+CP_LEN;
-	}
-
-	if (common->rx_symbol != sf_len)
-		printf("[PHY] Error: did not receive all ofdm symbols!\n");
 
 	return 0;
 }
@@ -487,46 +437,6 @@ void phy_bs_rx_symbol(PhyBS phy, float complex* rxbuf_time)
 		common->rx_subframe = (common->rx_subframe+1) % FRAME_LEN;
 		common->rx_symbol = 0;
 	}
-}
-
-int phy_bs_proc_rach(PhyBS phy, int timing_diff)
-{
-	PhyCommon common = phy->common;
-
-	uint mcs = 0; // CTRL slots use MCS 0
-	uint32_t blocksize = get_ulctrl_slot_size(common);
-
-	uint buf_len = 8*fec_get_enc_msg_length(common->mcs_fec_scheme[mcs],blocksize/8);
-	uint8_t* demod_buf = malloc(buf_len);
-
-	// demodulate signal
-	uint written_samps = 0, symbol = 0;
-	for (int i=0; i<NFFT; i++) {
-		if (common->pilot_sc[i] == OFDMFRAME_SCTYPE_DATA) {
-			modem_demodulate_soft(common->mcs_modem[mcs], phy->rach_buffer[i], &symbol, &demod_buf[written_samps]);
-			written_samps += modem_get_bps(common->mcs_modem[mcs]);
-		}
-	}
-
-	// decoding
-	LogicalChannel chan = lchan_create(blocksize/8,CRC8);
-	fec_decode_soft(common->mcs_fec[mcs], blocksize/8, demod_buf, chan->data);
-
-	free(demod_buf);
-
-	// TODO Fix definition of Associate Request message
-	if (lchan_verify_crc(chan)) {
-		uint8_t rach_userid = chan->data[0];
-		mac_bs_add_new_ue(phy->mac,rach_userid, phy->fs_rach, timing_diff);
-	}
-	lchan_destroy(chan);
-
-	// TODO correctly handle the framesync object
-	phy->fs = phy->fs_rach;
-	ofdmframesync_set_cb(phy->fs,_bs_rx_symbol_cb,phy);
-	//set to NULL to ensure RA procedure does not use sync object anymore
-	phy->fs_rach = NULL;
-	return 1;
 }
 
 // Main Thread for BS receive
