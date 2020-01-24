@@ -1,7 +1,6 @@
 #include "phy_bs.h"
 
 
-
 // callback for OFDM RACH receiver object
 // is called for every symbol that is received
 int _ofdm_rx_rach_cb(float complex* X,unsigned char* p, uint M, void* userd)
@@ -29,7 +28,7 @@ PhyBS phy_bs_init()
 	// Create OFDM receiver
 	//TODO: use different ofdmframesync structs for different users
 	phy->fs = ofdmframesync_create(NFFT,CP_LEN,0,phy->common->pilot_sc,_bs_rx_symbol_cb, phy);
-	phy->fs_rach = NULL;;
+	phy->fs_rach = NULL;
 
     // alloc buffer for dl control slot
     phy->dlctrl_buf = calloc((NFFT-NUM_GUARD)*DLCTRL_LEN/8, 1);
@@ -42,6 +41,11 @@ PhyBS phy_bs_init()
 		phy->ulslot_assignments[i] = calloc(sizeof(uint8_t),NUM_SLOT);
 		phy->ulctrl_assignments[i] = calloc(sizeof(uint8_t),NUM_ULCTRL_SLOT);
 	}
+
+    // buffer for ofdm symbol allocation
+    phy->ul_symbol_alloc = malloc(sizeof(uint8_t*)*2);
+	phy->ul_symbol_alloc[0] = calloc(sizeof(uint8_t)*SUBFRAME_LEN,1);
+    phy->ul_symbol_alloc[1] = calloc(sizeof(uint8_t)*SUBFRAME_LEN,1);
 
     // Set RX position
     phy->common->rx_symbol = SUBFRAME_LEN - DL_UL_SHIFT;
@@ -186,6 +190,13 @@ void phy_assign_dlctrl_ud(PhyBS phy, uint subframe, uint8_t* slot_assignment)
 	    phy->dlctrl_buf[NUM_SLOT/2+i/2].h4 = slot_assignment[i];
 	    phy->dlctrl_buf[NUM_SLOT/2+i/2].l4 = slot_assignment[i+1];
 	}
+
+	// TODO generalize this
+	// set allocation with ofdm symbol granularity. Used to pick correct receiver
+	memset(&phy->ul_symbol_alloc[subframe][0], slot_assignment[0], SLOT_LEN);
+	memset(&phy->ul_symbol_alloc[subframe][SLOT_LEN+1], slot_assignment[1], SLOT_LEN);
+	memset(&phy->ul_symbol_alloc[subframe][2*(SLOT_LEN+1)+4], slot_assignment[2], SLOT_LEN);
+	memset(&phy->ul_symbol_alloc[subframe][3*(SLOT_LEN+1)+4], slot_assignment[3], SLOT_LEN);
 }
 
 // Set the assignments of Uplink control slots
@@ -197,6 +208,11 @@ void phy_assign_dlctrl_uc(PhyBS phy, uint subframe, uint8_t* slot_assignment)
 	    phy->dlctrl_buf[NUM_SLOT+i/2].h4 = slot_assignment[i];
 	    phy->dlctrl_buf[NUM_SLOT+i/2].l4 = slot_assignment[i+1];
 	}
+
+	// set assignments on ofdm symbol granularity
+	phy->ul_symbol_alloc[subframe][2*(SLOT_LEN+1)] = slot_assignment[0];
+	phy->ul_symbol_alloc[subframe][2*(SLOT_LEN+1)+2] = slot_assignment[1];
+
 }
 
 int phy_assign_dlctrl_ud_user(PhyBS phy, uint8_t* assigned_slots, uint userid)
@@ -401,6 +417,9 @@ void phy_bs_write_symbol(PhyBS phy, float complex* txbuf_time)
 		ofdmframegen_writesymbol_nopilot(phy->fg, common->txdata_f[sfn][tx_symb],txbuf_time);
 	}
 
+	// clear frequency domain memory of the written symbol, to avoid sending garbage
+	// when the symbol is not overwritten in the next subframe
+	memset(common->txdata_f[sfn][tx_symb],0,sizeof(float complex)*NFFT);
 
 	// Update subframe and symbol counter
 	common->tx_symbol++;
@@ -418,8 +437,9 @@ void phy_bs_rx_symbol(PhyBS phy, float complex* rxbuf_time)
 {
 	PhyCommon common = phy->common;
 	uint rx_sym = NFFT+CP_LEN;
+	uint sfn = common->rx_subframe;
 
-	if (common->rx_subframe == 0 && common->rx_symbol==SUBFRAME_LEN-SLOT_LEN-2) {
+	if (sfn == 0 && common->rx_symbol==SUBFRAME_LEN-SLOT_LEN-2) {
 		// First symbol of random access slot. Config sync objects
 		if (phy->fs_rach!=NULL) {
 			ofdmframesync_reset(phy->fs_rach); // if we didnt find a new user in last RACH, sync object still exists. Reset it
@@ -428,7 +448,7 @@ void phy_bs_rx_symbol(PhyBS phy, float complex* rxbuf_time)
 		}
 	}
 
-	if (common->rx_subframe == 0 && common->rx_symbol>=SUBFRAME_LEN-SLOT_LEN-2) {
+	if (sfn == 0 && common->rx_symbol>=SUBFRAME_LEN-SLOT_LEN-2) {
 		// RA slot. Try to find sync sequence
 		if (phy->fs_rach && !ofdmframesync_is_synced(phy->fs_rach)) {
 			int offset = ofdmframesync_find_data_start(phy->fs_rach, rxbuf_time, rx_sym);
@@ -448,11 +468,16 @@ void phy_bs_rx_symbol(PhyBS phy, float complex* rxbuf_time)
 		}
 	} else {
 		// not in RA slot. Do normal receive
-		if (common->pilot_symbols_rx[common->rx_symbol] == PILOT) {
-			ofdmframesync_reset_msequence(phy->fs); // TODO Uplink pilot definition
-			ofdmframesync_execute(phy->fs,rxbuf_time,rx_sym);
-		} else {
-			ofdmframesync_execute_nopilot(phy->fs,rxbuf_time,rx_sym);
+		uint userid = phy->ul_symbol_alloc[sfn%2][common->rx_symbol];
+		ofdmframesync fs = mac_bs_get_receiver(phy->mac,userid);
+		if (fs!=NULL) {
+			if (common->pilot_symbols_rx[common->rx_symbol] == PILOT) {
+				ofdmframesync_reset_msequence(fs);
+				ofdmframesync_execute(fs,rxbuf_time,rx_sym);
+				ofdmframesync_set_cfo(fs,0); // TODO cfo estimation. Currently not working since we often receive if no data is sent. -> wrong pilot -> wrong cfo
+			} else {
+				ofdmframesync_execute_nopilot(fs,rxbuf_time,rx_sym);
+			}
 		}
 	}
 

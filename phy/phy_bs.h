@@ -28,6 +28,12 @@ struct PhyBS_s {
 	uint8_t** ulslot_assignments;
 	uint8_t** ulctrl_assignments;
 
+	// store uplink resource allocation on OFDM symbol basis
+	// BS has to pick the correct ofdmframesync object depending on the user
+	// 1. Index: subframe index: 0 -> even, 1->odd
+	// 2. Index ofdm symbol idx
+	uint8_t** ul_symbol_alloc;
+
 	dlctrl_alloc_t* dlctrl_buf;	// holds DL ctrl slot data
 
 	// buffer stores data which is sent by users during RACH procedure

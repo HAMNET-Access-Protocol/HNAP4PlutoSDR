@@ -39,6 +39,11 @@ PhyUE phy_ue_init()
 		phy->ulctrl_assignments[i] = calloc(sizeof(uint8_t),NUM_ULCTRL_SLOT);
 	}
 
+    // buffer for ofdm symbol allocation
+    phy->ul_symbol_alloc = malloc(sizeof(uint8_t*)*2);
+	phy->ul_symbol_alloc[0] = malloc(sizeof(uint8_t)*SUBFRAME_LEN);
+    phy->ul_symbol_alloc[1] = malloc(sizeof(uint8_t)*SUBFRAME_LEN);
+
 	phy->mac_rx_cb = NULL;
 
 	phy->mcs_dl = 0;
@@ -363,6 +368,14 @@ void phy_ue_create_assoc_request(PhyUE phy, float complex* txbuf_time)
 	free(repacked_b);
 }
 
+// reset the ofdm symbol allocation
+// should be done at the beginning of a subframe/scheduling period
+// this is required to stop the devices from sending old garbage values
+void phy_ue_reset_symbol_allocation(PhyUE phy, uint subframe)
+{
+	memset(phy->ul_symbol_alloc[subframe],NOT_USED,SUBFRAME_LEN);
+}
+
 // Create one OFDM symbol in time domain
 // Subcarriers in frequency have to be set beforehand!
 void phy_ue_write_symbol(PhyUE phy, float complex* txbuf_time)
@@ -388,14 +401,17 @@ void phy_ue_write_symbol(PhyUE phy, float complex* txbuf_time)
 				// send zeros
 				memset(txbuf_time, 0, sizeof(float complex)*(NFFT+CP_LEN));
 			}
-		} else {
-			// MAC is associated, might send data.
+		} else if (phy->ul_symbol_alloc[sfn][tx_symb]==DATA){
+			// MAC is associated and have data to send.
 			if (common->pilot_symbols_tx[tx_symb] == PILOT) {
 				ofdmframegen_reset(phy->fg); // TODO we use the same msequence in every pilot symbol sent. Fix this
 				ofdmframegen_writesymbol(phy->fg, common->txdata_f[sfn][tx_symb],txbuf_time);
 			} else {
 				ofdmframegen_writesymbol_nopilot(phy->fg, common->txdata_f[sfn][tx_symb],txbuf_time);
 			}
+		} else {
+			// associated but no data to send. Set zero
+			memset(txbuf_time,0,sizeof(float complex)*(NFFT+CP_LEN));
 		}
 	}
 
@@ -474,6 +490,9 @@ int phy_map_ulctrl(PhyUE phy, LogicalChannel chan, uint subframe, uint8_t slot_n
 	uint sfn = subframe % 2;
 	phy_mod(phy->common,sfn,0,NFFT-1,first_symb,first_symb, mcs, repacked_b, num_repacked, &total_samps);
 
+	// activate used OFDM symbols in resource allocation
+	phy->ul_symbol_alloc[sfn][first_symb] = DATA;
+
 	free(enc_b);
 	free(repacked_b);
 	return 0;
@@ -519,6 +538,9 @@ int phy_map_ulslot(PhyUE phy, LogicalChannel chan, uint subframe, uint8_t slot_n
 	// modulate signal
 	uint sfn = subframe % 2;
 	phy_mod(phy->common,sfn, 0,NFFT-1,first_symb,last_symb, mcs, repacked_b, num_repacked, &total_samps);
+
+	// activate used OFDM symbols in resource allocation
+	memset(&phy->ul_symbol_alloc[sfn][first_symb],DATA,last_symb-first_symb+1);
 
 	free(interleaved_b);
 	free(enc_b);

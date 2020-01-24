@@ -68,6 +68,16 @@ void mac_bs_add_new_ue(MacBS mac, uint8_t rachuserid, ofdmframesync fs, int timi
 	}
 }
 
+// Try to get the receiver object for the given userid
+// returns NULL if user does not exist
+ofdmframesync mac_bs_get_receiver(MacBS mac, uint userid)
+{
+	if (mac->UE[userid]!=NULL) {
+		return mac->UE[userid]->fs;
+	} else {
+		return NULL;
+	}
+}
 
 int mac_bs_add_txdata(MacBS mac, uint8_t destUserID, MacDataFrame frame)
 {

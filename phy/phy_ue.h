@@ -29,6 +29,12 @@ struct PhyUE_s {
 	uint8_t** ulslot_assignments;
 	uint8_t** ulctrl_assignments;
 
+	// store resource allocation on OFDM symbol basis
+	// UE has to refrain from sending if no data is allocated
+	// 1. Index: subframe index: 0 -> even, 1->odd
+	// 2. Index ofdm symbol idx
+	uint8_t** ul_symbol_alloc;
+
 	// Currently used modulation scheme for RX
 	uint mcs_dl;
 
@@ -60,6 +66,7 @@ typedef struct PhyUE_s* PhyUE;
 PhyUE phy_ue_init();
 void phy_ue_set_mac_interface(PhyUE phy, void (*mac_rx_cb)(struct MacUE_s*, LogicalChannel), struct MacUE_s* mac);
 void phy_ue_set_mcs_dl(PhyUE phy, uint mcs);
+void phy_ue_reset_symbol_allocation(PhyUE phy, uint subframe);
 
 /***************** PHY TX FUNCTIONS *****************************/
 int phy_map_ulslot(PhyUE phy, LogicalChannel chan, uint subframe, uint8_t slot_nr, uint mcs);
