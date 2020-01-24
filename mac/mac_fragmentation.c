@@ -162,9 +162,21 @@ MacDataFrame mac_assmbl_reassemble(MacAssmbl assmbl, MacMessage fragment)
 		for (int i=0; i<assmbl->fragNr; i++) {
 			free(assmbl->fragments[i]);
 		}
-		assmbl->frame_open = 0;
-		assmbl->frame_len = 0;
-		assmbl->fragNr = 0;
+		// if fragnr of the frame is 0, we can use it
+		// as a new start
+		if (data->fragNr==0) {
+			assmbl->fragments[0] = malloc(fragment->payload_len);
+			memcpy(assmbl->fragments[0],fragment->data,fragment->payload_len);
+			assmbl->fragNr = 1;
+			assmbl->seqNr = data->seqNr;
+			assmbl->frame_open = 1;
+			assmbl->frame_len=fragment->payload_len;
+		} else {
+			// reset reassembler state
+			assmbl->frame_open = 0;
+			assmbl->frame_len = 0;
+			assmbl->fragNr = 0;
+		}
 	}
 
 	if (data->final_flag) {
