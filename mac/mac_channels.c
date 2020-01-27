@@ -50,6 +50,8 @@ int lchan_add_message(LogicalChannel chan, MacMessage msg)
 		mac_msg_generate(msg,chan->data+chan->writepos, buf_len);
 		chan->writepos +=msg_len;
 		return 1;
+	} else {
+		LOG(ERR,"[MAC CHN] could not add message to channel. Too large!\n");
 	}
 	if (msg_len < buf_len) {
 		// Force next byte to 0, so if this is the last message

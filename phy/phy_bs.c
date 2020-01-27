@@ -18,7 +18,7 @@ int _ofdm_rx_rach_cb(float complex* X,unsigned char* p, uint M, void* userd)
 
 PhyBS phy_bs_init()
 {
-	PhyBS phy = malloc(sizeof(struct PhyBS_s));
+	PhyBS phy = calloc(sizeof(struct PhyBS_s),1);
 
 	phy->common = phy_common_init();
 	gen_pilot_symbols(phy->common, 1);
@@ -336,11 +336,11 @@ int _bs_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd)
 	}
 
 	// Debug log
-	char name[30];
+	/*char name[30];
 	sprintf(name,"rxF/rxF_%d_%d.m",common->rx_subframe,common->rx_symbol-1);
 	if (common->rx_symbol!=-1) {
 	LOG_MATLAB_FC(DEBUG,X, NFFT, name);
-	}
+	}*/
 
 	return 0;
 }
@@ -437,46 +437,4 @@ void phy_bs_rx_symbol(PhyBS phy, float complex* rxbuf_time)
 		common->rx_subframe = (common->rx_subframe+1) % FRAME_LEN;
 		common->rx_symbol = 0;
 	}
-}
-
-// Main Thread for BS receive
-void thread_phy_bs_rx(PhyBS phy, platform hw, pthread_cond_t* sched_sync)
-{
-	float complex* rxbuf_time = calloc(sizeof(float complex),NFFT+CP_LEN);
-
-	LOG(INFO,"[PHY BS] rx thread started!\n");
-
-	// Main RX loop
-	while (1) {
-		// fill buffer
-		hw->platform_rx(hw, rxbuf_time);
-		// process samples
-		phy_bs_rx_symbol(phy, rxbuf_time);
-
-		// Run scheduler some time before DLCTRL will be sent
-		if (phy->common->rx_symbol == SUBFRAME_LEN - 5) { //TODO estimate sceduler exec time
-			pthread_cond_signal(sched_sync);
-		}
-	}
-}
-
-// Main Thread for BS transmit
-void thread_phy_bs_tx(PhyBS phy, platform hw)
-{
-	float complex* txbuf_time = calloc(sizeof(float complex),NFFT+CP_LEN);
-
-	LOG(INFO,"[PHY BS] main tx thread started!\n");
-
-	while (1) {
-		// push buffer
-		hw->platform_tx_push(hw);
-
-		// create new symbol
-		phy_bs_write_symbol(phy, txbuf_time);
-
-		// prepare new symbol
-		hw->platform_tx_prep(hw, txbuf_time, 0, NFFT+CP_LEN);
-
-	}
-	hw->end(hw);
 }

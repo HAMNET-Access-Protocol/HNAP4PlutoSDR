@@ -15,8 +15,7 @@
 
 MacBS mac_bs_init()
 {
-	MacBS macinst = malloc(sizeof(struct MacBS_s));
-	memset(macinst, 0, sizeof(struct MacBS_s));
+	MacBS macinst = calloc(sizeof(struct MacBS_s),1);
 
 	for (int i=0; i<MAX_USER; i++) {
 		macinst->UE[i] = NULL;

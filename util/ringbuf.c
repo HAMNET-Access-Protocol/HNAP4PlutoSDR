@@ -18,7 +18,7 @@ struct ringbuf_s{
 ringbuf ringbuf_create(uint32_t size)
 {
 	ringbuf buf = malloc(sizeof(struct ringbuf_s));
-	buf->data = malloc(size*sizeof(void*));
+	buf->data = calloc(size*sizeof(void*),1);
 	buf->writepos = 0;
 	buf->readpos = 0 ;
 	buf->size = size;

@@ -18,7 +18,7 @@ int _ue_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd);
 // Init the PhyUE struct
 PhyUE phy_ue_init()
 {
-	PhyUE phy = malloc(sizeof(struct PhyUE_s));
+	PhyUE phy = calloc(sizeof(struct PhyUE_s),1);
 
 	phy->common = phy_common_init();
 	gen_pilot_symbols(phy->common, 0);
@@ -42,10 +42,11 @@ PhyUE phy_ue_init()
 
     // buffer for ofdm symbol allocation
     phy->ul_symbol_alloc = malloc(sizeof(uint8_t*)*2);
-	phy->ul_symbol_alloc[0] = malloc(sizeof(uint8_t)*SUBFRAME_LEN);
-    phy->ul_symbol_alloc[1] = malloc(sizeof(uint8_t)*SUBFRAME_LEN);
+	phy->ul_symbol_alloc[0] = calloc(sizeof(uint8_t)*SUBFRAME_LEN,1);
+    phy->ul_symbol_alloc[1] = calloc(sizeof(uint8_t)*SUBFRAME_LEN,1);
 
 	phy->mac_rx_cb = NULL;
+	phy->has_synced_once = 0;
 
 	phy->mcs_dl = 0;
 
@@ -100,8 +101,10 @@ int phy_ue_initial_sync(PhyUE phy, float complex* rxbuf_time, uint num_samples)
 			LOG(INFO,"[PHY UE] Got sync! cfo: %.3fHz offset: %d samps\n",phy->prev_cfo*SAMPLERATE/6.28,offset);
 		} else {
 			float new_cfo = ofdmframesync_get_cfo(phy->fs);
-			float cfo_filt = 0.1*phy->prev_cfo + (1-0.1)*new_cfo;
+			float cfo_filt = 0.5*phy->prev_cfo + (1-0.5)*new_cfo;
 			ofdmframesync_set_cfo(phy->fs,cfo_filt);
+			LOG(INFO,"[PHY UE] sync seq. cfo: %.3fHz offset: %d samps\n",phy->prev_cfo*SAMPLERATE/6.28,offset);
+
 		}
 	}
 	return offset;
@@ -479,74 +482,4 @@ int phy_map_ulslot(PhyUE phy, LogicalChannel chan, uint subframe, uint8_t slot_n
 	free(enc_b);
 	free(repacked_b);
 	return 0;
-}
-
-// Main Thread for UE receive
-void thread_phy_ue_rx(PhyUE phy, platform hw, pthread_cond_t* sched_sync)
-{
-	float complex* rxbuf_time = calloc(sizeof(float complex),NFFT+CP_LEN);
-
-	// get initial sync
-	int offset = -1;
-	while (offset == -1) {
-		hw->platform_rx(hw, rxbuf_time);
-		offset = phy_ue_initial_sync(phy, rxbuf_time, NFFT+CP_LEN);
-	}
-	LOG(INFO,"[PHY UE] rx thread got sync!\n");
-	// start the tx thread
-	//pthread_cond_signal(&phy->tx_sync_cond);
-
-	// Main RX loop
-	while (1) {
-		// fill buffer
-		hw->platform_rx(hw, rxbuf_time);
-		// process samples
-		phy_ue_do_rx(phy, rxbuf_time, NFFT+CP_LEN);
-
-		// Run scheduler after DLCTRL slot was received
-		if (phy->common->rx_symbol == DLCTRL_LEN) {
-			pthread_cond_signal(sched_sync);
-		}
-	}
-}
-
-// Main Thread for UE transmit
-void thread_phy_ue_tx(PhyUE phy, platform hw)
-{
-	float complex* txbuf_time = calloc(sizeof(float complex),NFFT+CP_LEN);
-	uint offset, num_samples;
-
-	// wait until rx thread has achieved sync
-	//pthread_mutex_lock(&phy->tx_sync_lock);
-	//pthread_cond_wait(&phy->tx_sync_cond, &phy->tx_sync_lock);
-
-	while (!phy->has_synced_once) {
-		hw->platform_tx_push(hw);
-		hw->platform_tx_prep(hw, txbuf_time, 0, NFFT+CP_LEN);
-	}
-
-	LOG(INFO,"[PHY UE] main tx thread started!\n");
-	offset = phy->rx_offset;
-	num_samples = NFFT+CP_LEN-offset;
-
-	while (1) {
-		// push buffer
-		hw->platform_tx_push(hw);
-
-		// create tx time data
-		// first add the last samples from the previous generated symbol
-		hw->platform_tx_prep(hw, txbuf_time, 0, offset);
-		// create new symbol
-		phy_ue_write_symbol(phy, txbuf_time);
-
-		// prepare first part of the new symbol
-		hw->platform_tx_prep(hw, txbuf_time, offset, num_samples);
-
-		// update offset
-		if (phy->common->tx_symbol == 0 && phy->common->tx_subframe == 0) {
-			offset = phy->rx_offset;
-			num_samples = NFFT+CP_LEN-offset;
-		}
-	}
-	hw->end(hw);
 }

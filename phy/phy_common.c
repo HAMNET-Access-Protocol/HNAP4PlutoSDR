@@ -38,7 +38,7 @@ void gen_sc_alloc(PhyCommon phy)
 // Init the PHY instance
 PhyCommon phy_common_init()
 {
-	PhyCommon phy = malloc(sizeof(PhyCommon_s));
+	PhyCommon phy = calloc(sizeof(PhyCommon_s),1);
 
 	// TX buffer has 2 entries for even/uneven subframes
 	phy->txdata_f = malloc(sizeof(float complex**)*2);
@@ -48,15 +48,15 @@ PhyCommon phy_common_init()
 	phy->txdata_f[1] = malloc(sizeof(float complex*)*SUBFRAME_LEN);
 	phy->rxdata_f    = malloc(sizeof(float complex*)*SUBFRAME_LEN);
     for (int i=0; i<SUBFRAME_LEN; i++) {
-    	phy->txdata_f[0][i] = malloc(sizeof(float complex)*(NFFT));
-    	phy->txdata_f[1][i] = malloc(sizeof(float complex)*(NFFT));
-    	phy->rxdata_f[i]    = malloc(sizeof(float complex)*(NFFT));
+    	phy->txdata_f[0][i] = calloc(sizeof(float complex)*(NFFT),1);
+    	phy->txdata_f[1][i] = calloc(sizeof(float complex)*(NFFT),1);
+    	phy->rxdata_f[i]    = calloc(sizeof(float complex)*(NFFT),1);
     }
 
     // alloc buffer for subcarrier definitions
-    phy->pilot_sc = malloc(NFFT);
-    phy->pilot_symbols_rx = malloc(SUBFRAME_LEN);
-    phy->pilot_symbols_tx = malloc(SUBFRAME_LEN);
+    phy->pilot_sc = calloc(NFFT,1);
+    phy->pilot_symbols_rx = calloc(SUBFRAME_LEN,1);
+    phy->pilot_symbols_tx = calloc(SUBFRAME_LEN,1);
     gen_sc_alloc(phy);
 
     // init modulator objects
