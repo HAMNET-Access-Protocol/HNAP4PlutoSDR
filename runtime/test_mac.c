@@ -7,11 +7,11 @@
  *	First test of MAC+PHY layer
  */
 
-#include "mac/mac_ue.h"
-#include "mac/mac_bs.h"
-#include "phy/phy_ue.h"
-#include "phy/phy_bs.h"
-#include "platform/platform_simulation.h"
+#include "../mac/mac_ue.h"
+#include "../mac/mac_bs.h"
+#include "../phy/phy_ue.h"
+#include "../phy/phy_bs.h"
+#include "../platform/platform_simulation.h"
 
 int main()
 {
@@ -45,11 +45,11 @@ int main()
 	{
 		LOG(INFO,"Prepare frame %d\n",subframe_cnt);
 		// add some data to send
-		//MacDataFrame dl_frame = dataframe_create(100);
-		//for (int i=0; i<100; i++)
-		//	dl_frame->data[i] = rand() & 0xFF;
-		//memcpy(dl_frame->data,&subframe_cnt,sizeof(uint));
-		//mac_bs_add_txdata(mac_bs, 2, dl_frame);
+		MacDataFrame dl_frame = dataframe_create(100);
+		for (int i=0; i<100; i++)
+			dl_frame->data[i] = rand() & 0xFF;
+		memcpy(dl_frame->data,&subframe_cnt,sizeof(uint));
+		mac_bs_add_txdata(mac_bs, 2, dl_frame);
 		// add some data to send for client
 		MacDataFrame ul_frame = dataframe_create(100);
 		for (int i=0; i<100; i++)
