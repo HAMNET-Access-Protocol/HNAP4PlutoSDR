@@ -337,10 +337,10 @@ void mac_bs_run_scheduler(MacBS mac)
 	phy_map_dlctrl(mac->phy, next_sfn%2);
 
 	// Log schedule
-	LOG(DEBUG,"[MAC BS] Scheduler user assignments:\n");
-	LOG(DEBUG,"         DL data slots: %4d %4d %4d %4d\n", mac->dl_data_assignments[0],
+	LOG(TRACE,"[MAC BS] Scheduler user assignments:\n");
+	LOG(TRACE,"         DL data slots: %4d %4d %4d %4d\n", mac->dl_data_assignments[0],
 			mac->dl_data_assignments[1],mac->dl_data_assignments[2],mac->dl_data_assignments[3]);
-	LOG(DEBUG,"         UL data slots: %4d %4d %4d %4d\n", mac->ul_data_assignments[0],
+	LOG(TRACE,"         UL data slots: %4d %4d %4d %4d\n", mac->ul_data_assignments[0],
 			mac->ul_data_assignments[1],mac->ul_data_assignments[2],mac->ul_data_assignments[3]);
-	LOG(DEBUG,"         UL ctrl slots: %4d %4d\n", mac->ul_ctrl_assignments[0],mac->ul_ctrl_assignments[1]);
+	LOG(TRACE,"         UL ctrl slots: %4d %4d\n", mac->ul_ctrl_assignments[0],mac->ul_ctrl_assignments[1]);
 }

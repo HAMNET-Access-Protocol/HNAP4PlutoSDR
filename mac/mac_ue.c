@@ -102,12 +102,12 @@ void mac_ue_run_scheduler(MacUE mac)
 	int num_assigned = num_slot_assigned(mac->ul_data_assignments,MAC_ULDATA_SLOTS,1);
 	uint next_sfn = (mac->phy->common->tx_subframe+1) % 2; // subframe for which the scheduler is run
 	// Log schedule
-	LOG(DEBUG,"[MAC UE] Scheduler user assignments:\n");
-	LOG(DEBUG,"         DL data slots: %4d %4d %4d %4d\n", mac->dl_data_assignments[0],
+	LOG(TRACE,"[MAC UE] Scheduler user assignments:\n");
+	LOG(TRACE,"         DL data slots: %4d %4d %4d %4d\n", mac->dl_data_assignments[0],
 			mac->dl_data_assignments[1],mac->dl_data_assignments[2],mac->dl_data_assignments[3]);
-	LOG(DEBUG,"         UL data slots: %4d %4d %4d %4d\n", mac->ul_data_assignments[0],
+	LOG(TRACE,"         UL data slots: %4d %4d %4d %4d\n", mac->ul_data_assignments[0],
 			mac->ul_data_assignments[1],mac->ul_data_assignments[2],mac->ul_data_assignments[3]);
-	LOG(DEBUG,"         UL ctrl slots: %4d %4d\n", mac->ul_ctrl_assignments[0],mac->ul_ctrl_assignments[1]);
+	LOG(TRACE,"         UL ctrl slots: %4d %4d\n", mac->ul_ctrl_assignments[0],mac->ul_ctrl_assignments[1]);
 
 	// ensure association
 	if (mac->is_associated == 0) {
@@ -168,6 +168,7 @@ void mac_ue_run_scheduler(MacUE mac)
 		for (int i=0; i<MAC_ULCTRL_SLOTS; i++) {
 			if (mac->ul_ctrl_assignments[i] == 1) {
 				phy_map_ulctrl(mac->phy,chan,next_sfn,i);
+				LOG(INFO,"[MAC UE] map ulctrl %d %d\n",mac->phy->common->tx_subframe,mac->phy->common->tx_symbol);
 				break;
 			}
 		}
