@@ -66,6 +66,7 @@ int mac_ue_handle_message(MacUE mac, MacMessage msg)
 	case dl_data:
 		frame = mac_assmbl_reassemble(mac->reassembler, msg);
 		if (frame != NULL) {
+			mac->stats.bytes_rx += frame->size;
 			printf("[MAC UE] received dataframe of %d bytes\n",frame->size);
 			//TODO forward received frame to higher layer
 			static uint sfn=0;
@@ -128,6 +129,7 @@ void mac_ue_run_scheduler(MacUE mac)
 					MacMessage msg = mac_frag_get_fragment(mac->fragmenter,
 													lchan_unused_bytes(chan),1);
 					lchan_add_message(chan, msg);
+					mac->stats.bytes_tx+=msg->payload_len;
 					mac_msg_destroy(msg);
 				} else {
 					// client is assigned to slot but has no data
@@ -181,6 +183,7 @@ void mac_ue_rx_channel(MacUE mac, LogicalChannel chan)
 	// Verify the CRC
 	if(!lchan_verify_crc(chan)) {
 		LOG(INFO, "[MAC UE] lchan CRC invalid. Dropping.\n");
+		mac->stats.chan_rx_fail++;
 		return;
 	}
 
@@ -194,6 +197,7 @@ void mac_ue_rx_channel(MacUE mac, LogicalChannel chan)
 	} while (msg != NULL);
 
 	lchan_destroy(chan);
+	mac->stats.chan_rx_succ++;
 }
 
 // Add a higher layer packet to the tx queue

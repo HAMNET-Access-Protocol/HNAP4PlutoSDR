@@ -13,12 +13,21 @@
 
 #include "mac_channels.h"
 
+
 // Define generic Dataframe
 // This object is used for interaction with higher layers
 typedef struct {
 	uint size;
 	uint8_t* data;
 } MacDataFrame_s;
+
+// Store some MAC layer statistics
+typedef struct {
+	uint chan_rx_succ;
+	uint chan_rx_fail;
+	uint bytes_rx;
+	uint bytes_tx;
+} MACstat_s;
 
 typedef MacDataFrame_s* MacDataFrame;
 

@@ -145,7 +145,7 @@ void thread_mac_ue_scheduler(struct mac_th_data_s* arg)
 	MacUE mac = arg->mac;
 	pthread_cond_t* cond_signal = arg->scheduler_signal;
 	pthread_mutex_t* mutex = arg->scheduler_mutex;
-
+	uint sched_rounds=0;
 	while (1) {
 		// Wait for signal from UE rx thread
 		pthread_mutex_lock(mutex);
@@ -153,6 +153,13 @@ void thread_mac_ue_scheduler(struct mac_th_data_s* arg)
 
 		mac_ue_run_scheduler(mac);
 		pthread_mutex_unlock(mutex);
+		sched_rounds++;
+
+		// show some MAC stats
+		if (sched_rounds%1000==0) {
+			LOG(WARN,"[MAC] channels received:fail %d:%d\n",mac->stats.chan_rx_succ,mac->stats.chan_rx_fail);
+			LOG(WARN,"      bytes rx: %d bytes tx: %d\n",mac->stats.bytes_rx, mac->stats.bytes_tx);
+		}
 	}
 }
 

@@ -120,6 +120,12 @@ void thread_mac_bs_scheduler(struct mac_th_data_s* arg)
 */
 		mac_bs_run_scheduler(mac);
 		subframe_cnt++;
+
+		// show some MAC stats
+		if (subframe_cnt%1000==0) {
+			LOG(WARN,"[MAC] channels received:fail %d:%d\n",mac->stats.chan_rx_succ,mac->stats.chan_rx_fail);
+			LOG(WARN,"      bytes rx: %d bytes tx: %d\n",mac->stats.bytes_rx, mac->stats.bytes_tx);
+		}
 		pthread_mutex_unlock(mutex);
 	}
 }

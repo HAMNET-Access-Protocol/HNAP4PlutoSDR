@@ -32,6 +32,8 @@ struct MacUE_s {
 	uint8_t is_associated;
 
 	struct PhyUE_s* phy;
+
+	MACstat_s stats;
 };
 
 typedef struct MacUE_s* MacUE;

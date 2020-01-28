@@ -143,6 +143,7 @@ int mac_bs_handle_message(MacBS mac, MacMessage msg, uint8_t userID)
 	case ul_data:
 		frame = mac_assmbl_reassemble(user->reassembler,msg);
 		if (frame != NULL) {
+			mac->stats.bytes_rx+=frame->size;
 			LOG_SFN(INFO,"[MAC BS] received frame with %d bytes!\n",frame->size);
 			//TODO forward received frame to higher layer
 			uint sfn;
@@ -169,6 +170,7 @@ void mac_bs_rx_channel(MacBS mac, LogicalChannel chan, uint userid)
 	if(!lchan_verify_crc(chan)) {
 		LOG_SFN(INFO, "[MAC BS] lchan CRC%d invalid. Dropping.\n",8*chan->crc_type);
 		lchan_destroy(chan);
+		mac->stats.chan_rx_fail++;
 		return;
 	}
 
@@ -182,6 +184,7 @@ void mac_bs_rx_channel(MacBS mac, LogicalChannel chan, uint userid)
 	} while (msg != NULL);
 
 	lchan_destroy(chan);
+	mac->stats.chan_rx_succ++;
 }
 
 user_s* get_next_user(MacBS mac, uint curr_user)
@@ -316,6 +319,7 @@ void mac_bs_run_scheduler(MacBS mac)
 			uint payload_size = lchan_unused_bytes(chan);
 			MacMessage msg = mac_frag_get_fragment(ue->fragmenter, payload_size, 0);
 			lchan_add_message(chan,msg);
+			mac->stats.bytes_tx+=msg->payload_len;
 			mac_msg_destroy(msg);
 		}
 		lchan_calc_crc(chan);

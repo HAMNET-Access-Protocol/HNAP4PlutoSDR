@@ -43,6 +43,8 @@ struct MacBS_s {
 	uint8_t dl_data_assignments[MAC_ULDATA_SLOTS];
 
 	struct PhyBS_s* phy;
+
+	MACstat_s stats;
 };
 
 typedef struct MacBS_s* MacBS;
