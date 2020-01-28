@@ -15,4 +15,9 @@
 // abstraction. See platform.h on how to use it
 platform init_pluto_platform(unsigned int buf_len);
 
+platform init_pluto_network_platform(unsigned int buf_len);
+
+// set the rxgain of the platform
+void pluto_set_rxgain(int gain);
+
 #endif /* PLATFORM_PLUTO_H_ */

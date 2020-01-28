@@ -9,6 +9,7 @@
 #include "pluto.h"
 #include <errno.h>
 #include "../phy/phy_config.h"
+#include "../util/log.h"
 #include <stdio.h>
 #include <iio.h>
 
@@ -164,87 +165,6 @@ bool cfg_ad9361_streaming_ch(struct iio_context *ctx, struct stream_cfg *cfg, en
 	return true;
 }
 
-platform init_pluto_platform(uint buf_len)
-{
-	// RX stream config
-	rxcfg.bw_hz = 1703632;   // Analog filter corner freq. Calculated by matlab filter tool
-	rxcfg.fs_hz = KHZ(256*8);   // 8*256khz, decimation is done after this stage
-	rxcfg.lo_hz = KHZ(430001); // 430Mhz rf frequency
-	rxcfg.rfport = "A_BALANCED"; // port A (select for rf freq.)
-
-	// TX stream config
-	txcfg.bw_hz = 1701126; // Analog filter corner freq: 1.6*fs
-	txcfg.fs_hz = KHZ(256*8);   // 2.5 MS/s tx sample rate
-	txcfg.lo_hz = MHZ(430); // 430Mhz rf frequency
-	txcfg.rfport = "A"; // port A (select for rf freq.)
-
-	printf("* Acquiring IIO context\n");
-	ASSERT((ctx = iio_create_local_context()) && "No context");
-	ASSERT(iio_context_get_devices_count(ctx) > 0 && "No devices");
-
-	printf("* Acquiring AD9361 streaming devices\n");
-	ASSERT(get_ad9361_stream_dev(ctx, TX, &tx) && "No tx dev found");
-	ASSERT(get_ad9361_stream_dev(ctx, RX, &rx) && "No rx dev found");
-
-	//enable fir filters on both channel
-	printf("* Enabling FIR filter on phy channels");
-	struct iio_channel* chn;
-	get_phy_chan(ctx, RX, 0, &chn);
-	wr_ch_lli(chn, "filter_fir_en", 1);
-	get_phy_chan(ctx, TX, 0, &chn);
-	wr_ch_lli(chn, "filter_fir_en", 1);
-
-	printf("* Configuring AD9361 for streaming\n");
-	ASSERT(cfg_ad9361_streaming_ch(ctx, &rxcfg, RX, 0) && "RX port 0 not found");
-	ASSERT(cfg_ad9361_streaming_ch(ctx, &txcfg, TX, 0) && "TX port 0 not found");
-
-	printf("* Initializing AD9361 IIO streaming channels\n");
-	ASSERT(get_ad9361_stream_ch(ctx, RX, rx, 0, &rx0_i) && "RX chan i not found");
-	ASSERT(get_ad9361_stream_ch(ctx, RX, rx, 1, &rx0_q) && "RX chan q not found");
-	ASSERT(get_ad9361_stream_ch(ctx, TX, tx, 0, &tx0_i) && "TX chan i not found");
-	ASSERT(get_ad9361_stream_ch(ctx, TX, tx, 1, &tx0_q) && "TX chan q not found");
-
-	// Enable dec/int stage of cf-ad9361-lpc / cf-ad9361-dds-core-lpc
-	wr_ch_lli(rx0_i,"sampling_frequency",rxcfg.fs_hz/8);
-	wr_ch_lli(tx0_i,"sampling_frequency",txcfg.fs_hz/8);
-
-	printf("* Set TX gain\n");
-    // Set TX gain
-	get_phy_chan(ctx, TX, 0, &chn);
-    wr_ch_lli(chn, "hardwaregain", 0.0);
-
-    // Set RX AGC to slow attack
-    get_phy_chan(ctx, RX, 0, &chn);
-    wr_ch_str(chn, "gain_control_mode", "slow_attack");
-
-	printf("* Enabling IIO streaming channels\n");
-	iio_channel_enable(rx0_i);
-	iio_channel_enable(rx0_q);
-	iio_channel_enable(tx0_i);
-	iio_channel_enable(tx0_q);
-
-
-	printf("* Creating non-cyclic IIO buffers\n");
-	rxbuf = iio_device_create_buffer(rx, buf_len, false);
-	if (!rxbuf) {
-		perror("Could not create RX buffer");
-		shutdown();
-	}
-	txbuf = iio_device_create_buffer(tx, buf_len, false);
-	if (!txbuf) {
-		perror("Could not create TX buffer");
-		shutdown();
-	}
-
-	// Generate platform interface
-	platform pluto = malloc(sizeof(struct platform_s));
-	pluto->platform_rx = pluto_receive;
-	pluto->platform_tx_prep = pluto_prep_tx;
-	pluto->platform_tx_push = pluto_receive;
-	pluto->end = shutdown;
-	return pluto;
-}
-
 // Push samples to TX buffer object
 // returns the number of samples that have been pushed
 int pluto_prep_tx(platform hw, float complex* buf_tx, uint offset, uint num_samples)
@@ -263,18 +183,25 @@ int pluto_prep_tx(platform hw, float complex* buf_tx, uint offset, uint num_samp
 		// https://wiki.analog.com/resources/eval/user-guides/ad-fmcomms2-ebz/software/basic_iq_datafiles#binary_format
 		((int16_t*)p_dat)[0] = (int16_t)(8196.0*creal(buf_tx[i])); // Real (I)
 		((int16_t*)p_dat)[1] = (int16_t)(8196.0*cimag(buf_tx[i++])); // Imag (Q)
+
+		// data check
+		if (((int16_t*)p_dat)[0]==32768 || ((int16_t*)p_dat)[0]==-32767 ||
+				((int16_t*)p_dat)[1]==32768 || ((int16_t*)p_dat)[1]==-32767) {
+			LOG(WARN,"[Platform] Clipping in TX buffer!\n");
+		}
 	}
 	return i;
 }
 
 // Flushes the TX buffer and transfers data to Kernel buffer
 // so that samples will be sent
-void pluto_transmit(platform hw)
+int pluto_transmit(platform hw)
 {
 	ssize_t nbytes_tx;
 	// Schedule TX buffer
 	nbytes_tx = iio_buffer_push(txbuf);
 	if (nbytes_tx < 0) { printf("Error pushing buf %d\n", (int) nbytes_tx); }
+	return nbytes_tx;
 }
 
 
@@ -301,3 +228,120 @@ int pluto_receive(platform hw, float complex* buf_rx)
 	}
 	return i;
 }
+
+platform init_generic(uint buf_len)
+{
+	// RX stream config
+	rxcfg.bw_hz = 1703632;   // Analog filter corner freq. Calculated by matlab filter tool
+	rxcfg.fs_hz = KHZ(256*8);   // 8*256khz, decimation is done after this stage
+	rxcfg.lo_hz = KHZ(430000); // 430Mhz rf frequency
+	rxcfg.rfport = "A_BALANCED"; // port A (select for rf freq.)
+
+	// TX stream config
+	txcfg.bw_hz = 1701126; // Analog filter corner freq: 1.6*fs
+	txcfg.fs_hz = KHZ(256*8);   // 2.5 MS/s tx sample rate
+	txcfg.lo_hz = MHZ(430); // 430Mhz rf frequency
+	txcfg.rfport = "A"; // port A (select for rf freq.)
+
+	printf("* Acquiring AD9361 streaming devices\n");
+	ASSERT(get_ad9361_stream_dev(ctx, TX, &tx) && "No tx dev found");
+	ASSERT(get_ad9361_stream_dev(ctx, RX, &rx) && "No rx dev found");
+
+	//enable fir filters on both channel
+	printf("* Enabling FIR filter on phy channels\n");
+	struct iio_channel* chn;
+	get_phy_chan(ctx, RX, 0, &chn);
+	wr_ch_lli(chn, "filter_fir_en", 1);
+	get_phy_chan(ctx, TX, 0, &chn);
+	wr_ch_lli(chn, "filter_fir_en", 1);
+
+	// set buffer size
+	printf("* Configure kernel buffer count for TXRX\n");
+	if(iio_device_set_kernel_buffers_count(tx,4)!=0) {
+		printf("Error configuring kernel buffer count for TX!\n");
+	}
+	if(iio_device_set_kernel_buffers_count(rx,6)!=0) {
+		printf("Error configuring kernel buffer count for RX!\n");
+	}
+
+	printf("* Configuring AD9361 for streaming\n");
+	ASSERT(cfg_ad9361_streaming_ch(ctx, &rxcfg, RX, 0) && "RX port 0 not found");
+	ASSERT(cfg_ad9361_streaming_ch(ctx, &txcfg, TX, 0) && "TX port 0 not found");
+
+	printf("* Initializing AD9361 IIO streaming channels\n");
+	ASSERT(get_ad9361_stream_ch(ctx, RX, rx, 0, &rx0_i) && "RX chan i not found");
+	ASSERT(get_ad9361_stream_ch(ctx, RX, rx, 1, &rx0_q) && "RX chan q not found");
+	ASSERT(get_ad9361_stream_ch(ctx, TX, tx, 0, &tx0_i) && "TX chan i not found");
+	ASSERT(get_ad9361_stream_ch(ctx, TX, tx, 1, &tx0_q) && "TX chan q not found");
+
+	// Enable dec/int stage of cf-ad9361-lpc / cf-ad9361-dds-core-lpc
+	wr_ch_lli(rx0_i,"sampling_frequency",rxcfg.fs_hz/8);
+	wr_ch_lli(tx0_i,"sampling_frequency",txcfg.fs_hz/8);
+
+	printf("* Set TX gain\n");
+    // Set TX gain
+	get_phy_chan(ctx, TX, 0, &chn);
+    wr_ch_lli(chn, "hardwaregain", 0.0);
+
+    // Set RX AGC to slow attack
+    get_phy_chan(ctx, RX, 0, &chn);
+    wr_ch_str(chn, "gain_control_mode", "manual"); // fast_attack, slow_attack, manual
+    wr_ch_lli(chn, "hardwaregain", 26.0);
+
+	printf("* Enabling IIO streaming channels\n");
+	iio_channel_enable(rx0_i);
+	iio_channel_enable(rx0_q);
+	iio_channel_enable(tx0_i);
+	iio_channel_enable(tx0_q);
+
+
+	printf("* Creating non-cyclic IIO buffers\n");
+	rxbuf = iio_device_create_buffer(rx, buf_len, false);
+	if (!rxbuf) {
+		perror("Could not create RX buffer");
+		shutdown();
+	}
+	txbuf = iio_device_create_buffer(tx, buf_len, false);
+	if (!txbuf) {
+		perror("Could not create TX buffer");
+		shutdown();
+	}
+
+	// Generate platform interface
+	platform pluto = malloc(sizeof(struct platform_s));
+	pluto->platform_rx = pluto_receive;
+	pluto->platform_tx_prep = pluto_prep_tx;
+	pluto->platform_tx_push = pluto_transmit;
+	pluto->end = shutdown;
+	return pluto;
+}
+
+void pluto_set_rxgain(int gain)
+{
+	struct iio_channel* chn;
+    get_phy_chan(ctx, RX, 0, &chn);
+    wr_ch_lli(chn, "hardwaregain", gain);
+}
+
+// Initialize a pluto network context
+platform init_pluto_network_platform(uint buf_len)
+{
+	char ipaddr[] = "192.168.3.1";
+	printf("* Acquiring IIO Device at %s\n",ipaddr);
+	ASSERT((ctx = iio_create_network_context(ipaddr)) && "No context");
+	ASSERT(iio_context_get_devices_count(ctx) > 0 && "No devices");
+
+	return init_generic(buf_len);
+}
+
+// Initialize a local context. Used for buidling directly
+// on the pluto
+platform init_pluto_platform(uint buf_len)
+{
+	printf("* Acquiring IIO context\n");
+	ASSERT((ctx = iio_create_local_context()) && "No context");
+	ASSERT(iio_context_get_devices_count(ctx) > 0 && "No devices");
+
+	return init_generic(buf_len);
+}
+
