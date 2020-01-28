@@ -291,6 +291,8 @@ void mac_bs_run_scheduler(MacBS mac)
 		if (ue->ul_queue > 0) {
 			mac->ul_data_assignments[slot_idx++] = ue->userid;
 			user_id = ue->userid; // update last active user
+			// update ul queue len:
+			ue->ul_queue -= fmin(ue->ul_queue, get_tbs_size(mac->phy->common, ue->ul_mcs)/8-5);
 		} else if (ue->userid == user_id) {
 			// no other active user found. assign to
 			// current user even if there is no ul req
