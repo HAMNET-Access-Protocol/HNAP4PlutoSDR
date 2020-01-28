@@ -24,4 +24,14 @@
 #define FRAME_LEN 8			// number of subframes per frame
 #define DL_UL_SHIFT 34		// number of ofdm symbols the UL is shifted behind
 #define MAX_USER 16
+
+// FIR filters, buffers etc introduce a delay that causes
+// uplink data to be received later than expected. Use this
+// variable to compensate for this offset at client side.
+// value range: [0 30] ofdm symbols. Otherwise waveform wont work
+#ifndef USE_SIM
+#define DL_UL_SHIFT_COMPENSATION 16
+#else
+#define DL_UL_SHIFT_COMPENSATION 0
+#endif
 #endif /* PHY_CONFIG_H_ */

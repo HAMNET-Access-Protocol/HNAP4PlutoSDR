@@ -7,6 +7,27 @@
 
 #include "phy_common.h"
 
+// define dummy data which is sent when no other data is available
+// these are frequency domain samples for one OFDM symbol
+/*float complex dummy_data_f[NFFT] = { 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+		 	 	 	 	 	 	 	 1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,
+									 0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,
+									 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1};
+*/
+float complex dummy_data_f[NFFT] = { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+		 	 	 	 	 	 	 	 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+									 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+									 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+
+// Use a custom pilot allocation in frequency domain.
+// In order to use it, set USE_CUSTOM_PILOT to 1.
+#define USE_CUSTOM_PILOT 0
+uint8_t custom_pilot[NFFT] = { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+							   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+							   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+							   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+
+
 // generate the allocation info for the subcarriers
 void gen_sc_alloc(PhyCommon phy)
 {
@@ -137,7 +158,8 @@ void phy_common_destroy(PhyCommon phy)
 int get_tbs_size(PhyCommon phy, uint mcs)
 {
 	if (NFFT==64) {
-		uint symbols = (SLOT_LEN-1)*(NUM_DATA_SC+NUM_PILOT)+NUM_DATA_SC;
+		uint symbols_w_pilot_per_slot = 7;
+		uint symbols = (SLOT_LEN-symbols_w_pilot_per_slot)*(NUM_DATA_SC+NUM_PILOT)+symbols_w_pilot_per_slot*NUM_DATA_SC;
 		uint enc_bits = symbols*modem_get_bps(phy->mcs_modem[mcs]); //number of encoded bits
 		return (enc_bits-16)*fec_get_rate(phy->mcs_fec_scheme[mcs]); // real tbs size. Subtract 16bit for conv encoding
 	} else {
@@ -234,6 +256,7 @@ void gen_pilot_symbols(PhyCommon phy, uint is_bs)
     pilot_dl[0] = PILOT;
     for (int i=0; i<NUM_SLOT; i++) {
     	pilot_dl[DLCTRL_LEN+2+(SLOT_LEN+1)*i] = PILOT;
+    	pilot_dl[DLCTRL_LEN+2+(SLOT_LEN+1)*i+8] = PILOT; //test w more pilots
     }
 
     // UL: ulctrl slots and first symbol of uldata slots have pilots
@@ -243,4 +266,27 @@ void gen_pilot_symbols(PhyCommon phy, uint is_bs)
     pilot_ul[SLOT_LEN+1] = PILOT;
     pilot_ul[2*(SLOT_LEN+1)+4] = PILOT;
     pilot_ul[3*(SLOT_LEN+1)+4] = PILOT;
+}
+
+// generate a more robust pilot distribution within a subframe
+void gen_pilot_symbols_robust(PhyCommon phy, uint is_bs)
+{
+	// UE transmits in UL and RXs in DL, BS the other way around
+	// define pilots accordingly
+	uint8_t* pilot_ul,*pilot_dl;
+	if (is_bs) {
+		pilot_dl = phy->pilot_symbols_tx;
+		pilot_ul = phy->pilot_symbols_rx;
+	} else {
+		pilot_dl = phy->pilot_symbols_rx;
+		pilot_ul = phy->pilot_symbols_tx;
+	}
+
+    // Pilot definition in time domain:
+    for (int i=0; i<SUBFRAME_LEN; i+=2) {
+    	pilot_dl[i] = PILOT;
+    	pilot_ul[i] = PILOT;
+    	pilot_dl[i+1] = NO_PILOT;
+    	pilot_ul[i+1] = NO_PILOT;
+    }
 }

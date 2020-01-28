@@ -21,7 +21,8 @@
 #define UE_TX_CPUID 0
 #define UE_MAC_CPUID 0
 
-#define BUFLEN ((NFFT+CP_LEN)*2)
+#define SYMBOLS_PER_BUF 2
+#define BUFLEN ((NFFT+CP_LEN)*SYMBOLS_PER_BUF)
 
 // Set to 1 in order to use the simulated platform
 #define CLIENT_USE_PLATFORM_SIM 0
@@ -77,9 +78,10 @@ void thread_phy_ue_rx(struct rx_th_data_s* arg)
 		hw->platform_rx(hw, rxbuf_time);
 		// process samples
 		phy_ue_do_rx(phy, rxbuf_time, BUFLEN);
-		log_bin((uint8_t*)rxbuf_time,BUFLEN*sizeof(float complex), "dl_data.bin","a");
+		//log_bin((uint8_t*)rxbuf_time,BUFLEN*sizeof(float complex), "dl_data.bin","a");
 		// Run scheduler after DLCTRL slot was received
-		if (phy->common->rx_symbol == DLCTRL_LEN) {
+		if (phy->common->rx_symbol == DLCTRL_LEN ||
+				phy->common->rx_symbol == DLCTRL_LEN+1) {
 			pthread_cond_signal(scheduler_signal);
 		}
 	}
@@ -92,12 +94,9 @@ void thread_phy_ue_tx(struct tx_th_data_s* arg)
 	platform hw = arg->hw;
 
 	float complex* ul_data_tx = calloc(sizeof(float complex),BUFLEN);
-	uint offset, num_samples, tx_shift=0;;
+	int offset, num_samples, tx_shift=0;;
 
 	// wait until rx thread has achieved sync
-	//pthread_mutex_lock(&phy->tx_sync_lock);
-	//pthread_cond_wait(&phy->tx_sync_cond, &phy->tx_sync_lock);
-
 	while (!phy->has_synced_once) {
 		hw->platform_tx_push(hw);
 		hw->platform_tx_prep(hw, ul_data_tx, 0, BUFLEN);
@@ -114,6 +113,7 @@ void thread_phy_ue_tx(struct tx_th_data_s* arg)
 		hw->platform_tx_prep(hw, ul_data_tx+num_samples, 0, tx_shift);
 		// create new symbol
 		phy_ue_write_symbol(phy, ul_data_tx);
+		phy_ue_write_symbol(phy, ul_data_tx+(NFFT+CP_LEN));
 
 		// prepare first part of the new symbol
 		hw->platform_tx_prep(hw, ul_data_tx, tx_shift, num_samples);
@@ -122,18 +122,20 @@ void thread_phy_ue_tx(struct tx_th_data_s* arg)
 		hw->platform_tx_push(hw);
 
 		// update timing offset for tx. TODO explain chosen tx_Symbol idx
-		if (phy->common->tx_symbol == 29 && phy->common->tx_subframe == 0) {
+		if (phy->common->tx_symbol >= 29 && phy->common->tx_subframe == 0) {
 			// check if offset has changed
 			int new_offset = phy->mac->timing_advance;
-			if (abs(new_offset-offset)>0) {
-				// if offset diff is >0, we have to skip ofdm symbols
-				while (new_offset-offset > 0) {
-					phy->common->tx_symbol++;
-					offset+=BUFLEN;
+			int diff = new_offset - offset;
+			if (abs(diff)>0) {
+				// if offset shift-diff is <0, we have to skip ofdm symbols
+				while (tx_shift - diff < 0) {
+					phy->common->tx_symbol+=SYMBOLS_PER_BUF;
+					diff-=BUFLEN;
 				}
-				tx_shift = (BUFLEN-new_offset) % (BUFLEN);
+				tx_shift = tx_shift - diff;
 				offset = new_offset;
 				num_samples = BUFLEN - tx_shift;
+				LOG(INFO,"[Runtime] adapt tx offset. shift: %d\n",tx_shift);
 			}
 		}
 	}
@@ -150,6 +152,14 @@ void thread_mac_ue_scheduler(struct mac_th_data_s* arg)
 		// Wait for signal from UE rx thread
 		pthread_mutex_lock(mutex);
 		pthread_cond_wait(cond_signal, mutex);
+
+		// add some data to send for client
+		/*MacDataFrame ul_frame = dataframe_create(100);
+		for (int i=0; i<100; i++)
+			ul_frame->data[i] = rand() & 0xFF;
+		if(!mac_ue_add_txdata(mac, ul_frame)) {
+			dataframe_destroy(ul_frame);
+		}*/
 
 		mac_ue_run_scheduler(mac);
 		pthread_mutex_unlock(mutex);
@@ -171,7 +181,8 @@ int main()
 #if CLIENT_USE_PLATFORM_SIM
 	platform pluto = platform_init_simulation(NFFT+CP_LEN);
 #else
-	platform pluto = init_pluto_network_platform(BUFLEN);
+	platform pluto = init_pluto_platform(BUFLEN);
+	pluto_set_rxgain(40);
 #endif
 
 	// Init phy and mac layer

@@ -21,7 +21,7 @@ PhyBS phy_bs_init()
 	PhyBS phy = calloc(sizeof(struct PhyBS_s),1);
 
 	phy->common = phy_common_init();
-	gen_pilot_symbols(phy->common, 1);
+	gen_pilot_symbols_robust(phy->common, 1);
 
 	// Create OFDM frame generator: nFFt, CPlen, taperlen, subcarrier alloc
 	phy->fg = ofdmframegen_create(NFFT, CP_LEN, 0, phy->common->pilot_sc);
@@ -369,7 +369,7 @@ void phy_bs_write_symbol(PhyBS phy, float complex* txbuf_time)
 
 	// clear frequency domain memory of the written symbol, to avoid sending garbage
 	// when the symbol is not overwritten in the next subframe
-	memset(common->txdata_f[sfn][tx_symb],0,sizeof(float complex)*NFFT);
+	memcpy(common->txdata_f[sfn][tx_symb],dummy_data_f,sizeof(float complex)*NFFT);
 
 	// Update subframe and symbol counter
 	common->tx_symbol++;
@@ -404,8 +404,8 @@ void phy_bs_rx_symbol(PhyBS phy, float complex* rxbuf_time)
 			int offset = ofdmframesync_find_data_start(phy->fs_rach, rxbuf_time, rx_sym);
 			if (offset !=-1) {
 				phy->rach_timing = offset+(NFFT+CP_LEN)*(common->rx_symbol-(SUBFRAME_LEN-SLOT_LEN+SYNC_SYMBOLS-1));
-				LOG(INFO,"[PHY BS] detected preamble of association request! offset %d. cfo %.3f Hz\n",
-													phy->rach_timing, ofdmframesync_get_cfo(phy->fs_rach)*SAMPLERATE/6.28);
+				LOG(INFO,"[PHY BS] detected preamble of association request in (%d %d)! offset %d. cfo %.3f Hz\n",
+													common->rx_subframe, common->rx_symbol, phy->rach_timing, ofdmframesync_get_cfo(phy->fs_rach)*SAMPLERATE/6.28);
 				// rach can be unaligned to symbol boundaries. receive rx_sym-offset samps
 				ofdmframesync_execute(phy->fs_rach, rxbuf_time+offset,rx_sym-offset);
 			}

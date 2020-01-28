@@ -60,8 +60,8 @@ void thread_phy_bs_rx(struct rx_th_data_s* arg)
 	while (1)
 	{
 		hw->platform_rx(hw, rxbuf_time);
-		//phy_bs_rx_symbol(phy, rxbuf_time);
-		//phy_bs_rx_symbol(phy, rxbuf_time+(NFFT+CP_LEN));
+		phy_bs_rx_symbol(phy, rxbuf_time);
+		phy_bs_rx_symbol(phy, rxbuf_time+(NFFT+CP_LEN));
 	}
 }
 
@@ -73,18 +73,16 @@ void thread_phy_bs_tx(struct tx_th_data_s* arg)
 	pthread_cond_t* scheduler_signal = arg->scheduler_signal;
 
 	float complex* txbuf_time = calloc(sizeof(float complex),BUFLEN);
-	uint offset, num_samples;
 
 	uint subframe_cnt = 0;
 	while (1)
 	{
 		for (int symbol=0; symbol<SUBFRAME_LEN/2; symbol++) {
-			// BS TX
 			bs->platform_tx_push(bs);
 			phy_bs_write_symbol(phy, txbuf_time);
-			phy_bs_write_symbol(phy, txbuf_time+(NFFT+CP_LEN));
-			bs->platform_tx_prep(bs, txbuf_time, 0, BUFLEN);
+			phy_bs_write_symbol(phy, txbuf_time+1*(NFFT+CP_LEN));
 
+			bs->platform_tx_prep(bs, txbuf_time, 0, BUFLEN);
 			// run scheduler
 			if (symbol==30) {
 				pthread_cond_signal(scheduler_signal);
@@ -112,12 +110,13 @@ void thread_mac_bs_scheduler(struct mac_th_data_s* arg)
 		// add some dummy data
 		LOG(INFO,"Prepare frame %d. Time: %.3f\n",subframe_cnt,clock()*1000.0/CLOCKS_PER_SEC);
 		// add some data to send
-		/*MacDataFrame dl_frame = dataframe_create(100);
+		MacDataFrame dl_frame = dataframe_create(100);
 		for (int i=0; i<100; i++)
 			dl_frame->data[i] = rand() & 0xFF;
 		memcpy(dl_frame->data,&subframe_cnt,sizeof(uint));
-		mac_bs_add_txdata(mac, 2, dl_frame);
-*/
+		if(!mac_bs_add_txdata(mac, 2, dl_frame)) {
+			dataframe_destroy(dl_frame);
+		}
 		mac_bs_run_scheduler(mac);
 		subframe_cnt++;
 
@@ -139,6 +138,7 @@ int main()
 	platform pluto = platform_init_simulation(BUFLEN);
 #else
 	platform pluto = init_pluto_platform(BUFLEN);
+	pluto_set_rxgain(20);
 #endif
 
 	// Init phy and mac layer

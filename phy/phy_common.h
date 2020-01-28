@@ -17,6 +17,12 @@
 #include <string.h>
 #include <math.h>
 
+// log makro to log with subframe number
+#define LOG_SFN(level, ...) do { if (level>=LOG_LEVEL) \
+	{ printf("[%2d %2d]",phy->common->rx_subframe,phy->common->rx_symbol); \
+	  printf(__VA_ARGS__); }} while(0);
+
+
 // typedef for easier dlctrl slot access
 typedef union {
 	uint8_t byte;
@@ -27,6 +33,8 @@ typedef union {
 } dlctrl_alloc_t;
 
 enum {NO_PILOT, PILOT};		// definition for pilot_symbols variable
+
+extern float complex dummy_data_f[];
 
 // Struct contains PHY variables common to UE and BS Phy layer
 typedef struct {
@@ -83,5 +91,6 @@ void phy_demod_soft(PhyCommon common, uint first_sc, uint last_sc, uint first_sy
 
 // Define which OFDM symbols whithin a subframe contain pilots
 void gen_pilot_symbols(PhyCommon phy, uint is_bs);
+void gen_pilot_symbols_robust(PhyCommon phy, uint is_bs);
 
 #endif /* PHY_COMMON_H_ */

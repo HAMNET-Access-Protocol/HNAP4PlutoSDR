@@ -21,7 +21,7 @@ PhyUE phy_ue_init()
 	PhyUE phy = calloc(sizeof(struct PhyUE_s),1);
 
 	phy->common = phy_common_init();
-	gen_pilot_symbols(phy->common, 0);
+	gen_pilot_symbols_robust(phy->common, 0);
 
 	// Create OFDM frame generator: nFFt, CPlen, taperlen, subcarrier alloc
 	phy->fg = ofdmframegen_create(NFFT, CP_LEN, 0, phy->common->pilot_sc);
@@ -93,7 +93,7 @@ int phy_ue_initial_sync(PhyUE phy, float complex* rxbuf_time, uint num_samples)
 		if (phy->has_synced_once == 0) {
 			// init TX counters once
 			common->tx_active = 1;
-			common->tx_symbol = SUBFRAME_LEN - DL_UL_SHIFT; //TODO clarify what happens for offset=0
+			common->tx_symbol = SUBFRAME_LEN - DL_UL_SHIFT + DL_UL_SHIFT_COMPENSATION; //TODO clarify what happens for offset=0
 			common->tx_subframe = 0;
 
 			phy->has_synced_once = 1;
@@ -103,7 +103,7 @@ int phy_ue_initial_sync(PhyUE phy, float complex* rxbuf_time, uint num_samples)
 			float new_cfo = ofdmframesync_get_cfo(phy->fs);
 			float cfo_filt = 0.5*phy->prev_cfo + (1-0.5)*new_cfo;
 			ofdmframesync_set_cfo(phy->fs,cfo_filt);
-			LOG(INFO,"[PHY UE] sync seq. cfo: %.3fHz offset: %d samps\n",phy->prev_cfo*SAMPLERATE/6.28,offset);
+			LOG_SFN(DEBUG,"[PHY UE] sync seq. cfo: %.3fHz offset: %d samps\n",new_cfo*SAMPLERATE/6.28,offset);
 
 		}
 	}
@@ -131,13 +131,15 @@ int phy_ue_proc_dlctrl(PhyUE phy)
 
 	// verify CRC
 	if (!crc_validate_message(LIQUID_CRC_8, (uint8_t*)dlctrl_buf, dlctrl_size, dlctrl_buf[dlctrl_size].byte)) {
-		LOG(DEBUG,"[PHY] DLCTRL slot could not be decoded!\n");
+		LOG(WARN,"[PHY UE] DLCTRL slot could not be decoded!\n");
 		return 0; // CRC not valid
 	}
 
 	// Set the decoded user assignments in the phy struct
+	LOG_SFN(DEBUG,"[PHY UE] DLCTRL:");
 	uint idx = 0;
 	for (int i=0; i<NUM_SLOT/2; i++) {
+		LOG(DEBUG,"%02x",dlctrl_buf[idx].byte);
 		phy->dlslot_assignments[sfn][2*i  ] = (dlctrl_buf[idx].h4 == phy->userid ||
 											   dlctrl_buf[idx].h4 == USER_BROADCAST) ? 1 : 0;
 		phy->dlslot_assignments[sfn][2*i+1] = (dlctrl_buf[idx].l4 == phy->userid ||
@@ -145,11 +147,13 @@ int phy_ue_proc_dlctrl(PhyUE phy)
 		idx++;
 	}
 	for (int i=0; i<NUM_SLOT/2; i++) {
+		LOG(DEBUG,"%02x",dlctrl_buf[idx].byte);
 		phy->ulslot_assignments[sfn][2*i  ] = (dlctrl_buf[idx].h4 == phy->userid) ? 1 : 0;
 		phy->ulslot_assignments[sfn][2*i+1] = (dlctrl_buf[idx].l4 == phy->userid) ? 1 : 0;
 		idx++;
 	}
 	for (int i=0; i<NUM_ULCTRL_SLOT/2; i++) {
+		LOG(DEBUG,"%02x\n",dlctrl_buf[idx].byte);
 		phy->ulctrl_assignments[sfn][2*i  ] = (dlctrl_buf[idx].h4 == phy->userid) ? 1 : 0;
 		phy->ulctrl_assignments[sfn][2*i+1] = (dlctrl_buf[idx].l4 == phy->userid) ? 1 : 0;
 		idx++;
@@ -382,7 +386,7 @@ void phy_ue_do_rx(PhyUE phy, float complex* rxbuf_time, uint num_samples)
 			uint rx_sym = fmin(NFFT+CP_LEN,remaining_samps);
 			if (common->pilot_symbols_rx[common->rx_symbol] == PILOT) {
 				ofdmframesync_execute(phy->fs,rxbuf_time,rx_sym);
-				LOG(DEBUG,"[PHY UE] cfo updated: %.3f Hz\n",ofdmframesync_get_cfo(phy->fs)*SAMPLERATE/6.28);
+				LOG(TRACE,"[PHY UE] cfo updated: %.3f Hz\n",ofdmframesync_get_cfo(phy->fs)*SAMPLERATE/6.28);
 			} else {
 				ofdmframesync_execute_nopilot(phy->fs,rxbuf_time,rx_sym);
 			}
