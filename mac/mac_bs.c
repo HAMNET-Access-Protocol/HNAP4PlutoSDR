@@ -189,6 +189,7 @@ void mac_bs_rx_channel(MacBS mac, LogicalChannel chan, uint userid)
 
 user_s* get_next_user(MacBS mac, uint curr_user)
 {
+	curr_user = curr_user % MAX_USER;
 	uint next_user = curr_user;
 	do {
 		next_user = (next_user + 1) % MAX_USER;
@@ -200,6 +201,24 @@ int ue_has_dldata(user_s* ue)
 {
 	return (mac_frag_has_fragment(ue->fragmenter) ||
 			!ringbuf_isempty(ue->msg_control_queue));
+}
+
+void mac_bs_map_slot(MacBS mac, uint subframe, uint slot, user_s* ue)
+{
+	// Generate logical channel
+	uint tbs = get_tbs_size(mac->phy->common, ue->dl_mcs);
+	LogicalChannel chan = lchan_create(tbs/8, CRC16);
+	lchan_add_all_msgs(chan, ue->msg_control_queue);
+	if (mac_frag_has_fragment(ue->fragmenter)) {
+		uint payload_size = lchan_unused_bytes(chan);
+		MacMessage msg = mac_frag_get_fragment(ue->fragmenter, payload_size, 0);
+		lchan_add_message(chan,msg);
+		mac->stats.bytes_tx+=msg->payload_len;
+		mac_msg_destroy(msg);
+	}
+	lchan_calc_crc(chan);
+    phy_map_dlslot(mac->phy, chan, subframe%2, slot, ue->userid, ue->dl_mcs);
+    lchan_destroy(chan);
 }
 
 void mac_bs_run_scheduler(MacBS mac)
@@ -255,10 +274,11 @@ void mac_bs_run_scheduler(MacBS mac)
 			break;
 		}
 		// get next user. Round robin allocation
-		ue = get_next_user(mac,user_id);
+		ue = get_next_user(mac,ue->userid);
 
 		// check whether the user has DL data or DL ctrl data
 		if (ue_has_dldata(ue)) {
+			mac_bs_map_slot(mac,next_sfn,slot_idx,ue);
 			mac->dl_data_assignments[slot_idx++] = ue->userid;
 			user_id = ue->userid; // update last active user
 		} else if (ue->userid == user_id) {
@@ -280,12 +300,12 @@ void mac_bs_run_scheduler(MacBS mac)
 		user_id = ue->userid;
 	}
 	while (slot_idx < MAC_ULDATA_SLOTS) {
-		// get next user. Round robin allocation
-		user_s* ue = get_next_user(mac,user_id);
 		if (ue==NULL) {
 			// no active user at all. stop
 			break;
 		}
+		// get next user. Round robin allocation
+		user_s* ue = get_next_user(mac,ue->userid);
 
 		// check whether the user has pending ul data
 		if (ue->ul_queue > 0) {
@@ -306,30 +326,7 @@ void mac_bs_run_scheduler(MacBS mac)
 		mac->ul_data_assignments[MAC_ULDATA_SLOTS-1] = USER_UNUSED;
 	}
 
-	// 5. Generate DL slot data
-	for (int slot=0; slot<MAC_DLDATA_SLOTS; slot++) {
-		user_s* ue = mac->UE[mac->dl_data_assignments[slot]];
-		if (ue == NULL) {
-			continue; // skip slots that are assigned for broadcast or disabled
-		}
-
-		// Generate logical channel
-		uint tbs = get_tbs_size(mac->phy->common, ue->dl_mcs);
-		LogicalChannel chan = lchan_create(tbs/8, CRC16);
-		lchan_add_all_msgs(chan, ue->msg_control_queue);
-		if (mac_frag_has_fragment(ue->fragmenter)) {
-			uint payload_size = lchan_unused_bytes(chan);
-			MacMessage msg = mac_frag_get_fragment(ue->fragmenter, payload_size, 0);
-			lchan_add_message(chan,msg);
-			mac->stats.bytes_tx+=msg->payload_len;
-			mac_msg_destroy(msg);
-		}
-		lchan_calc_crc(chan);
-        phy_map_dlslot(mac->phy, chan, next_sfn%2, slot, ue->userid, ue->dl_mcs);
-        lchan_destroy(chan);
-	}
-
-	// 5.2 set slot assignments in PHY
+	// 5. set slot assignments in PHY
 	phy_assign_dlctrl_dd(mac->phy, mac->dl_data_assignments);
 	phy_assign_dlctrl_ud(mac->phy, next_sfn%2, mac->ul_data_assignments);
 	phy_assign_dlctrl_uc(mac->phy, next_sfn%2, mac->ul_ctrl_assignments);
