@@ -58,7 +58,7 @@ void thread_phy_ue_rx(struct rx_th_data_s* arg)
 	float complex* rxbuf_time = calloc(sizeof(float complex),BUFLEN);
 
 	// get initial sync
-	int offset = -1;
+	/*int offset = -1;
 	while (offset == -1) {
 		hw->platform_rx(hw, rxbuf_time);
 		offset = phy_ue_initial_sync(phy, rxbuf_time, BUFLEN);
@@ -68,7 +68,7 @@ void thread_phy_ue_rx(struct rx_th_data_s* arg)
 		phy_ue_do_rx(phy, rxbuf_time, BUFLEN-offset);
 		offset = 0;
 	}
-	LOG(INFO,"[PHY UE] rx thread got sync!\n");
+	LOG(INFO,"[PHY UE] rx thread got sync!\n");*/
 	// start the tx thread
 	//pthread_cond_signal(&phy->tx_sync_cond);
 
@@ -103,9 +103,9 @@ void thread_phy_ue_tx(struct tx_th_data_s* arg)
 	}
 
 	LOG(INFO,"[PHY UE] main tx thread started!\n");
-	offset = 0;	// TODO use rx offset to align tx
-	tx_shift = 0;
-	num_samples = BUFLEN-offset;
+	offset = -phy->rx_offset;	// TODO use rx offset to align tx
+	tx_shift = phy->rx_offset;
+	num_samples = BUFLEN-tx_shift;
 
 	while (1) {
 		// create tx time data
@@ -124,18 +124,23 @@ void thread_phy_ue_tx(struct tx_th_data_s* arg)
 		// update timing offset for tx. TODO explain chosen tx_Symbol idx
 		if (phy->common->tx_symbol >= 29 && phy->common->tx_subframe == 0) {
 			// check if offset has changed
-			int new_offset = phy->mac->timing_advance;
+			int new_offset = phy->mac->timing_advance - phy->rx_offset;
 			int diff = new_offset - offset;
 			if (abs(diff)>0) {
+				LOG(INFO,"[Runtime] adapt tx offset. diff: %d old txshift: %d\n",diff, tx_shift);
+
 				// if offset shift-diff is <0, we have to skip ofdm symbols
 				while (tx_shift - diff < 0) {
 					phy->common->tx_symbol+=SYMBOLS_PER_BUF;
 					diff-=BUFLEN;
 				}
+				while (tx_shift - diff >=BUFLEN) {
+					phy->common->tx_symbol-=SYMBOLS_PER_BUF;
+					diff+=BUFLEN;
+				}
 				tx_shift = tx_shift - diff;
 				offset = new_offset;
 				num_samples = BUFLEN - tx_shift;
-				LOG(INFO,"[Runtime] adapt tx offset. shift: %d\n",tx_shift);
 			}
 		}
 	}
@@ -154,12 +159,12 @@ void thread_mac_ue_scheduler(struct mac_th_data_s* arg)
 		pthread_cond_wait(cond_signal, mutex);
 
 		// add some data to send for client
-		/*MacDataFrame ul_frame = dataframe_create(100);
+		MacDataFrame ul_frame = dataframe_create(100);
 		for (int i=0; i<100; i++)
 			ul_frame->data[i] = rand() & 0xFF;
 		if(!mac_ue_add_txdata(mac, ul_frame)) {
 			dataframe_destroy(ul_frame);
-		}*/
+		}
 
 		mac_ue_run_scheduler(mac);
 		pthread_mutex_unlock(mutex);
