@@ -12,7 +12,10 @@
 #include <string.h>
 #include "../util/log.h"
 
-#define USE_GSM_MULTIPATH 0
+#define TX_ENABLE_FILE_LOG 1
+
+#define USE_GSM_MULTIPATH 1
+#define SNR 20
 
 // Struct which stores data necessary for simulation
 // i.e. two buffers and a channel object
@@ -52,6 +55,9 @@ int simulation_tx(platform p)
 	if (data->tx_dest) {
 		channel_cccf_execute_block(data->tx_channel, data->tx_prep_buf, data->buflen, data->tx_dest);
 	}
+#if TX_ENABLE_FILE_LOG
+	log_bin((uint8_t*)data->tx_prep_buf,sizeof(float complex)*data->buflen, "dldata.bin","a");
+#endif
 	return 1;
 }
 
@@ -98,8 +104,8 @@ platform platform_init_simulation(uint buflen)
 
     // AWGN
     float noise_floor = -60.0;
-    float SNR = 25;
-    channel_cccf_add_awgn(channel,noise_floor, SNR);
+    float snr = SNR;
+    channel_cccf_add_awgn(channel,noise_floor, snr);
 
     // Multipath
     // GSM typical urban 12 tap scenario 1
