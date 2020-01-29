@@ -22,6 +22,10 @@ MacBS mac_bs_init()
 	}
 	macinst->broadcast_ctrl_queue = ringbuf_create(MAC_MSG_BUF_SIZE);
 	macinst->broadcast_data_fragmenter = mac_frag_init();
+
+	macinst->last_added_rachuserid=-1;
+	macinst->last_added_userid=-1;
+
 	return macinst;
 }
 
@@ -36,39 +40,54 @@ void mac_bs_destroy(MacBS mac)
 	// TODO mac bs destroy
 }
 
-void mac_bs_add_new_ue(MacBS mac, uint8_t rachuserid, ofdmframesync fs, int timing_diff)
+void mac_bs_add_new_ue(MacBS mac, uint8_t rachuserid, uint8_t rach_try_cnt, ofdmframesync fs, int timing_diff)
 {
 	MacMessage response=NULL;
-	// find the first unused userid
 	uint8_t userid = 0;
-	while((userid<MAX_USER) && ((mac->UE[userid]!=NULL) ||
-			(userid == USER_BROADCAST) || (userid == USER_UNUSED))) {
-		userid++;
-	}
-	if (userid==MAX_USER) {
-		// no free userid. generate NAK
-		LOG(INFO,"[MAC BS] add_new_ue: no free userID\n");
-		response = mac_msg_create_associate_response(0,rachuserid, assoc_resp_full);
-		// Response will be sent via broadcast channel
-		ringbuf_put(mac->broadcast_ctrl_queue, response);
-	} else {
-		// create user instance and association response
-		user_s* new_ue = calloc(sizeof(user_s),1);
-		new_ue->msg_control_queue = ringbuf_create(MAC_MSG_BUF_SIZE);
-		new_ue->fragmenter = mac_frag_init();
-		new_ue->reassembler = mac_assmbl_init();
-		new_ue->userid = userid;
-		new_ue->ul_queue = 0;
-		new_ue->dl_mcs = 0;
-		new_ue->ul_mcs = 0;
-		new_ue->fs = fs;
-		mac->UE[userid] = new_ue;
+
+	// if this isnt the first time an association is tried,
+	// check if this is the same user as the last one added
+	if (rach_try_cnt > 0 && mac->last_added_rachuserid==rachuserid) {
+		userid = mac->last_added_userid;
 		response = mac_msg_create_associate_response(userid,rachuserid, assoc_resp_success);
-		LOG(INFO,"[MAC BS] add new user! rachuserid %d, new ID %d\n",rachuserid,userid);
+		LOG(INFO,"[MAC BS] Double assoc req! rachuserid %d, user ID %d\n",rachuserid,userid);
 		// Response will be sent via broadcast channel
 		ringbuf_put(mac->broadcast_ctrl_queue, response);
 		// Inform the UE of its TA
 		mac_bs_update_timingadvance(mac, userid, timing_diff);
+	} else {
+		// find the first unused userid
+		while((userid<MAX_USER) && ((mac->UE[userid]!=NULL) ||
+				(userid == USER_BROADCAST) || (userid == USER_UNUSED))) {
+			userid++;
+		}
+		if (userid==MAX_USER) {
+			// no free userid. generate NAK
+			LOG(INFO,"[MAC BS] add_new_ue: no free userID\n");
+			response = mac_msg_create_associate_response(0,rachuserid, assoc_resp_full);
+			// Response will be sent via broadcast channel
+			ringbuf_put(mac->broadcast_ctrl_queue, response);
+		} else {
+			// create user instance and association response
+			user_s* new_ue = calloc(sizeof(user_s),1);
+			new_ue->msg_control_queue = ringbuf_create(MAC_MSG_BUF_SIZE);
+			new_ue->fragmenter = mac_frag_init();
+			new_ue->reassembler = mac_assmbl_init();
+			new_ue->userid = userid;
+			new_ue->ul_queue = 0;
+			new_ue->dl_mcs = 0;
+			new_ue->ul_mcs = 0;
+			new_ue->fs = fs;
+			mac->UE[userid] = new_ue;
+			response = mac_msg_create_associate_response(userid,rachuserid, assoc_resp_success);
+			LOG(INFO,"[MAC BS] add new user! rachuserid %d, new ID %d\n",rachuserid,userid);
+			// Response will be sent via broadcast channel
+			ringbuf_put(mac->broadcast_ctrl_queue, response);
+			// Inform the UE of its TA
+			mac_bs_update_timingadvance(mac, userid, timing_diff);
+			mac->last_added_userid = userid;
+			mac->last_added_rachuserid = rachuserid;
+		}
 	}
 }
 
@@ -107,7 +126,7 @@ int mac_bs_add_txdata(MacBS mac, uint8_t destUserID, MacDataFrame frame)
 void mac_bs_update_timingadvance(MacBS mac, uint userid, int timing_diff)
 {
 	if (mac->UE[userid]) {
-		mac->UE[userid]->timingadvance += timing_diff;
+		mac->UE[userid]->timingadvance = timing_diff;
 		MacMessage msg = mac_msg_create_timing_advance(mac->UE[userid]->timingadvance);
 		ringbuf_put(mac->UE[userid]->msg_control_queue, msg);
 	} else {

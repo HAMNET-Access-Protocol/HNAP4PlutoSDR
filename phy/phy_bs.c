@@ -285,7 +285,8 @@ int phy_bs_proc_rach(PhyBS phy, int timing_diff)
 	// TODO Fix definition of Associate Request message
 	if (lchan_verify_crc(chan)) {
 		uint8_t rach_userid = chan->data[0];
-		mac_bs_add_new_ue(phy->mac,rach_userid, phy->fs_rach, timing_diff);
+		uint8_t rach_try_cnt = chan->data[1];
+		mac_bs_add_new_ue(phy->mac,rach_userid, rach_try_cnt, phy->fs_rach, timing_diff);
 	}
 	lchan_destroy(chan);
 

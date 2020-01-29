@@ -55,6 +55,7 @@ PhyUE phy_ue_init()
 	phy->rx_offset = 0;
 
 	phy->rachuserid = -1;
+	phy->rach_try_cnt = 0;
 	phy->userid = -1;
 
 	// Init mutexes etc
@@ -274,11 +275,12 @@ void phy_ue_create_assoc_request(PhyUE phy, float complex* txbuf_time)
 
 	// TODO generate a defined struct for Association Request message
 	LogicalChannel chan = lchan_create(blocksize/8, CRC8);
-	if (phy->rachuserid == -1) {
+	if (phy->rach_try_cnt == 0) {
 		// RA procedure hasnt started. Select a random ID first
 		phy->rachuserid = rand() % MAX_USER;
 	}
 	chan->data[0] = (uint8_t)phy->rachuserid;
+	chan->data[1] = (uint8_t)phy->rach_try_cnt++;
 	lchan_calc_crc(chan);
 
 	// encode channel

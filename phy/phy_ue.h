@@ -54,6 +54,8 @@ struct PhyUE_s {
 
 	// random userid which is used during RA procedure
 	int rachuserid;
+	// count how often we tried to associate
+	int rach_try_cnt;
 	// assigned userid
 	int userid;
 
