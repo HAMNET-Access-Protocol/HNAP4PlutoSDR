@@ -33,6 +33,7 @@
 struct rx_th_data_s {
 	PhyBS phy;
 	platform hw;
+	pthread_barrier_t* thread_sync;
 };
 
 // struct holds arguments for TX thread
@@ -40,6 +41,7 @@ struct tx_th_data_s {
 	PhyBS phy;
 	platform hw;
 	pthread_cond_t* scheduler_signal;
+	pthread_barrier_t* thread_sync;
 };
 
 // struct holds arguments for MAC thread
@@ -57,6 +59,13 @@ void thread_phy_bs_rx(struct rx_th_data_s* arg)
 
 	float complex* rxbuf_time = calloc(sizeof(float complex),BUFLEN);
 
+	// read some rxbuffer objects in order to empty rxbuffer queue
+	pthread_barrier_wait(arg->thread_sync);
+	for (int i=0; i<8; i++)
+		hw->platform_rx(hw, rxbuf_time);
+
+	pthread_barrier_wait(arg->thread_sync);
+	LOG(INFO,"RX thread started: RX symbol %d. TX symbol %d\n",phy->common->rx_symbol,phy->common->tx_symbol);
 	while (1)
 	{
 		hw->platform_rx(hw, rxbuf_time);
@@ -71,10 +80,18 @@ void thread_phy_bs_tx(struct tx_th_data_s* arg)
 	PhyBS phy = arg->phy;
 	platform bs = arg->hw;
 	pthread_cond_t* scheduler_signal = arg->scheduler_signal;
+	uint subframe_cnt = 0;
 
 	float complex* txbuf_time = calloc(sizeof(float complex),BUFLEN);
 
-	uint subframe_cnt = 0;
+	// generate some txbuffers in order to keep the txbuffer queue full
+	bs->platform_tx_prep(bs, txbuf_time, 0, BUFLEN);
+	pthread_barrier_wait(arg->thread_sync);
+	for (int i=0; i<8; i++)
+		bs->platform_tx_push(bs);
+
+	pthread_barrier_wait(arg->thread_sync);
+	LOG(INFO,"TX thread started: RX symbol %d. TX symbol %d\n",phy->common->rx_symbol,phy->common->tx_symbol);
 	while (1)
 	{
 		for (int symbol=0; symbol<SUBFRAME_LEN/2; symbol++) {
@@ -148,6 +165,10 @@ int main()
 	phy_bs_set_mac_interface(phy, mac);
 	mac_bs_set_phy_interface(mac, phy);
 
+	//rx and tx threads will be synchronized by a barrier
+	pthread_barrier_t sync_barrier;
+	pthread_barrier_init(&sync_barrier, NULL, 2);
+
 	// create arguments for MAC scheduler thread
 	pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 	pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
@@ -160,13 +181,15 @@ int main()
 	struct rx_th_data_s rx_th_data;
 	rx_th_data.hw = pluto;
 	rx_th_data.phy = phy;
+	rx_th_data.thread_sync = &sync_barrier;
+
 
 	// create arguments for TX thread
 	struct tx_th_data_s tx_th_data;
 	tx_th_data.hw = pluto;
 	tx_th_data.phy = phy;
 	tx_th_data.scheduler_signal = &cond;
-
+	tx_th_data.thread_sync = &sync_barrier;
 
 	// start RX thread
 	if (pthread_create(&bs_phy_rx_th, NULL, thread_phy_bs_rx, &rx_th_data) !=0) {
@@ -205,19 +228,20 @@ int main()
 	// printf affinities
 	pthread_getaffinity_np(bs_phy_rx_th,sizeof(cpu_set_t),&cpu_set);
 	printf("RX Thread CPU mask: ");
-	for (int i=i; i<4; i++)
+	for (int i=0; i<4; i++)
 		printf("%d ",CPU_ISSET(i, &cpu_set));
 
 	pthread_getaffinity_np(bs_phy_tx_th,sizeof(cpu_set_t),&cpu_set);
 	printf("\nTX Thread CPU mask: ");
-	for (int i=i; i<4; i++)
+	for (int i=0; i<4; i++)
 		printf("%d ",CPU_ISSET(i, &cpu_set));
 
 	pthread_getaffinity_np(bs_mac_th,sizeof(cpu_set_t),&cpu_set);
 	printf("\nMAC Thread CPU mask: ");
-	for (int i=i; i<4; i++)
+	for (int i=0; i<4; i++)
 		printf("%d ",CPU_ISSET(i, &cpu_set));
 	printf("\n");
+
 
 	static int ret[3];
 	pthread_join(bs_phy_rx_th, &ret[0]);
