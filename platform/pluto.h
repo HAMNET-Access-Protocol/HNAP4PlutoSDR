@@ -17,7 +17,10 @@ platform init_pluto_platform(unsigned int buf_len);
 
 platform init_pluto_network_platform(unsigned int buf_len);
 
-// set the rxgain of the platform
+// ---------------- Configuration --------------------- //
 void pluto_set_rxgain(int gain);
+int pluto_set_rx_freq(long long rxfreq);
+int pluto_set_tx_freq(long long txfreq);
+
 
 #endif /* PLATFORM_PLUTO_H_ */

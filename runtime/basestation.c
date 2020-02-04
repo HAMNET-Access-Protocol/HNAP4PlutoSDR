@@ -156,6 +156,8 @@ int main()
 #else
 	platform pluto = init_pluto_platform(BUFLEN);
 	pluto_set_rxgain(20);
+	pluto_set_tx_freq(LO_FREQ_DL);
+	pluto_set_rx_freq(LO_FREQ_UL);
 #endif
 
 	// Init phy and mac layer

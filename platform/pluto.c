@@ -323,6 +323,22 @@ void pluto_set_rxgain(int gain)
     wr_ch_lli(chn, "hardwaregain", gain);
 }
 
+int pluto_set_tx_freq(long long txfreq)
+{
+	struct iio_channel* chn;
+	if (!get_lo_chan(ctx, TX, &chn)) { return false; }
+	wr_ch_lli(chn, "frequency", txfreq);
+	return true;
+}
+
+int pluto_set_rx_freq(long long rxfreq)
+{
+	struct iio_channel* chn;
+	if (!get_lo_chan(ctx, RX, &chn)) { return false; }
+	wr_ch_lli(chn, "frequency", rxfreq);
+	return true;
+}
+
 // Initialize a pluto network context
 platform init_pluto_network_platform(uint buf_len)
 {

@@ -9,12 +9,19 @@
 #define PHY_CONFIG_H_
 
 
+// LO frequency
+#define LO_FREQ_DL 434900000 // Hz
+#define LO_FREQ_UL 439700000 // Hz
+
+// OFDM Parameters
 #define NFFT 64				// FFT size
 #define CP_LEN 4			// Cyclic Prefix Size
 #define NUM_DATA_SC 32
 #define NUM_PILOT 8
 #define NUM_GUARD 24
 #define SAMPLERATE 256000	// sample rate in Hz
+
+// Subframe/slot length config
 #define SLOT_LEN 14			// length of one data slot
 #define NUM_SLOT 4			// number of slots per subframe
 #define NUM_ULCTRL_SLOT 2	// number of UL control slots
