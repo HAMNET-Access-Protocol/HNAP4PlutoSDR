@@ -184,14 +184,14 @@ int mac_bs_handle_message(MacBS mac, MacMessage msg, uint8_t userID)
 // Main interface function that is called from PHY when receiving a
 // logical channel. Function will extract messages and call
 // the message handler
-void mac_bs_rx_channel(MacBS mac, LogicalChannel chan, uint userid)
+int mac_bs_rx_channel(MacBS mac, LogicalChannel chan, uint userid)
 {
 	// Verify the CRC
 	if(!lchan_verify_crc(chan)) {
 		LOG_SFN_MAC(WARN, "[MAC BS] lchan CRC%d invalid. Dropping %d bytes.\n",8*chan->crc_type, chan->payload_len);
 		mac->stats.chan_rx_fail++;
-		return;
 		lchan_destroy(chan);
+		return 0;
 	}
 
 	MacMessage msg = NULL;
@@ -205,6 +205,7 @@ void mac_bs_rx_channel(MacBS mac, LogicalChannel chan, uint userid)
 
 	lchan_destroy(chan);
 	mac->stats.chan_rx_succ++;
+	return 1;
 }
 
 user_s* get_next_user(MacBS mac, uint curr_user)
