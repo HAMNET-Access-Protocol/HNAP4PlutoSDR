@@ -7,6 +7,9 @@
 #include "mac_bs.h"
 #include "../util/log.h"
 
+#ifdef MAC_TEST_DELAY
+#include "../runtime/test.h"
+#endif
 
 MacBS mac_bs_init()
 {
@@ -160,9 +163,12 @@ int mac_bs_handle_message(MacBS mac, MacMessage msg, uint8_t userID)
 			mac->stats.bytes_rx+=frame->size;
 			LOG_SFN_MAC(INFO,"[MAC BS] received frame with %d bytes!\n",frame->size);
 			//TODO forward received frame to higher layer
+
+#ifdef MAC_TEST_DELAY
 			uint sfn;
 			memcpy(&sfn, frame->data,sizeof(uint));
-			LOG(INFO,"[MAC BS] received frame ID: %d\n",sfn);
+			mac_ul_timestamps[sfn] += global_sfn*SUBFRAME_LEN + global_slot;
+#endif
 			dataframe_destroy(frame);
 		}
 		break;

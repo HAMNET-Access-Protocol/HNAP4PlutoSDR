@@ -8,6 +8,12 @@
 #ifndef PHY_CONFIG_H_
 #define PHY_CONFIG_H_
 
+// Uncomment when compiling for simulation
+//#define USE_SIM
+
+#ifdef USE_SIM
+#define PHY_TEST_BER
+#endif
 
 // LO frequency
 #define LO_FREQ_DL 434900000 // Hz

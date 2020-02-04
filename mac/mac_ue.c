@@ -7,6 +7,10 @@
 
 #include "mac_ue.h"
 
+#ifdef MAC_TEST_DELAY
+#include "../runtime/test.h"
+#endif
+
 // Allocate memory for MAC instance and init it
 MacUE mac_ue_init()
 {
@@ -69,9 +73,11 @@ int mac_ue_handle_message(MacUE mac, MacMessage msg)
 			mac->stats.bytes_rx += frame->size;
 			LOG(INFO,"[MAC UE] received dataframe of %d bytes\n",frame->size);
 			//TODO forward received frame to higher layer
+#ifdef MAC_TEST_DELAY
 			static uint sfn=0;
-			sfn++;
-			LOG(INFO,"[MAC UE] total received: %d\n",sfn);
+			memcpy(&sfn,frame->data,sizeof(uint));
+			mac_dl_timestamps[sfn] += global_sfn*SUBFRAME_LEN+global_slot;
+#endif
 			dataframe_destroy(frame);
 		}
 		break;

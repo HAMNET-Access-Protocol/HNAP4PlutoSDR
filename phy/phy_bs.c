@@ -1,5 +1,9 @@
 #include "phy_bs.h"
 
+#ifdef PHY_TEST_BER
+#include "../runtime/test.h"
+#endif
+
 // Forward declarations of local helper functions
 int phy_bs_proc_rach(PhyBS phy, int timing_diff);
 int _bs_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd);
@@ -76,6 +80,9 @@ int phy_map_dlslot(PhyBS phy, LogicalChannel chan, uint subframe, uint8_t slot_n
 		return -1;
 	}
 
+#ifdef PHY_TEST_BER
+	memcpy(phy_dl[subframe%2][slot_nr], chan->data, chan->payload_len);
+#endif
 	//interleaving
 	uint8_t* interleaved_b = malloc(chan->payload_len);
 	interleaver_encode(common->mcs_interlvr[mcs],chan->data,interleaved_b);
@@ -219,6 +226,13 @@ void phy_bs_proc_slot(PhyBS phy, uint slotnr)
 	LogicalChannel chan = lchan_create(blocksize/8,CRC16);
 	interleaver_decode(common->mcs_interlvr[mcs],interleaved_b,chan->data);
 
+#ifdef PHY_TEST_BER
+	uint32_t num_biterr = 0;
+	for (int i=0; i<chan->payload_len;i++)
+		num_biterr += liquid_count_ones(phy_ul[sfn][slotnr][i]^chan->data[i]);
+	phy_ul_tot_bits += chan->payload_len*8;
+	phy_ul_biterr += num_biterr;
+#endif
 	// pass to upper layer
 	if(!mac_bs_rx_channel(phy->mac,chan, userid)) {
 		// log when crc check failed

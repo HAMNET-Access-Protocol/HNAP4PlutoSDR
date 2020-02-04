@@ -11,6 +11,10 @@
 #include "../mac/mac_config.h"
 #include <pthread.h>
 
+#ifdef PHY_TEST_BER
+#include "../runtime/test.h"
+#endif
+
 // Declarations of local functions
 void phy_ue_proc_slot(PhyUE phy, uint slotnr);
 int _ue_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd);
@@ -195,6 +199,14 @@ void phy_ue_proc_slot(PhyUE phy, uint slotnr)
 		//deinterleaving
 		LogicalChannel chan = lchan_create(blocksize/8,CRC16);
 		interleaver_decode(common->mcs_interlvr[phy->mcs_dl],interleaved_b,chan->data);
+
+#ifdef PHY_TEST_BER
+	uint32_t num_biterr = 0;
+	for (int i=0; i<chan->payload_len;i++)
+		num_biterr += liquid_count_ones(phy_dl[common->rx_subframe%2][slotnr][i]^chan->data[i]);
+	phy_dl_tot_bits += chan->payload_len*8;
+	phy_dl_biterr += num_biterr;
+#endif
 
 		// pass to upper layer
 		phy->mac_rx_cb(phy->mac, chan);
@@ -453,6 +465,10 @@ int phy_map_ulslot(PhyUE phy, LogicalChannel chan, uint subframe, uint8_t slot_n
 		printf("Error: Wrong TBS\n");
 		return -1;
 	}
+
+#ifdef PHY_TEST_BER
+	memcpy(phy_ul[subframe%2][slot_nr], chan->data, chan->payload_len);
+#endif
 
 	//interleaving
 	uint8_t* interleaved_b = malloc(chan->payload_len);
