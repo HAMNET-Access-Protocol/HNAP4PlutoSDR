@@ -191,6 +191,7 @@ void mac_bs_rx_channel(MacBS mac, LogicalChannel chan, uint userid)
 		lchan_destroy(chan);
 		mac->stats.chan_rx_fail++;
 		return;
+		lchan_destroy(chan);
 	}
 
 	MacMessage msg = NULL;

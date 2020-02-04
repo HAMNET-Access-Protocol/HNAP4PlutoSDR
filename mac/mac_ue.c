@@ -194,6 +194,7 @@ void mac_ue_rx_channel(MacUE mac, LogicalChannel chan)
 	if(!lchan_verify_crc(chan)) {
 		LOG(INFO, "[MAC UE] lchan CRC invalid. Dropping.\n");
 		mac->stats.chan_rx_fail++;
+		lchan_destroy(chan);
 		return;
 	}
 
