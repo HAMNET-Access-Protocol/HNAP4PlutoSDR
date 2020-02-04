@@ -25,7 +25,11 @@ PhyUE phy_ue_init()
 	PhyUE phy = calloc(sizeof(struct PhyUE_s),1);
 
 	phy->common = phy_common_init();
+#if USE_ROBUST_PILOT
 	gen_pilot_symbols_robust(phy->common, 0);
+#else
+	gen_pilot_symbols(phy->common, 0);
+#endif
 
 	// Create OFDM frame generator: nFFt, CPlen, taperlen, subcarrier alloc
 	phy->fg = ofdmframegen_create(NFFT, CP_LEN, 0, phy->common->pilot_sc);
@@ -106,7 +110,7 @@ int phy_ue_initial_sync(PhyUE phy, float complex* rxbuf_time, uint num_samples)
 			LOG(INFO,"[PHY UE] Got sync! cfo: %.3fHz offset: %d samps\n",phy->prev_cfo*SAMPLERATE/6.28,offset);
 		} else {
 			float new_cfo = ofdmframesync_get_cfo(phy->fs);
-			float cfo_filt = 0.5*phy->prev_cfo + (1-0.5)*new_cfo;
+			float cfo_filt = (1-SYNC_CFO_FILT_PARAM)*phy->prev_cfo + SYNC_CFO_FILT_PARAM*new_cfo;
 			ofdmframesync_set_cfo(phy->fs,cfo_filt);
 			LOG_SFN_PHY(INFO,"[PHY UE] sync seq. cfo: %.3fHz offset: %d samps\n",new_cfo*SAMPLERATE/6.28,offset);
 

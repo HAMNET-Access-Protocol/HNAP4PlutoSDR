@@ -12,10 +12,10 @@
 #include <string.h>
 #include "../util/log.h"
 
-#define TX_ENABLE_FILE_LOG 1
+#define TX_ENABLE_FILE_LOG 0
 
 #define USE_GSM_MULTIPATH 1
-#define SNR 20
+#define SNR 8
 
 // Struct which stores data necessary for simulation
 // i.e. two buffers and a channel object
@@ -137,10 +137,10 @@ platform platform_init_simulation(uint buflen)
     channel_cccf_add_multipath(channel, hc, hc_len);
 	#endif
     // frequency offset
-    //float cfo = 0;	// frequency offset in Hertz
-    //float dphi = (2*3.1415*cfo)/256000.0;	//frequency offset in radians/sample
-    //float phi = 2;		// phase offset in radians
-    //channel_cccf_add_carrier_offset(channel, dphi, phi);
+    float cfo = 50;	// frequency offset in Hertz
+    float dphi = (2*3.1415*cfo)/256000.0;	//frequency offset in radians/sample
+    float phi = 2;		// phase offset in radians
+    channel_cccf_add_carrier_offset(channel, dphi, phi);
 
     // slow-flat fading
     //float sigma = 1;	// standard deviation for log-normal shadowing

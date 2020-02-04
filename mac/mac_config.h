@@ -8,11 +8,15 @@
 #ifndef MAC_MAC_CONFIG_H_
 #define MAC_MAC_CONFIG_H_
 
-#define MAC_MSG_BUF_SIZE 8
+#include "../config.h"
+
+#define MAC_MSG_BUF_SIZE 32
 #define MAX_USER 16
 
 // enable MAC testing
-//#define MAC_TEST_DELAY
+#ifdef USE_SIM
+#define MAC_TEST_DELAY
+#endif
 
 // Number of data/control slots per subframe
 #define MAC_DLDATA_SLOTS 4 //TODO double definition of the same variable here and in phy_config

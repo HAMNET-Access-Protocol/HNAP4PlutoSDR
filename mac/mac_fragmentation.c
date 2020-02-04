@@ -176,6 +176,7 @@ MacDataFrame mac_assmbl_reassemble(MacAssmbl assmbl, MacMessage fragment)
 			assmbl->frame_open = 0;
 			assmbl->frame_len = 0;
 			assmbl->fragNr = 0;
+			return NULL;
 		}
 	}
 

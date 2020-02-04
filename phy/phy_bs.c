@@ -25,8 +25,11 @@ PhyBS phy_bs_init()
 	PhyBS phy = calloc(sizeof(struct PhyBS_s),1);
 
 	phy->common = phy_common_init();
+#if USE_ROBUST_PILOT
 	gen_pilot_symbols_robust(phy->common, 1);
-
+#else
+	gen_pilot_symbols(phy->common, 1);
+#endif
 	// Create OFDM frame generator: nFFt, CPlen, taperlen, subcarrier alloc
 	phy->fg = ofdmframegen_create(NFFT, CP_LEN, 0, phy->common->pilot_sc);
 

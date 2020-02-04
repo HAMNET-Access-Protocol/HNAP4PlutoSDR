@@ -18,7 +18,7 @@
 enum {TRACE, DEBUG,INFO,WARN,ERR,NONE};
 
 // Set the global log level
-#define LOG_LEVEL INFO
+#define LOG_LEVEL WARN
 
 // log macros with specified log level
 #define LOG(level,...) do { if (level>=LOG_LEVEL) \

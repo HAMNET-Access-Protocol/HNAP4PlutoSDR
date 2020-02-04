@@ -8,6 +8,8 @@
 #ifndef PHY_CONFIG_H_
 #define PHY_CONFIG_H_
 
+#include "../config.h"
+
 // Uncomment when compiling for simulation
 //#define USE_SIM
 
@@ -37,6 +39,24 @@
 #define FRAME_LEN 8			// number of subframes per frame
 #define DL_UL_SHIFT 34		// number of ofdm symbols the UL is shifted behind
 #define MAX_USER 16
+
+// Two types of pilot allocation schemes are supported:
+// 1. Normal (P=ofdm symbol with pilot, D=symbol without pilot)
+//		UL: P P D D D D D D D D D D D D
+//		DL: P D D D D D D D D D D D D D
+// 2. Robust allocation:
+//		UL: P D P D P D P D P D P D P D
+//		DL: P D P D P D P D P D P D P D
+// Robust pilot allocation might enable higher mcs, but takes 10% of resources
+#define USE_ROBUST_PILOT 1
+
+// UE regulary resyncs to the sync sequence to estimate timing offset
+// during this also the carrier frequency offset is estimated.
+// estimation can estimate larger offsets than the cfo estimation with
+// pilots (done during slot receive) but is inaccurate
+// We filter the new estimate with the old (pilot based) cfo estimation
+// Set this filter to [0 1] to tune estimation (1= completely based on new cfo)
+#define SYNC_CFO_FILT_PARAM 0.1f
 
 // FIR filters, buffers etc introduce a delay that causes
 // uplink data to be received later than expected. Use this

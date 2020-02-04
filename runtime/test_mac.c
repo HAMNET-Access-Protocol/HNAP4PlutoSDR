@@ -15,8 +15,10 @@
 
 #include "test.h"
 
-#define payload_size 100
-
+// size of a mac data frame in bytes [VoIP data + UDP + IP + Ethernet header]
+#define payload_size (20+8+20+0)
+// how often mac data frames will be sent in ms
+#define PACKETIZATION_TIME 20
 // PHY test variables
 uint8_t phy_ul[FRAME_LEN][4][MAX_SLOT_DATA];
 uint8_t phy_dl[FRAME_LEN][4][MAX_SLOT_DATA];
@@ -31,7 +33,7 @@ int mac_dl_timestamps[num_simulated_subframes];
 int mac_ul_timestamps[num_simulated_subframes];
 
 uint global_sfn = 0;
-uint global_slot = 0;
+uint global_symbol = 0;
 
 // UE/BS instances
 PhyUE phy_ue;
@@ -44,127 +46,142 @@ uint buflen = NFFT+CP_LEN;
 platform bs;
 platform client;
 
+uint get_sim_time_msec()
+{
+	float time =  1000.0*(global_sfn*SUBFRAME_LEN + global_symbol)*(NFFT+CP_LEN)/SAMPLERATE;
+	return time;
+}
+
 int run_simulation(uint num_subframes)
 {
 	uint subframe_cnt = 0;
 	global_sfn = 0;
-	global_slot = 0;
+	global_symbol = 0;
 	// offset stores the currently compensated TX advance
 	// tx_shift stores the shift within the buffer that is caused by the offset
 	int offset=0, tx_shift=0, num_samples=buflen;
 
-
-	// Main simulation thread
+	// Buffers for simulation
 	float complex* dl_data = calloc(sizeof(float complex),NFFT+CP_LEN);
 	float complex* ul_data_tx = calloc(sizeof(float complex),NFFT+CP_LEN);
 	float complex* ul_data_rx = calloc(sizeof(float complex),NFFT+CP_LEN);
 
+	uint last_tx = get_sim_time_msec();
+	uint packet_id = 0;
+
 	while (subframe_cnt<num_subframes)
 	{
-		LOG(INFO,"Prepare frame %d\n",subframe_cnt);
-		// add some data to send
-		MacDataFrame dl_frame = dataframe_create(payload_size);
-		for (int i=0; i<payload_size; i++)
-			dl_frame->data[i] = rand() & 0xFF;
-		memcpy(dl_frame->data,&global_sfn,sizeof(uint));
-		mac_bs_add_txdata(mac_bs, 2, dl_frame);
-		mac_dl_timestamps[global_sfn] = -global_sfn*SUBFRAME_LEN - global_slot;
-		// add some data to send for client
-		MacDataFrame ul_frame = dataframe_create(100);
-		for (int i=0; i<100; i++)
-			ul_frame->data[i] = rand() & 0xFF;
-		memcpy(ul_frame->data,&global_sfn,sizeof(uint));
-		mac_ul_timestamps[global_sfn] = -global_sfn*SUBFRAME_LEN - global_slot;
+		// Add some data every 20ms
+		if (get_sim_time_msec() - last_tx > 20) {
+			last_tx = get_sim_time_msec();
+			LOG(INFO,"Prepare frame %d\n",packet_id);
+			// add some data to send
+			MacDataFrame dl_frame = dataframe_create(payload_size);
+			for (int i=0; i<payload_size; i++)
+				dl_frame->data[i] = rand() & 0xFF;
+			memcpy(dl_frame->data,&packet_id,sizeof(uint));
+			mac_bs_add_txdata(mac_bs, 2, dl_frame);
+			mac_dl_timestamps[packet_id] = -global_sfn*SUBFRAME_LEN - global_symbol;
+			// add some data to send for client
+			MacDataFrame ul_frame = dataframe_create(100);
+			for (int i=0; i<100; i++)
+				ul_frame->data[i] = rand() & 0xFF;
+			memcpy(ul_frame->data,&packet_id,sizeof(uint));
+			mac_ul_timestamps[packet_id] = -global_sfn*SUBFRAME_LEN - global_symbol;
 
-		if(!mac_ue_add_txdata(mac_ue, ul_frame)) {
-			dataframe_destroy(ul_frame);
+			if(!mac_ue_add_txdata(mac_ue, ul_frame)) {
+				dataframe_destroy(ul_frame);
+			}
+			packet_id++;
 		}
 
 		// run BS scheduler
-		mac_bs_run_scheduler(mac_bs);
+		if (phy_bs->common->tx_symbol==0)
+			mac_bs_run_scheduler(mac_bs);
 
-		for (int symbol=0; symbol<SUBFRAME_LEN; symbol++) {
-			// BS TX
-			phy_bs_write_symbol(phy_bs, dl_data);
-			bs->platform_tx_prep(bs, dl_data, 0, buflen);
-			bs->platform_tx_push(bs);
+		// BS TX
+		phy_bs_write_symbol(phy_bs, dl_data);
+		bs->platform_tx_prep(bs, dl_data, 0, buflen);
+		bs->platform_tx_push(bs);
 
-			// Client RXTX
-			if (!phy_ue->has_synced_once) {
-				// Initial sync
-				// TODO edge case for offset=68
-				client->platform_rx(client, dl_data);
-				offset = phy_ue_initial_sync(phy_ue, dl_data, NFFT+CP_LEN);
-				if (offset>0) {
-					// receive remaining symbols
-					phy_ue_do_rx(phy_ue, dl_data, NFFT+CP_LEN-offset);
-					phy_ue->rx_offset =  offset;
+		// Client RXTX
+		if (!phy_ue->has_synced_once) {
+			// Initial sync
+			// TODO edge case for offset=68
+			client->platform_rx(client, dl_data);
+			offset = phy_ue_initial_sync(phy_ue, dl_data, NFFT+CP_LEN);
+			if (offset>0) {
+				// receive remaining symbols
+				phy_ue_do_rx(phy_ue, dl_data, NFFT+CP_LEN-offset);
+				phy_ue->rx_offset =  offset;
 
-					offset = -phy_ue->rx_offset;	// TODO use rx offset to align tx
-					tx_shift = phy_ue->rx_offset;
-					num_samples = buflen-tx_shift;
-				}
-			} else {
-				// ---------- RX ------------
-				client->platform_rx(client, dl_data);
-				// process samples
-				phy_ue_do_rx(phy_ue, dl_data, NFFT+CP_LEN);
-				// Run scheduler after DLCTRL slot was received
-				if (phy_ue->common->rx_symbol == DLCTRL_LEN) {
-					mac_ue_run_scheduler(mac_ue);
-				}
+				offset = -phy_ue->rx_offset;	// TODO use rx offset to align tx
+				tx_shift = phy_ue->rx_offset;
+				num_samples = buflen-tx_shift;
+			}
+		} else {
+			// ---------- RX ------------
+			client->platform_rx(client, dl_data);
+			// process samples
+			phy_ue_do_rx(phy_ue, dl_data, NFFT+CP_LEN);
+			// Run scheduler after DLCTRL slot was received
+			if (phy_ue->common->rx_symbol == DLCTRL_LEN) {
+				mac_ue_run_scheduler(mac_ue);
+			}
 
-				// --------- TX ------------
-				// create tx time data
-				// first add the last samples from the previous generated symbol
-				client->platform_tx_prep(client, ul_data_tx+num_samples, 0, tx_shift);
-				// create new symbol
-				phy_ue_write_symbol(phy_ue, ul_data_tx);
+			// --------- TX ------------
+			// create tx time data
+			// first add the last samples from the previous generated symbol
+			client->platform_tx_prep(client, ul_data_tx+num_samples, 0, tx_shift);
+			// create new symbol
+			phy_ue_write_symbol(phy_ue, ul_data_tx);
 
-				// prepare first part of the new symbol
-				client->platform_tx_prep(client, ul_data_tx, tx_shift, num_samples);
+			// prepare first part of the new symbol
+			client->platform_tx_prep(client, ul_data_tx, tx_shift, num_samples);
 
-				// push buffer
-				client->platform_tx_push(client);
+			// push buffer
+			client->platform_tx_push(client);
 
-				// update timing offset for tx. TODO explain chosen tx_Symbol idx
-				if (phy_ue->common->tx_symbol == 29 && phy_ue->common->tx_subframe == 0) {
-					// check if offset has changed
-					int new_offset = phy_ue->mac->timing_advance - phy_ue->rx_offset;
-					int diff = new_offset - offset;
-					if (abs(diff)>0) {
-						LOG(INFO,"[Runtime] adapt tx offset. diff: %d old txshift: %d\n",diff, tx_shift);
+			// update timing offset for tx. TODO explain chosen tx_Symbol idx
+			if (phy_ue->common->tx_symbol == 29 && phy_ue->common->tx_subframe == 0) {
+				// check if offset has changed
+				int new_offset = phy_ue->mac->timing_advance - phy_ue->rx_offset;
+				int diff = new_offset - offset;
+				if (abs(diff)>0) {
+					LOG(INFO,"[Runtime] adapt tx offset. diff: %d old txshift: %d\n",diff, tx_shift);
 
-						// if offset shift-diff is <0, we have to skip ofdm symbols
-						while (tx_shift - diff < 0) {
-							phy_ue->common->tx_symbol+=1;
-							diff-=buflen;
-						}
-						while (tx_shift - diff >=buflen) {
-							phy_ue->common->tx_symbol-=1;
-							diff+=buflen;
-						}
-						tx_shift = tx_shift - diff;
-						offset = new_offset;
-						num_samples = buflen - tx_shift;
+					// if offset shift-diff is <0, we have to skip ofdm symbols
+					while (tx_shift - diff < 0) {
+						phy_ue->common->tx_symbol+=1;
+						diff-=buflen;
 					}
+					while (tx_shift - diff >=buflen) {
+						phy_ue->common->tx_symbol-=1;
+						diff+=buflen;
+					}
+					tx_shift = tx_shift - diff;
+					offset = new_offset;
+					num_samples = buflen - tx_shift;
 				}
-			} // end(client RXTX)
+			}
+		} // end(client RXTX)
 
-			// BS RX
-			bs->platform_rx(bs, ul_data_rx);
-			phy_bs_rx_symbol(phy_bs, ul_data_rx);
+		// BS RX
+		bs->platform_rx(bs, ul_data_rx);
+		phy_bs_rx_symbol(phy_bs, ul_data_rx);
 
-			global_slot = (global_slot+1) % SUBFRAME_LEN;
-		} // end{for}
-		subframe_cnt++;
-		global_sfn++;
+		global_symbol = (global_symbol+1) % SUBFRAME_LEN;
+		if (global_symbol==0) {
+			subframe_cnt++;
+			global_sfn++;
+		}
+
 		// show progress
-		if (subframe_cnt%1000==0)
+		if (subframe_cnt%1000==0 && global_symbol==0)
 			printf("Processed %d subframes...\n",subframe_cnt);
 
 		// Log stats
-		if (subframe_cnt%10000==0) {
+		if (subframe_cnt%10000==0 && global_symbol==0) {
 			// PHY
 			printf("PHY BS: %d bit rx, %d biterrors\n",phy_ul_tot_bits,phy_ul_biterr);
 			printf("PHY UE: %d bit rx, %d biterrors\n",phy_dl_tot_bits,phy_dl_biterr);
