@@ -9,6 +9,7 @@
 #define PLATFORM_PLUTO_H_
 
 #include "platform.h"
+#include <pthread.h>
 
 // Pluto Platform hardware abstraction
 // use init pluto platform, to generate a platform
@@ -22,5 +23,7 @@ void pluto_set_rxgain(int gain);
 int pluto_set_rx_freq(long long rxfreq);
 int pluto_set_tx_freq(long long txfreq);
 
+// start a thread that monitors for Buffer over/underflows
+pthread_t pluto_start_monitor();
 
 #endif /* PLATFORM_PLUTO_H_ */

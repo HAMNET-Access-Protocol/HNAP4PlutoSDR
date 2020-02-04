@@ -10,6 +10,7 @@
 
 #include "../mac/mac_bs.h"
 #include "../phy/phy_bs.h"
+#include "../phy/phy_config.h"
 #include "../platform/pluto.h"
 #include "../platform/platform_simulation.h"
 #include "../util/log.h"
@@ -21,11 +22,14 @@
 // Set to 1 in order to use the simulated platform
 #define BS_USE_PLATFORM_SIM 0
 
+// set to one if the BS shall send random MAC data frames
+#define BS_SEND_ENABLE 1
+
 #define BUFLEN ((NFFT+CP_LEN)*2)
 
 
 // Configure CPU core affinities for the threads
-#define BS_RX_CPUID 0
+#define BS_RX_CPUID 1
 #define BS_TX_CPUID 1
 #define BS_MAC_CPUID 0
 
@@ -52,16 +56,18 @@ struct mac_th_data_s {
 };
 
 // Main Thread for BS receive
-void thread_phy_bs_rx(struct rx_th_data_s* arg)
+void* thread_phy_bs_rx(struct rx_th_data_s* arg)
 {
 	platform hw = arg->hw;
 	PhyBS phy = arg->phy;
+	struct timespec start, end;
+	double elapsed;
 
 	float complex* rxbuf_time = calloc(sizeof(float complex),BUFLEN);
 
 	// read some rxbuffer objects in order to empty rxbuffer queue
 	pthread_barrier_wait(arg->thread_sync);
-	for (int i=0; i<8; i++)
+	for (int i=0; i<10; i++)
 		hw->platform_rx(hw, rxbuf_time);
 
 	pthread_barrier_wait(arg->thread_sync);
@@ -69,25 +75,33 @@ void thread_phy_bs_rx(struct rx_th_data_s* arg)
 	while (1)
 	{
 		hw->platform_rx(hw, rxbuf_time);
+		clock_gettime(CLOCK_MONOTONIC, &start);
 		phy_bs_rx_symbol(phy, rxbuf_time);
 		phy_bs_rx_symbol(phy, rxbuf_time+(NFFT+CP_LEN));
+		clock_gettime(CLOCK_MONOTONIC, &end);
+		elapsed = (end.tv_sec-start.tv_sec)*1000000.0 +(end.tv_nsec-start.tv_nsec)/1000.0;
+
+		if (elapsed > 2000)
+			LOG(WARN,"RX timing warn: Iteration took %.1fus\n",elapsed);
 	}
 }
 
 // Main Thread for BS transmit
-void thread_phy_bs_tx(struct tx_th_data_s* arg)
+void* thread_phy_bs_tx(struct tx_th_data_s* arg)
 {
 	PhyBS phy = arg->phy;
 	platform bs = arg->hw;
 	pthread_cond_t* scheduler_signal = arg->scheduler_signal;
 	uint subframe_cnt = 0;
+	struct timespec start, end;
+	double elapsed;
 
 	float complex* txbuf_time = calloc(sizeof(float complex),BUFLEN);
 
 	// generate some txbuffers in order to keep the txbuffer queue full
 	bs->platform_tx_prep(bs, txbuf_time, 0, BUFLEN);
 	pthread_barrier_wait(arg->thread_sync);
-	for (int i=0; i<8; i++)
+	for (int i=0; i<10; i++)
 		bs->platform_tx_push(bs);
 
 	pthread_barrier_wait(arg->thread_sync);
@@ -96,6 +110,7 @@ void thread_phy_bs_tx(struct tx_th_data_s* arg)
 	{
 		for (int symbol=0; symbol<SUBFRAME_LEN/2; symbol++) {
 			bs->platform_tx_push(bs);
+			clock_gettime(CLOCK_MONOTONIC, &start);
 			phy_bs_write_symbol(phy, txbuf_time);
 			phy_bs_write_symbol(phy, txbuf_time+1*(NFFT+CP_LEN));
 
@@ -104,6 +119,12 @@ void thread_phy_bs_tx(struct tx_th_data_s* arg)
 			if (symbol==30) {
 				pthread_cond_signal(scheduler_signal);
 			}
+			clock_gettime(CLOCK_MONOTONIC, &end);
+			elapsed = (end.tv_sec-start.tv_sec)*1000000.0 +(end.tv_nsec-start.tv_nsec)/1000.0;
+			if (elapsed > 1000)
+				LOG(WARN,"TX timing warn: Iteration took %.1fus. %d %d\n",elapsed,
+						phy->common->tx_subframe, phy->common->tx_symbol);
+
 		} // end{for}
 		subframe_cnt++;
 	}
@@ -112,28 +133,31 @@ void thread_phy_bs_tx(struct tx_th_data_s* arg)
 
 }
 
-void thread_mac_bs_scheduler(struct mac_th_data_s* arg)
+void* thread_mac_bs_scheduler(struct mac_th_data_s* arg)
 {
 	MacBS mac = arg->mac;
 	pthread_cond_t* cond_signal = arg->scheduler_signal;
 	pthread_mutex_t* mutex = arg->scheduler_mutex;
-
+	struct timespec start, end;
+	double elapsed;
 	uint subframe_cnt = 0;
+
 	while (1) {
 		// Wait for signal from BS tx thread
+		clock_gettime(CLOCK_MONOTONIC,&start);
 		pthread_mutex_lock(mutex);
 		pthread_cond_wait(cond_signal, mutex);
 
-		// add some dummy data
-		LOG(INFO,"Prepare frame %d. Time: %.3f\n",subframe_cnt,clock()*1000.0/CLOCKS_PER_SEC);
 		// add some data to send
-		MacDataFrame dl_frame = dataframe_create(100);
+#if BS_SEND_ENABLE
+		MacDataFrame dl_frame = dataframe_create(120);
 		for (int i=0; i<100; i++)
 			dl_frame->data[i] = rand() & 0xFF;
 		memcpy(dl_frame->data,&subframe_cnt,sizeof(uint));
 		if(!mac_bs_add_txdata(mac, 2, dl_frame)) {
 			dataframe_destroy(dl_frame);
 		}
+#endif
 		mac_bs_run_scheduler(mac);
 		subframe_cnt++;
 
@@ -143,6 +167,10 @@ void thread_mac_bs_scheduler(struct mac_th_data_s* arg)
 			LOG(WARN,"      bytes rx: %d bytes tx: %d\n",mac->stats.bytes_rx, mac->stats.bytes_tx);
 		}
 		pthread_mutex_unlock(mutex);
+		clock_gettime(CLOCK_MONOTONIC, &end);
+		elapsed = (end.tv_sec-start.tv_sec)*1000000.0 +(end.tv_nsec-start.tv_nsec)/1000.0;
+		LOG(INFO,"Prepared frame %d. Time: %.3f\n",subframe_cnt,elapsed);
+
 	}
 }
 
@@ -155,9 +183,10 @@ int main()
 	platform pluto = platform_init_simulation(BUFLEN);
 #else
 	platform pluto = init_pluto_platform(BUFLEN);
-	pluto_set_rxgain(20);
+	pluto_set_rxgain(40);
 	pluto_set_tx_freq(LO_FREQ_DL);
 	pluto_set_rx_freq(LO_FREQ_UL);
+	pluto_start_monitor();
 #endif
 
 	// Init phy and mac layer
@@ -246,8 +275,8 @@ int main()
 
 
 	static int ret[3];
-	pthread_join(bs_phy_rx_th, &ret[0]);
-	pthread_join(bs_phy_tx_th, &ret[1]);
+	pthread_join(bs_phy_rx_th, (void*)&ret[0]);
+	pthread_join(bs_phy_tx_th, (void*)&ret[1]);
 	pthread_join(bs_mac_th, &ret[2]);
 	LOG(INFO,"Thread exit codes: RX: %d, TX: %d, MAC: %d\n",ret[0],ret[1],ret[2]);
 

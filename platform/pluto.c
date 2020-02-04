@@ -11,7 +11,9 @@
 #include "../phy/phy_config.h"
 #include "../util/log.h"
 #include <stdio.h>
+#include <string.h>
 #include <iio.h>
+#include <unistd.h>
 
 /* helper macros */
 #define MHZ(x) ((long long)(x*1000000.0 + .5))
@@ -169,7 +171,7 @@ bool cfg_ad9361_streaming_ch(struct iio_context *ctx, struct stream_cfg *cfg, en
 // returns the number of samples that have been pushed
 int pluto_prep_tx(platform hw, float complex* buf_tx, uint offset, uint num_samples)
 {
-	char *p_dat, *p_end, p, *p_start;
+	char *p_dat, *p_end, *p_start;
 	ptrdiff_t p_inc;
 
 
@@ -179,7 +181,7 @@ int pluto_prep_tx(platform hw, float complex* buf_tx, uint offset, uint num_samp
 	p_end = iio_buffer_end(txbuf);
 	uint i=0;
 	for (p_dat = p_start; p_dat < p_end && i<num_samples; p_dat += p_inc) {
-		// 12-bit sample needs to be MSB alligned
+		// 12-bit sample needs to be MSB aligned
 		// https://wiki.analog.com/resources/eval/user-guides/ad-fmcomms2-ebz/software/basic_iq_datafiles#binary_format
 		((int16_t*)p_dat)[0] = (int16_t)(8196.0*creal(buf_tx[i])); // Real (I)
 		((int16_t*)p_dat)[1] = (int16_t)(8196.0*cimag(buf_tx[i++])); // Imag (Q)
@@ -361,3 +363,56 @@ platform init_pluto_platform(uint buf_len)
 	return init_generic(buf_len);
 }
 
+// Thread monitors the TX and RX buffer for overflow/underflows
+// adapted example from AD libiio:
+// https://github.com/analogdevicesinc/libiio/blob/master/tests/iio_adi_xflow_check.c
+static void *monitor_thread_fn(void *data)
+{
+	uint32_t rxval, txval;
+	int ret;
+
+	/* Give the main thread a moment to start the DMA */
+	sleep(1);
+
+	/* Clear all status bits for TX and RX dev*/
+	iio_device_reg_write(tx, 0x80000088, 0x6);
+	iio_device_reg_write(rx, 0x80000088, 0x6);
+
+	while (1) {
+		// Check TX device
+		ret = iio_device_reg_read(tx, 0x80000088, &txval);
+		if (ret) {
+			printf("Monitor: Failed to read status register: %s\n",
+					strerror(-ret));
+		} else if (txval & 1)
+			printf("Monitor: TX DEVICE UNDERFLOW DETECTED!\n");
+
+		// Check RX device
+		ret = iio_device_reg_read(rx, 0x80000088, &rxval);
+		if (ret) {
+			printf("Monitor: Failed to read status register: %s\n",
+					strerror(-ret));
+		} else if (rxval & 4)
+			printf("Monitor: RX DEVICE OVERFLOW DETECTED!\n");
+
+		/* Clear bits */
+		if (txval)
+			iio_device_reg_write(tx, 0x80000088, txval);
+		if (rxval)
+			iio_device_reg_write(rx, 0x80000088, rxval);
+		sleep(1);
+	}
+
+	return (void *)0;
+}
+
+// Start the monitoring thread
+pthread_t pluto_start_monitor()
+{
+	pthread_t monitor_thread;
+
+	int ret = pthread_create(&monitor_thread, NULL, monitor_thread_fn, NULL);
+	if (ret)
+		printf("Failed to create buffer monitor thread\n");
+	return monitor_thread;
+}

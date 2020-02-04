@@ -9,16 +9,18 @@
 
 #include "../mac/mac_ue.h"
 #include "../phy/phy_ue.h"
+#include "../phy/phy_config.h"
 #include "../platform/pluto.h"
 #include "../platform/platform_simulation.h"
 #include "../util/log.h"
 
 #include <pthread.h>
 #include <sched.h>
+#include <time.h>
 
 // Config thread core affinities
 #define UE_RX_CPUID 1
-#define UE_TX_CPUID 0
+#define UE_TX_CPUID 1
 #define UE_MAC_CPUID 0
 
 #define SYMBOLS_PER_BUF 2
@@ -26,6 +28,8 @@
 
 // Set to 1 in order to use the simulated platform
 #define CLIENT_USE_PLATFORM_SIM 0
+
+#define CLIENT_SEND_ENABLE 1
 
 
 // struct holds arguments for RX thread
@@ -54,29 +58,21 @@ void thread_phy_ue_rx(struct rx_th_data_s* arg)
 	platform hw = arg->hw;
 	PhyUE phy = arg->phy;
 	pthread_cond_t* scheduler_signal = arg->scheduler_signal;
+	struct timespec start, end;
+	double elapsed;
 
 	float complex* rxbuf_time = calloc(sizeof(float complex),BUFLEN);
 
-	// get initial sync
-	/*int offset = -1;
-	while (offset == -1) {
+	// read some rxbuffer objects in order to empty rxbuffer queue
+	for (int i=0; i<10; i++)
 		hw->platform_rx(hw, rxbuf_time);
-		offset = phy_ue_initial_sync(phy, rxbuf_time, BUFLEN);
-	}
-	if (offset>0) {
-		// receive remaining symbols
-		phy_ue_do_rx(phy, rxbuf_time, BUFLEN-offset);
-		offset = 0;
-	}
-	LOG(INFO,"[PHY UE] rx thread got sync!\n");*/
-	// start the tx thread
-	//pthread_cond_signal(&phy->tx_sync_cond);
 
 	// Main RX loop
 	while (1) {
 		// fill buffer
 		hw->platform_rx(hw, rxbuf_time);
 		// process samples
+		clock_gettime(CLOCK_MONOTONIC, &start);
 		phy_ue_do_rx(phy, rxbuf_time, BUFLEN);
 		//log_bin((uint8_t*)rxbuf_time,BUFLEN*sizeof(float complex), "dl_data.bin","a");
 		// Run scheduler after DLCTRL slot was received
@@ -84,6 +80,13 @@ void thread_phy_ue_rx(struct rx_th_data_s* arg)
 				phy->common->rx_symbol == DLCTRL_LEN+1) {
 			pthread_cond_signal(scheduler_signal);
 		}
+		clock_gettime(CLOCK_MONOTONIC, &end);
+		elapsed = (end.tv_sec-start.tv_sec)*1000000.0 +(end.tv_nsec-start.tv_nsec)/1000.0;
+
+		if (elapsed > 2000)
+			LOG(WARN,"RX timing warn: Iteration took %.1fus in %d %d\n",elapsed,
+					phy->common->rx_subframe, phy->common->rx_symbol);
+
 	}
 }
 
@@ -92,6 +95,8 @@ void thread_phy_ue_tx(struct tx_th_data_s* arg)
 {
 	PhyUE phy = arg->phy;
 	platform hw = arg->hw;
+	struct timespec start, end;
+	double elapsed;
 
 	float complex* ul_data_tx = calloc(sizeof(float complex),BUFLEN);
 	int offset, num_samples, tx_shift=0;;
@@ -108,6 +113,7 @@ void thread_phy_ue_tx(struct tx_th_data_s* arg)
 	num_samples = BUFLEN-tx_shift;
 
 	while (1) {
+		clock_gettime(CLOCK_MONOTONIC, &start);
 		// create tx time data
 		// first add the last samples from the previous generated symbol
 		hw->platform_tx_prep(hw, ul_data_tx+num_samples, 0, tx_shift);
@@ -118,6 +124,11 @@ void thread_phy_ue_tx(struct tx_th_data_s* arg)
 		// prepare first part of the new symbol
 		hw->platform_tx_prep(hw, ul_data_tx, tx_shift, num_samples);
 
+		clock_gettime(CLOCK_MONOTONIC, &end);
+		elapsed = (end.tv_sec-start.tv_sec)*1000000.0 +(end.tv_nsec-start.tv_nsec)/1000.0;
+		if (elapsed > 1000) //TODO calculate based in buf size and kernel buffer amount
+			LOG(WARN,"TX timing warn: Iteration took %.1fus. %d %d\n",elapsed,
+					phy->common->tx_subframe, phy->common->tx_symbol);
 		// push buffer
 		hw->platform_tx_push(hw);
 
@@ -152,20 +163,25 @@ void thread_mac_ue_scheduler(struct mac_th_data_s* arg)
 	MacUE mac = arg->mac;
 	pthread_cond_t* cond_signal = arg->scheduler_signal;
 	pthread_mutex_t* mutex = arg->scheduler_mutex;
+	struct timespec start, end;
+	double elapsed;
 	uint sched_rounds=0;
+
 	while (1) {
 		// Wait for signal from UE rx thread
+		clock_gettime(CLOCK_MONOTONIC,&start);
 		pthread_mutex_lock(mutex);
 		pthread_cond_wait(cond_signal, mutex);
 
 		// add some data to send for client
-		MacDataFrame ul_frame = dataframe_create(100);
+#if CLIENT_SEND_ENABLE
+		MacDataFrame ul_frame = dataframe_create(120);
 		for (int i=0; i<100; i++)
 			ul_frame->data[i] = rand() & 0xFF;
 		if(!mac_ue_add_txdata(mac, ul_frame)) {
 			dataframe_destroy(ul_frame);
 		}
-
+#endif
 		mac_ue_run_scheduler(mac);
 		pthread_mutex_unlock(mutex);
 		sched_rounds++;
@@ -175,6 +191,11 @@ void thread_mac_ue_scheduler(struct mac_th_data_s* arg)
 			LOG(WARN,"[MAC] channels received:fail %d:%d\n",mac->stats.chan_rx_succ,mac->stats.chan_rx_fail);
 			LOG(WARN,"      bytes rx: %d bytes tx: %d\n",mac->stats.bytes_rx, mac->stats.bytes_tx);
 		}
+
+		clock_gettime(CLOCK_MONOTONIC, &end);
+		elapsed = (end.tv_sec-start.tv_sec)*1000000.0 +(end.tv_nsec-start.tv_nsec)/1000.0;
+		LOG(INFO,"Prepared frame %d. Time: %.3f\n",sched_rounds,elapsed);
+
 	}
 }
 
@@ -187,9 +208,10 @@ int main()
 	platform pluto = platform_init_simulation(NFFT+CP_LEN);
 #else
 	platform pluto = init_pluto_platform(BUFLEN);
-	pluto_set_rxgain(40);
+	pluto_set_rxgain(20);
 	pluto_set_tx_freq(LO_FREQ_UL);
 	pluto_set_rx_freq(LO_FREQ_DL);
+	//pluto_start_monitor();
 #endif
 
 	// Init phy and mac layer
@@ -228,7 +250,7 @@ int main()
 	cpu_set_t cpu_set;
 	CPU_ZERO(&cpu_set);
 	CPU_SET(UE_RX_CPUID,&cpu_set);
-	pthread_setaffinity_np(ue_phy_rx_th,2,&cpu_set);
+	pthread_setaffinity_np(ue_phy_rx_th,sizeof(cpu_set_t),&cpu_set);
 
 	// start TX thread
 	if (pthread_create(&ue_phy_tx_th, NULL, thread_phy_ue_tx, &tx_th_data) !=0) {
@@ -239,7 +261,7 @@ int main()
 	}
 	CPU_ZERO(&cpu_set);
 	CPU_SET(UE_TX_CPUID,&cpu_set);
-	pthread_setaffinity_np(ue_phy_tx_th,2,&cpu_set);
+	pthread_setaffinity_np(ue_phy_tx_th,sizeof(cpu_set_t),&cpu_set);
 
 	// start MAC thread
 	if (pthread_create(&ue_mac_th, NULL, thread_mac_ue_scheduler, &mac_th_data) !=0) {
@@ -250,7 +272,24 @@ int main()
 	}
 	CPU_ZERO(&cpu_set);
 	CPU_SET(UE_MAC_CPUID,&cpu_set);
-	pthread_setaffinity_np(ue_mac_th,2,&cpu_set);
+	pthread_setaffinity_np(ue_mac_th,sizeof(cpu_set_t),&cpu_set);
+
+	// printf affinities
+	pthread_getaffinity_np(ue_phy_rx_th,sizeof(cpu_set_t),&cpu_set);
+	printf("RX Thread CPU mask: ");
+	for (int i=0; i<4; i++)
+		printf("%d ",CPU_ISSET(i, &cpu_set));
+
+	pthread_getaffinity_np(ue_phy_tx_th,sizeof(cpu_set_t),&cpu_set);
+	printf("\nTX Thread CPU mask: ");
+	for (int i=0; i<4; i++)
+		printf("%d ",CPU_ISSET(i, &cpu_set));
+
+	pthread_getaffinity_np(ue_mac_th,sizeof(cpu_set_t),&cpu_set);
+	printf("\nMAC Thread CPU mask: ");
+	for (int i=0; i<4; i++)
+		printf("%d ",CPU_ISSET(i, &cpu_set));
+	printf("\n");
 
 	static int ret[3];
 	pthread_join(ue_phy_rx_th, &ret[0]);
