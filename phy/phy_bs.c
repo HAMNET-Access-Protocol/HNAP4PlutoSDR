@@ -49,7 +49,7 @@ PhyBS phy_bs_init()
     phy->ul_symbol_alloc[1] = calloc(sizeof(uint8_t)*SUBFRAME_LEN,1);
 
     // Set RX position
-    phy->common->rx_symbol = SUBFRAME_LEN - DL_UL_SHIFT;
+    phy->common->rx_symbol = SUBFRAME_LEN - DL_UL_SHIFT - DL_UL_SHIFT_COMPENSATION;
     phy->common->rx_subframe = FRAME_LEN -1;
     phy->rach_timing = 0;
     phy->rach_remaining_samps = 0;
