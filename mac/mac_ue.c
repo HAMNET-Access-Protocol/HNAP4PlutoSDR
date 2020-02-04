@@ -122,10 +122,18 @@ void mac_ue_run_scheduler(MacUE mac)
 	if (num_assigned>0) {
 		for (int i=0; i<MAC_ULDATA_SLOTS; i++) {
 			if (mac->ul_data_assignments[i] == 1) {
+				num_assigned--;
 				LogicalChannel chan = lchan_create(slotsize, CRC16);
 				lchan_add_all_msgs(chan, mac->msg_control_queue);
 				if (queuesize>0) {
 					// client is assigned to slot and has data
+					if (num_assigned==0) {
+						// this is the last assigned slot within subframe
+						// if we still have remaining data, add a ul_req to this slot
+						MacMessage msg = mac_msg_create_ul_req(queuesize);
+						lchan_add_message(chan, msg);
+						mac_msg_destroy(msg);
+					}
 					MacMessage msg = mac_frag_get_fragment(mac->fragmenter,
 													lchan_unused_bytes(chan),1);
 					lchan_add_message(chan, msg);
@@ -174,6 +182,7 @@ void mac_ue_run_scheduler(MacUE mac)
 		}
 		lchan_destroy(chan);
 	}
+	LOG_SFN_MAC(INFO,"[MAC UE] scheduler done.\n");
 }
 
 // Main interface function that is called from PHY when receiving a

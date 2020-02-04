@@ -20,7 +20,7 @@
 typedef struct {
 	ofdmframesync fs;			// framesync object. Stores freq offset etc.
 	uint8_t userid;
-	uint ul_queue;
+	int ul_queue;
 	ringbuf msg_control_queue;
 	MacFrag fragmenter;
 	MacAssmbl reassembler;

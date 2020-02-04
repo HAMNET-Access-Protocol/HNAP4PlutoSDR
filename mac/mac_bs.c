@@ -246,6 +246,8 @@ void mac_bs_run_scheduler(MacBS mac)
 	uint user_id = 0;
 	uint next_sfn;
 
+	LOG(TRACE,"[MAC BS] run scheduler\n");
+
 	if (mac->phy->common->tx_symbol==0) {
 		// subframe just started. schedule for this one.
 		// TODO set rules when the scheduler should run
@@ -311,6 +313,10 @@ void mac_bs_run_scheduler(MacBS mac)
 	// TODO assure that no data slot is assigned during RA slot?
 
 	// 4. iterate over each UL slot and assign it
+	// start by disabling all slots
+	for (int i=0; i<MAC_ULDATA_SLOTS; i++) {
+		mac->ul_data_assignments[i] = USER_UNUSED;
+	}
 	// TODO check that assignment do not overlap with DL slots
 	slot_idx = 0;
 	// get first active user
@@ -324,14 +330,16 @@ void mac_bs_run_scheduler(MacBS mac)
 			break;
 		}
 		// get next user. Round robin allocation
-		user_s* ue = get_next_user(mac,ue->userid);
+		ue = get_next_user(mac,ue->userid);
 
 		// check whether the user has pending ul data
 		if (ue->ul_queue > 0) {
 			mac->ul_data_assignments[slot_idx++] = ue->userid;
 			user_id = ue->userid; // update last active user
 			// update ul queue len:
-			ue->ul_queue -= fmin(ue->ul_queue, get_tbs_size(mac->phy->common, ue->ul_mcs)/8-5);
+			ue->ul_queue -= get_tbs_size(mac->phy->common, ue->ul_mcs)/8-5;
+			if (ue->ul_queue<0)
+				ue->ul_queue = 0;
 		} else if (ue->userid == user_id) {
 			// no other active user found. assign to
 			// current user even if there is no ul req
