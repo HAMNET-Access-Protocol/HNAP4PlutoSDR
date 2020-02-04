@@ -104,7 +104,7 @@ int phy_ue_initial_sync(PhyUE phy, float complex* rxbuf_time, uint num_samples)
 			float new_cfo = ofdmframesync_get_cfo(phy->fs);
 			float cfo_filt = 0.5*phy->prev_cfo + (1-0.5)*new_cfo;
 			ofdmframesync_set_cfo(phy->fs,cfo_filt);
-			LOG_SFN(DEBUG,"[PHY UE] sync seq. cfo: %.3fHz offset: %d samps\n",new_cfo*SAMPLERATE/6.28,offset);
+			LOG_SFN_PHY(INFO,"[PHY UE] sync seq. cfo: %.3fHz offset: %d samps\n",new_cfo*SAMPLERATE/6.28,offset);
 
 		}
 	}
@@ -137,7 +137,7 @@ int phy_ue_proc_dlctrl(PhyUE phy)
 	}
 
 	// Set the decoded user assignments in the phy struct
-	LOG_SFN(DEBUG,"[PHY UE] DLCTRL:");
+	LOG_SFN_PHY(DEBUG,"[PHY UE] DLCTRL:");
 	uint idx = 0;
 	for (int i=0; i<NUM_SLOT/2; i++) {
 		LOG(DEBUG,"%02x",dlctrl_buf[idx].byte);

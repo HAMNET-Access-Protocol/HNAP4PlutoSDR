@@ -7,11 +7,6 @@
 #include "mac_bs.h"
 #include "../util/log.h"
 
-// log makro to log with subframe number
-#define LOG_SFN(level, ...) do { if (level>=LOG_LEVEL) \
-	{ printf("[%2d %2d]",mac->phy->common->rx_subframe,mac->phy->common->rx_symbol); \
-	  printf(__VA_ARGS__); }} while(0);
-
 
 MacBS mac_bs_init()
 {
@@ -142,20 +137,20 @@ int mac_bs_handle_message(MacBS mac, MacMessage msg, uint8_t userID)
 	if (user==NULL) {
 		mac_msg_destroy(msg);
 		return 0;
-		LOG_SFN(WARN,"[MAC BS] received message for unassociated user %d. Drop\n",userID);
+		LOG_SFN_MAC(WARN,"[MAC BS] received message for unassociated user %d. Drop\n",userID);
 	}
 	MacDataFrame frame;
 	switch (msg->type) {
 	case ul_req:
 		// Update the user uplink queue state
 		user->ul_queue=msg->hdr.ULreq.packetqueuesize;
-		LOG_SFN(DEBUG,"[MAC BS] ul_req from user %d. Queuesize: %d\n", userID,user->ul_queue);
+		LOG_SFN_MAC(INFO,"[MAC BS] ul_req from user %d. Queuesize: %d\n", userID,user->ul_queue);
 		break;
 	case channel_quality:
-		LOG_SFN(DEBUG, "[MAC BS] channel quality measurement not implemented yet\n");
+		LOG_SFN_MAC(DEBUG, "[MAC BS] channel quality measurement not implemented yet\n");
 		break;
 	case keepalive:
-		LOG_SFN(DEBUG,"[MAC BS] keepalive from user %d\n",userID);
+		LOG_SFN_MAC(DEBUG,"[MAC BS] keepalive from user %d\n",userID);
 		break;
 	case control_ack:
 		break;
@@ -163,7 +158,7 @@ int mac_bs_handle_message(MacBS mac, MacMessage msg, uint8_t userID)
 		frame = mac_assmbl_reassemble(user->reassembler,msg);
 		if (frame != NULL) {
 			mac->stats.bytes_rx+=frame->size;
-			LOG_SFN(INFO,"[MAC BS] received frame with %d bytes!\n",frame->size);
+			LOG_SFN_MAC(INFO,"[MAC BS] received frame with %d bytes!\n",frame->size);
 			//TODO forward received frame to higher layer
 			uint sfn;
 			memcpy(&sfn, frame->data,sizeof(uint));
@@ -172,7 +167,7 @@ int mac_bs_handle_message(MacBS mac, MacMessage msg, uint8_t userID)
 		}
 		break;
 	default:
-		LOG_SFN(WARN,"[MAC BS] unexpected MacMsg ID: %d\n",msg->type);
+		LOG_SFN_MAC(WARN,"[MAC BS] unexpected MacMsg ID: %d\n",msg->type);
 		mac_msg_destroy(msg);
 		return 0;
 	}
@@ -187,8 +182,7 @@ void mac_bs_rx_channel(MacBS mac, LogicalChannel chan, uint userid)
 {
 	// Verify the CRC
 	if(!lchan_verify_crc(chan)) {
-		LOG_SFN(INFO, "[MAC BS] lchan CRC%d invalid. Dropping.\n",8*chan->crc_type);
-		lchan_destroy(chan);
+		LOG_SFN_MAC(WARN, "[MAC BS] lchan CRC%d invalid. Dropping %d bytes.\n",8*chan->crc_type, chan->payload_len);
 		mac->stats.chan_rx_fail++;
 		return;
 		lchan_destroy(chan);

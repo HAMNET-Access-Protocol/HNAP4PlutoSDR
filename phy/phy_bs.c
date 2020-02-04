@@ -220,7 +220,11 @@ void phy_bs_proc_slot(PhyBS phy, uint slotnr)
 	interleaver_decode(common->mcs_interlvr[mcs],interleaved_b,chan->data);
 
 	// pass to upper layer
-	mac_bs_rx_channel(phy->mac,chan, userid);
+	if(!mac_bs_rx_channel(phy->mac,chan, userid)) {
+		// log when crc check failed
+		ofdmframesync fs = mac_bs_get_receiver(phy->mac,userid);
+		LOG_SFN_PHY(DEBUG,"cfo was: %.3fHz\n",ofdmframesync_get_cfo(fs)*SAMPLERATE/6.28);
+	}
 	free(interleaved_b);
 	free(demod_buf);
 }

@@ -18,7 +18,7 @@
 #include <math.h>
 
 // log makro to log with subframe number
-#define LOG_SFN(level, ...) do { if (level>=LOG_LEVEL) \
+#define LOG_SFN_PHY(level, ...) do { if (level>=LOG_LEVEL) \
 	{ printf("[%2d %2d]",phy->common->rx_subframe,phy->common->rx_symbol); \
 	  printf(__VA_ARGS__); }} while(0);
 

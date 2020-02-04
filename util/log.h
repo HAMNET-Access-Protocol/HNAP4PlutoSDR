@@ -15,7 +15,7 @@
 #include <stdlib.h>
 
 // Log level enumeration
-enum {TRACE, DEBUG,INFO,WARN,ERR};
+enum {TRACE, DEBUG,INFO,WARN,ERR,NONE};
 
 // Set the global log level
 #define LOG_LEVEL INFO

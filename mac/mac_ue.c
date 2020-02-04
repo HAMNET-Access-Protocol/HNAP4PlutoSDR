@@ -40,11 +40,11 @@ int mac_ue_handle_message(MacUE mac, MacMessage msg)
 		if (msg->hdr.AssociateResponse.response == assoc_resp_success) {
 			mac->is_associated = 1;
 			mac->userid = msg->hdr.AssociateResponse.userid;
-			LOG(INFO,"[MAC UE] successfully associated! userid: %d\n",mac->userid);
+			LOG_SFN_MAC(INFO,"[MAC UE] successfully associated! userid: %d\n",mac->userid);
 			mac->phy->userid = mac->userid; // Notify phy about the userid. TODO define interface functions?
 			phy_ue_proc_dlctrl(mac->phy);	// Decode CTRL slot again, since we now know our userid
 		} else {
-			LOG(INFO,"[MAC UE] NACK for assoc req: response is %d\n",msg->hdr.AssociateResponse.response);
+			LOG_SFN_MAC(INFO,"[MAC UE] NACK for assoc req: response is %d\n",msg->hdr.AssociateResponse.response);
 		}
 		break;
 	case dl_mcs_info:
@@ -67,7 +67,7 @@ int mac_ue_handle_message(MacUE mac, MacMessage msg)
 		frame = mac_assmbl_reassemble(mac->reassembler, msg);
 		if (frame != NULL) {
 			mac->stats.bytes_rx += frame->size;
-			printf("[MAC UE] received dataframe of %d bytes\n",frame->size);
+			LOG(INFO,"[MAC UE] received dataframe of %d bytes\n",frame->size);
 			//TODO forward received frame to higher layer
 			static uint sfn=0;
 			sfn++;
@@ -176,7 +176,7 @@ void mac_ue_run_scheduler(MacUE mac)
 		for (int i=0; i<MAC_ULCTRL_SLOTS; i++) {
 			if (mac->ul_ctrl_assignments[i] == 1) {
 				phy_map_ulctrl(mac->phy,chan,next_sfn,i);
-				LOG(INFO,"[MAC UE] map ulctrl %d %d\n",mac->phy->common->tx_subframe,mac->phy->common->tx_symbol);
+				LOG_SFN_MAC(INFO,"[MAC UE] map ulctrl %d %d\n",mac->phy->common->tx_subframe,mac->phy->common->tx_symbol);
 				break;
 			}
 		}
@@ -192,7 +192,7 @@ void mac_ue_rx_channel(MacUE mac, LogicalChannel chan)
 {
 	// Verify the CRC
 	if(!lchan_verify_crc(chan)) {
-		LOG(INFO, "[MAC UE] lchan CRC invalid. Dropping.\n");
+		LOG_SFN_MAC(WARN, "[MAC UE] lchan CRC invalid. Dropping.\n");
 		mac->stats.chan_rx_fail++;
 		lchan_destroy(chan);
 		return;
