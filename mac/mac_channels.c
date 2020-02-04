@@ -86,6 +86,12 @@ int lchan_unused_bytes(LogicalChannel chan)
 // at the end of the payload
 void lchan_calc_crc(LogicalChannel chan)
 {
+	// if the payload area is partially unused, fill it up with random
+	// bytes. This increases robustness during transmission
+	for (int i=chan->writepos+1; i<chan->payload_len; i++) {
+		chan->data[i] = (uint8_t)rand();
+	}
+
 	if (chan->crc_type*8 == CRC16) {
 		uint16_t crc = crc_generate_key(LIQUID_CRC_16, chan->data, chan->payload_len-chan->crc_type);
 		chan->data[chan->payload_len-2] = (crc >> 8) & 0xFF; // upper byte
