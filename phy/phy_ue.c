@@ -137,7 +137,8 @@ int phy_ue_proc_dlctrl(PhyUE phy)
 	// verify CRC
 	if (!crc_validate_message(LIQUID_CRC_8, (uint8_t*)dlctrl_buf, dlctrl_size, dlctrl_buf[dlctrl_size].byte)) {
 		LOG(WARN,"[PHY UE] DLCTRL slot could not be decoded!\n");
-		return 0; // CRC not valid
+		// set dlctrl buf to 0 so that mac will think no slots allocated
+		memset(dlctrl_buf,0,dlctrl_size);
 	}
 
 	// Set the decoded user assignments in the phy struct

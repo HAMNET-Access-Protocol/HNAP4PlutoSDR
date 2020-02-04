@@ -440,10 +440,18 @@ void phy_bs_rx_symbol(PhyBS phy, float complex* rxbuf_time)
 		uint userid = phy->ul_symbol_alloc[sfn%2][common->rx_symbol];
 		ofdmframesync fs = mac_bs_get_receiver(phy->mac,userid);
 		if (fs!=NULL) {
+			// if this is the first symbol of a slot, soft reset the
+			// sync object
+			uint prev_rx_symb = (common->rx_symbol-1) % SUBFRAME_LEN;
+			if (common->rx_symbol == 0 || phy->ul_symbol_alloc[sfn%2][prev_rx_symb]==0) {
+				ofdmframesync_reset_soft(fs);
+			}
+
 			if (common->pilot_symbols_rx[common->rx_symbol] == PILOT) {
 				ofdmframesync_reset_msequence(fs);
 				ofdmframesync_execute(fs,rxbuf_time,rx_sym);
-				ofdmframesync_set_cfo(fs,0); // TODO cfo estimation. Currently not working since we often receive if no data is sent. -> wrong pilot -> wrong cfo
+				LOG_SFN_PHY(DEBUG,"cfo was: %.3fHz\n",ofdmframesync_get_cfo(fs)*SAMPLERATE/6.28)
+				//ofdmframesync_set_cfo(fs,0); // TODO cfo estimation. Currently not working since we often receive if no data is sent. -> wrong pilot -> wrong cfo
 			} else {
 				ofdmframesync_execute_nopilot(fs,rxbuf_time,rx_sym);
 			}

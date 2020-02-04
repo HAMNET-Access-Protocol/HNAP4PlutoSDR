@@ -282,11 +282,31 @@ void gen_pilot_symbols_robust(PhyCommon phy, uint is_bs)
 		pilot_ul = phy->pilot_symbols_tx;
 	}
 
-    // Pilot definition in time domain:
-    for (int i=0; i<SUBFRAME_LEN; i+=2) {
-    	pilot_dl[i] = PILOT;
-    	pilot_ul[i] = PILOT;
-    	pilot_dl[i+1] = NO_PILOT;
-    	pilot_ul[i+1] = NO_PILOT;
+	memset(pilot_dl,NO_PILOT,SUBFRAME_LEN);
+	memset(pilot_ul,NO_PILOT,SUBFRAME_LEN);
+
+	// Pilot symbols within subframe in UL
+	// dldata slots
+    for (int i=0; i<SLOT_LEN; i+=2) {
+    	pilot_dl[4+i] = PILOT;
+    	pilot_dl[4+(SLOT_LEN+1)*1+i] = PILOT;
+    	pilot_dl[4+(SLOT_LEN+1)*2+i] = PILOT;
+    	pilot_dl[4+(SLOT_LEN+1)*3+i] = PILOT;
     }
+    // dlctrl slot
+    pilot_dl[0] = PILOT;
+    pilot_dl[1] = PILOT;
+
+
+    // Pilot symbols within subframe in UL
+    //uldata slots
+    for (int i=0; i<SLOT_LEN; i+=2) {
+    	pilot_ul[i] = PILOT;
+    	pilot_ul[(SLOT_LEN+1)*1+i] = PILOT;
+    	pilot_ul[4+(SLOT_LEN+1)*2+i] = PILOT;
+    	pilot_ul[4+(SLOT_LEN+1)*3+i] = PILOT;
+    }
+    //ulctrl slots
+    pilot_ul[2*(SLOT_LEN+1)] = PILOT;
+    pilot_ul[2*(SLOT_LEN+1)+2] = PILOT;
 }
