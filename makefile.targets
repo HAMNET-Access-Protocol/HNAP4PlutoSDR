@@ -2,52 +2,44 @@
 # Own makefile targets
 ################################################################################
 
-MAIN_OBJS := ./test_phy_channel.o ./iio_loopback.o ./platform/pluto_test.o ./decode_from_file.o ./test_mac.o
+MAIN_OBJS :=  ./runtime/test_mac.o ./runtime/client_network.o ./runtime/client.o ./runtime/basestation.o
 COMMON_OBJS := $(filter-out $(MAIN_OBJS), $(OBJS))
+SYSROOT :=--sysroot=/home/lukas/pluto-0.31.sysroot/
 
-# loopback test using one Adalm Pluto and libiio buffers
-iio_loopback: $(OBJS) $(USER_OBJS)
-	@echo 'Building target: $@'
-	@echo 'Invoking: GCC C Linker'
-	arm-linux-gnueabihf-gcc --sysroot=$(HOME)/pluto-0.31.sysroot/ -o "iio_loopback" ./iio_loopback.o $(COMMON_OBJS) $(USER_OBJS) $(LIBS)
-	@echo 'Finished building target: $@'
-	@echo ' '
-
-pluto_test: $(OBJS) $(USER_OBJS)
-	@echo 'Building target: $@'
-	@echo 'Invoking: GCC C Linker'
-	arm-linux-gnueabihf-gcc --sysroot=$(HOME)/pluto-0.31.sysroot/ -o "pluto_test" ./platform/pluto_test.o $(COMMON_OBJS) $(USER_OBJS) $(LIBS)
-	@echo 'Finished building target: $@'
-	@echo ' '
-	
-# simluation test with static float complex buffers
-simulation-arm: $(OBJS) $(USER_OBJS)
-	@echo 'Building target: $@'
-	@echo 'Invoking: GCC C Linker'
-	arm-linux-gnueabihf-gcc --sysroot=$(HOME)/pluto-0.31.sysroot/ -o "simulation" ./test_phy_channel.o $(COMMON_OBJS) $(USER_OBJS) $(LIBS)
-	@echo 'Finished building target: $@'
-	@echo ' '
-
-simulation-x86: $(OBJS) $(USER_OBJS)
-	@echo 'Building target: $@'
-	@echo 'Invoking: GCC C Linker'
-	gcc -o "simulation" ./test_phy_channel.o $(COMMON_OBJS) $(USER_OBJS) $(LIBS)
-	@echo 'Finished building target: $@'
-	@echo ' '
-	
-# read samples from a binary file and decode them
-decode_from_file: $(OBJS) $(USER_OBJS)
-	@echo 'Building target: $@'
-	@echo 'Invoking: GCC C Linker'
-	gcc -o "decode_from_file" ./decode_from_file.o $(COMMON_OBJS) $(USER_OBJS) $(LIBS)
-	@echo 'Finished building target: $@'
-	@echo ' '
-	
 # mac layer test
 test_mac: $(OBJS) $(USER_OBJS)
 	@echo 'Building target: $@'
 	@echo 'Invoking: GCC C Linker'
-	gcc -o "test_mac" ./test_mac.o $(COMMON_OBJS) $(USER_OBJS) $(LIBS)
+	gcc -o "test_mac" ./runtime/test_mac.o $(COMMON_OBJS) $(USER_OBJS) $(LIBS)
 	@echo 'Finished building target: $@'
 	@echo ' '
 	
+# client build
+client: $(OBJS) $(USER_OBJS)
+	@echo 'Building target: $@'
+	@echo 'Invoking: GCC C Linker'
+	arm-linux-gnueabihf-gcc -o "client" $(SYSROOT) ./runtime/client.o $(COMMON_OBJS) $(USER_OBJS) $(LIBS)
+	@echo 'Finished building target: $@'
+	@echo ' '
+
+client-x86: $(OBJS) $(USER_OBJS)
+	@echo 'Building target: $@'
+	@echo 'Invoking: GCC C Linker'
+	gcc -o "client_x86" ./runtime/client.o $(COMMON_OBJS) $(USER_OBJS) $(LIBS)
+	@echo 'Finished building target: $@'
+	@echo ' '
+	
+# basestation build
+basestation: $(OBJS) $(USER_OBJS)
+	@echo 'Building target: $@'
+	@echo 'Invoking: GCC C Linker'
+	arm-linux-gnueabihf-gcc -o "basestation" $(SYSROOT) ./runtime/basestation.o $(COMMON_OBJS) $(USER_OBJS) $(LIBS)
+	@echo 'Finished building target: $@'
+	@echo ' '
+	
+basestation-x86: $(OBJS) $(USER_OBJS)
+	@echo 'Building target: $@'
+	@echo 'Invoking: GCC C Linker'
+	gcc -o "basestation_x86" ./runtime/basestation.o $(COMMON_OBJS) $(USER_OBJS) $(LIBS)
+	@echo 'Finished building target: $@'
+	@echo ' '
