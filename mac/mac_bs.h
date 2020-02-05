@@ -16,7 +16,9 @@
 #include <liquid/liquid.h>
 #include "../phy/phy_bs.h"
 
+enum {DL=0, UL};
 
+// Struct represents an associated user
 typedef struct {
 	ofdmframesync fs;			// framesync object. Stores freq offset etc.
 	uint8_t userid;
@@ -28,6 +30,11 @@ typedef struct {
 	uint timingadvance;
 	uint8_t dl_mcs;				// The mcs schemes used for the user
 	uint8_t ul_mcs;
+
+	uint8_t dl_mcs_pending;		// Variables used during MCS switch
+	uint8_t ul_mcs_pending;
+	long int dl_mcs_pending_time;
+	long int ul_mcs_pending_time;
 }user_s;
 
 //forward declaration of phy struct that is needed in mac struct
@@ -48,6 +55,10 @@ struct MacBS_s {
 
 	int last_added_rachuserid;
 	int last_added_userid;
+
+	// subframe counter. Note: this is not synchronized with other clients
+	// every client starts with 0 once it synced. Used for MAC timers
+	long long unsigned int subframe_cnt;
 };
 
 typedef struct MacBS_s* MacBS;
@@ -64,6 +75,7 @@ void mac_bs_update_timingadvance(MacBS mac, uint userid, int timing_diff);
 int mac_bs_rx_channel(MacBS mac, LogicalChannel chan, uint userid);
 
 // ----------- Interface functions for higher layer ---------- //
+void mac_bs_set_mcs(MacBS mac, uint userid, uint mcs, uint dl_ul);
 int mac_bs_add_txdata(MacBS mac, uint8_t destUserID, MacDataFrame frame);
 void mac_bs_run_scheduler(MacBS mac);
 

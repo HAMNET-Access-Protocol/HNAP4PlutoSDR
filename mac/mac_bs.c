@@ -89,6 +89,32 @@ void mac_bs_add_new_ue(MacBS mac, uint8_t rachuserid, uint8_t rach_try_cnt, ofdm
 	}
 }
 
+// Change the DL/UL MCS scheme for a user
+void mac_bs_set_mcs(MacBS mac, uint userid, uint mcs, uint dl_ul)
+{
+	int ret = 0;
+	if (userid>=MAX_USER || mac->UE[userid]==NULL) {
+		LOG(ERR,"[MAC BS] cannot find user %d to set MCS",userid);
+		return;
+	}
+
+	if (dl_ul==DL) {
+		MacMessage msg = mac_msg_create_dl_mcs_info(mcs);
+		ret = ringbuf_put(mac->UE[userid]->msg_control_queue, msg);
+		if (ret) {
+			mac->UE[userid]->dl_mcs_pending = mcs;
+			mac->UE[userid]->dl_mcs_pending_time = mac->subframe_cnt+MAX_RESPONSE_TIME;
+		}
+	} else {
+		MacMessage msg = mac_msg_create_ul_mcs_info(mcs);
+		ret = ringbuf_put(mac->UE[userid]->msg_control_queue, msg);
+		if (ret) {
+			mac->UE[userid]->ul_mcs_pending = mcs;
+			mac->UE[userid]->ul_mcs_pending_time = mac->subframe_cnt+MAX_RESPONSE_TIME;
+		}
+	}
+}
+
 // Try to get the receiver object for the given userid
 // returns NULL if user does not exist
 ofdmframesync mac_bs_get_receiver(MacBS mac, uint userid)
@@ -132,6 +158,24 @@ void mac_bs_update_timingadvance(MacBS mac, uint userid, int timing_diff)
 	}
 }
 
+// Handle the control ack message
+void mac_bs_handle_control_ack(MacBS mac, MacMessage msg, user_s* ue)
+{
+	switch (msg->hdr.ControlAck.acked_ctrl_id) {
+	case dl_mcs_info:
+		ue->dl_mcs = ue->dl_mcs_pending;
+		ue->dl_mcs_pending_time = 0;
+		break;
+	case ul_mcs_info:
+		ue->ul_mcs = ue->ul_mcs_pending;
+		ue->ul_mcs_pending_time = 0;
+		break;
+	default:
+		LOG(ERR, "[MAC BS] cannot handle control ack for ctrlID %d\n",
+									msg->hdr.ControlAck.acked_ctrl_id);
+	}
+}
+
 // Handle incoming messages from PHY layer
 int mac_bs_handle_message(MacBS mac, MacMessage msg, uint8_t userID)
 {
@@ -156,6 +200,7 @@ int mac_bs_handle_message(MacBS mac, MacMessage msg, uint8_t userID)
 		LOG_SFN_MAC(DEBUG,"[MAC BS] keepalive from user %d\n",userID);
 		break;
 	case control_ack:
+		mac_bs_handle_control_ack(mac,msg,user);
 		break;
 	case ul_data:
 		frame = mac_assmbl_reassemble(user->reassembler,msg);
@@ -242,6 +287,43 @@ void mac_bs_map_slot(MacBS mac, uint subframe, uint slot, user_s* ue)
     lchan_destroy(chan);
 }
 
+// Checks whether there are pending or expired MCS changes
+void mac_bs_process_mcs_change(MacBS mac)
+{
+	for (int userid=0; userid<MAX_USER-1; userid++) {
+		user_s* ue = mac->UE[userid];
+		if (ue!=NULL) {
+			if (ue->dl_mcs_pending_time>0 &&
+					ue->dl_mcs_pending_time >= mac->subframe_cnt) {
+				// MCS change pending and unacknowledged
+				// resend mcs_info message
+				MacMessage msg = mac_msg_create_dl_mcs_info(ue->dl_mcs_pending);
+				if (!ringbuf_put(ue->msg_control_queue, msg))
+					mac_msg_destroy(msg);
+			}
+			if (ue->dl_mcs_pending_time>0 &&
+				ue->dl_mcs_pending_time < mac->subframe_cnt) {
+				// MCS change expired without any ack. Cancel it
+				ue->dl_mcs_pending_time = 0;
+			}
+
+			if (ue->ul_mcs_pending_time>0 &&
+					ue->ul_mcs_pending_time >= mac->subframe_cnt) {
+				// MCS change pending and unacknowledged
+				// resend mcs_info message
+				MacMessage msg = mac_msg_create_ul_mcs_info(ue->ul_mcs_pending);
+				if (!ringbuf_put(ue->msg_control_queue, msg))
+					mac_msg_destroy(msg);
+			}
+			if (ue->ul_mcs_pending_time>0 &&
+				ue->ul_mcs_pending_time < mac->subframe_cnt) {
+				// MCS change expired without any ack. Cancel it
+				ue->ul_mcs_pending_time = 0;
+			}
+		}
+	}
+}
+
 void mac_bs_run_scheduler(MacBS mac)
 {
 	uint slot_idx = 0;
@@ -249,6 +331,9 @@ void mac_bs_run_scheduler(MacBS mac)
 	uint next_sfn;
 
 	LOG(TRACE,"[MAC BS] run scheduler\n");
+
+	// Run MAC procedures
+	mac_bs_process_mcs_change(mac);
 
 	if (mac->phy->common->tx_symbol==0) {
 		// subframe just started. schedule for this one.
@@ -369,4 +454,8 @@ void mac_bs_run_scheduler(MacBS mac)
 	LOG(TRACE,"         UL data slots: %4d %4d %4d %4d\n", mac->ul_data_assignments[0],
 			mac->ul_data_assignments[1],mac->ul_data_assignments[2],mac->ul_data_assignments[3]);
 	LOG(TRACE,"         UL ctrl slots: %4d %4d\n", mac->ul_ctrl_assignments[0],mac->ul_ctrl_assignments[1]);
+
+	// update mac subframe counter
+	// TODO: let phy handle this? What if scheduler is not called
+	mac->subframe_cnt++;
 }

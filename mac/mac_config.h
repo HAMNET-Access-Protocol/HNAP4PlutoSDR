@@ -11,6 +11,10 @@
 #include "../config.h"
 
 #define MAC_MSG_BUF_SIZE 32
+// Maximum allowed response time for control messages sent by BS
+// Unit: number of subframes
+#define MAX_RESPONSE_TIME 32
+
 #define MAX_USER 16
 
 // enable MAC testing

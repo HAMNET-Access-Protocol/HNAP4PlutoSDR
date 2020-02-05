@@ -32,6 +32,7 @@ void mac_ue_set_phy_interface(MacUE mac, struct PhyUE_s* phy)
 int mac_ue_handle_message(MacUE mac, MacMessage msg)
 {
 	MacDataFrame frame;
+	MacMessage response;
 
 	switch (msg->type) {
 	case associate_response:
@@ -55,13 +56,20 @@ int mac_ue_handle_message(MacUE mac, MacMessage msg)
 		mac->dl_mcs = msg->hdr.DLMCSInfo.mcs;
 		phy_ue_set_mcs_dl(mac->phy, mac->dl_mcs);
 		LOG(INFO,"[MAC UE] switching to DL MCS %d\n",mac->dl_mcs);
-
-		// TODO generate answer
+		response = mac_msg_create_control_ack(msg->hdr.DLMCSInfo.ctrl_id);
+		if(!ringbuf_put(mac->msg_control_queue,response)) {
+			LOG(ERR,"[MAC UE] cannot ack dl_mcs_info msg!\n");
+			mac_msg_destroy(response);
+		}
 		break;
 	case ul_mcs_info:
 		mac->ul_mcs = msg->hdr.ULMCSInfo.mcs;
 		LOG(INFO,"[MAC UE] switching to UL MCS %d\n",mac->ul_mcs);
-		// TODO generate answer
+		response = mac_msg_create_control_ack(msg->hdr.ULMCSInfo.ctrl_id);
+		if(!ringbuf_put(mac->msg_control_queue,response)) {
+			LOG(ERR,"[MAC UE] cannot ack ul_mcs_info msg!\n");
+			mac_msg_destroy(response);
+		}
 		break;
 	case timing_advance:
 		mac->timing_advance = msg->hdr.TimingAdvance.timingAdvance;
