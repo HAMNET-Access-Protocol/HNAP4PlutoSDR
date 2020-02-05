@@ -36,7 +36,7 @@ struct MacReassembler_s {
 MacFrag mac_frag_init()
 {
 	MacFrag frag = calloc(1,sizeof(struct MacFragmenter_s));
-	frag->frame_queue = ringbuf_create(MAC_MSG_BUF_SIZE);
+	frag->frame_queue = ringbuf_create(MAC_DATA_BUF_SIZE);
 	frag->curr_frame = NULL;
 	return frag;
 }

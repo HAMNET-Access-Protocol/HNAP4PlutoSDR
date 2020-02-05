@@ -18,7 +18,7 @@ MacBS mac_bs_init()
 	for (int i=0; i<MAX_USER; i++) {
 		macinst->UE[i] = NULL;
 	}
-	macinst->broadcast_ctrl_queue = ringbuf_create(MAC_MSG_BUF_SIZE);
+	macinst->broadcast_ctrl_queue = ringbuf_create(MAC_CTRL_MSG_BUF_SIZE);
 	macinst->broadcast_data_fragmenter = mac_frag_init();
 
 	macinst->last_added_rachuserid=-1;
@@ -68,7 +68,7 @@ void mac_bs_add_new_ue(MacBS mac, uint8_t rachuserid, uint8_t rach_try_cnt, ofdm
 		} else {
 			// create user instance and association response
 			user_s* new_ue = calloc(sizeof(user_s),1);
-			new_ue->msg_control_queue = ringbuf_create(MAC_MSG_BUF_SIZE);
+			new_ue->msg_control_queue = ringbuf_create(MAC_CTRL_MSG_BUF_SIZE);
 			new_ue->fragmenter = mac_frag_init();
 			new_ue->reassembler = mac_assmbl_init();
 			new_ue->userid = userid;
