@@ -53,22 +53,24 @@ int mac_ue_handle_message(MacUE mac, MacMessage msg)
 		}
 		break;
 	case dl_mcs_info:
-		mac->dl_mcs = msg->hdr.DLMCSInfo.mcs;
-		phy_ue_set_mcs_dl(mac->phy, mac->dl_mcs);
-		LOG(INFO,"[MAC UE] switching to DL MCS %d\n",mac->dl_mcs);
 		response = mac_msg_create_control_ack(msg->hdr.DLMCSInfo.ctrl_id);
 		if(!ringbuf_put(mac->msg_control_queue,response)) {
 			LOG(ERR,"[MAC UE] cannot ack dl_mcs_info msg!\n");
 			mac_msg_destroy(response);
+		} else {
+			mac->dl_mcs = msg->hdr.DLMCSInfo.mcs;
+			phy_ue_set_mcs_dl(mac->phy, mac->dl_mcs);
+			LOG(INFO,"[MAC UE] switching to DL MCS %d\n",mac->dl_mcs);
 		}
 		break;
 	case ul_mcs_info:
-		mac->ul_mcs = msg->hdr.ULMCSInfo.mcs;
-		LOG(INFO,"[MAC UE] switching to UL MCS %d\n",mac->ul_mcs);
 		response = mac_msg_create_control_ack(msg->hdr.ULMCSInfo.ctrl_id);
 		if(!ringbuf_put(mac->msg_control_queue,response)) {
 			LOG(ERR,"[MAC UE] cannot ack ul_mcs_info msg!\n");
 			mac_msg_destroy(response);
+		} else {
+			mac->ul_mcs = msg->hdr.ULMCSInfo.mcs;
+			LOG(INFO,"[MAC UE] switching to UL MCS %d\n",mac->ul_mcs);
 		}
 		break;
 	case timing_advance:
