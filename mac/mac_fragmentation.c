@@ -41,6 +41,17 @@ MacFrag mac_frag_init()
 	return frag;
 }
 
+void mac_frag_destroy(MacFrag frag)
+{
+	while (!ringbuf_isempty(frag->frame_queue)) {
+		MacDataFrame p = ringbuf_get(frag->frame_queue);
+		dataframe_destroy(p);
+	}
+	ringbuf_destroy(frag->frame_queue);
+	free(frag->curr_frame);
+	free(frag);
+}
+
 int mac_frag_add_frame(MacFrag frag, MacDataFrame frame)
 {
 	if (ringbuf_isfull(frag->frame_queue)) {
@@ -115,8 +126,7 @@ MacMessage mac_frag_get_fragment(MacFrag frag, uint max_frag_size, uint is_uplin
 	// update fragmenter state
 	frag->bytes_sent += data_len;
 	if (final_flag) {
-		free(frag->curr_frame->data);
-		free(frag->curr_frame);
+		dataframe_destroy(frag->curr_frame);
 		frag->curr_frame = NULL;
 	}
 
@@ -127,6 +137,13 @@ MacAssmbl mac_assmbl_init()
 {
 	MacAssmbl assmbl = calloc(sizeof(struct MacReassembler_s),1);
 	return assmbl;
+}
+
+void mac_assmbl_destroy(MacAssmbl assmbl)
+{
+	for (int i=0; i<assmbl->fragNr; i++)
+		free(assmbl->fragments[i]);
+	free(assmbl);
 }
 
 MacDataFrame mac_assmbl_reassemble(MacAssmbl assmbl, MacMessage fragment)
@@ -167,6 +184,7 @@ MacDataFrame mac_assmbl_reassemble(MacAssmbl assmbl, MacMessage fragment)
 		if (data->fragNr==0) {
 			assmbl->fragments[0] = malloc(fragment->payload_len);
 			memcpy(assmbl->fragments[0],fragment->data,fragment->payload_len);
+			assmbl->fragments_len[0] = fragment->payload_len;
 			assmbl->fragNr = 1;
 			assmbl->seqNr = data->seqNr;
 			assmbl->frame_open = 1;

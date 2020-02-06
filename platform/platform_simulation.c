@@ -66,6 +66,9 @@ void sim_end(platform p)
 	free(((simu_data)p->data)->rxbuf);
 	free(((simu_data)p->data)->tx_prep_buf);
 	channel_cccf_destroy(((simu_data)p->data)->tx_channel);
+
+	free((simu_data)p->data);
+	free(p);
 }
 
 // Connect two simulation platform instances

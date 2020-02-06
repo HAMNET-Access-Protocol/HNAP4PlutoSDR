@@ -58,16 +58,13 @@ struct PhyUE_s {
 	int rach_try_cnt;
 	// assigned userid
 	int userid;
-
-	// Locks and Condition variables for RX/TX thread sync
-	pthread_mutex_t tx_sync_lock;
-	pthread_cond_t tx_sync_cond;
 };
 
 typedef struct PhyUE_s* PhyUE;
 
 /************ GENERAL PHY CONFIG FUNCTIONS **********************/
 PhyUE phy_ue_init();
+void phy_ue_destroy(PhyUE phy);
 void phy_ue_set_mac_interface(PhyUE phy, void (*mac_rx_cb)(struct MacUE_s*, LogicalChannel), struct MacUE_s* mac);
 
 

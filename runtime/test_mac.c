@@ -62,9 +62,9 @@ int run_simulation(uint num_subframes)
 	int offset=0, tx_shift=0, num_samples=buflen;
 
 	// Buffers for simulation
-	float complex* dl_data = calloc(sizeof(float complex),NFFT+CP_LEN);
-	float complex* ul_data_tx = calloc(sizeof(float complex),NFFT+CP_LEN);
-	float complex* ul_data_rx = calloc(sizeof(float complex),NFFT+CP_LEN);
+	float complex dl_data[NFFT+CP_LEN];
+	float complex ul_data_tx[NFFT+CP_LEN];
+	float complex ul_data_rx[NFFT+CP_LEN];
 
 	uint last_tx = get_sim_time_msec();
 	uint packet_id = 0;
@@ -80,7 +80,8 @@ int run_simulation(uint num_subframes)
 			for (int i=0; i<payload_size; i++)
 				dl_frame->data[i] = rand() & 0xFF;
 			memcpy(dl_frame->data,&packet_id,sizeof(uint));
-			mac_bs_add_txdata(mac_bs, 2, dl_frame);
+			if(!mac_bs_add_txdata(mac_bs, 2, dl_frame))
+				dataframe_destroy(dl_frame);
 			mac_dl_timestamps[packet_id] = -global_sfn*SUBFRAME_LEN - global_symbol;
 			// add some data to send for client
 			MacDataFrame ul_frame = dataframe_create(100);
@@ -200,9 +201,6 @@ int run_simulation(uint num_subframes)
 	printf("       bytes rx: %d bytes tx: %d\n",mac_bs->stats.bytes_rx, mac_bs->stats.bytes_tx);
 	printf("MAC UE channels received:fail %d:%d\n",mac_ue->stats.chan_rx_succ,mac_ue->stats.chan_rx_fail);
 	printf("       bytes rx: %d bytes tx: %d\n",mac_ue->stats.bytes_rx, mac_ue->stats.bytes_tx);
-
-	client->end(client);
-	bs->end(bs);
 
 	return 0;
 }

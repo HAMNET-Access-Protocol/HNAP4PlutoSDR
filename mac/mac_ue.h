@@ -26,10 +26,11 @@ struct MacUE_s {
 	MacAssmbl reassembler;
 
 	uint8_t ul_ctrl_assignments[MAC_ULCTRL_SLOTS]; //TODO the assignments are already defined in PHY instance
-	uint8_t ul_data_assignments[MAC_DLDATA_SLOTS];
-	uint8_t dl_data_assignments[MAC_ULDATA_SLOTS];
+	uint8_t ul_data_assignments[MAC_ULDATA_SLOTS];
+	uint8_t dl_data_assignments[MAC_DLDATA_SLOTS];
 
 	uint8_t is_associated;
+
 
 	struct PhyUE_s* phy;
 
@@ -40,7 +41,8 @@ typedef struct MacUE_s* MacUE;
 
 /************ GENERAL MAC CONFIG FUNCTIONS **********************/
 MacUE mac_ue_init();
-void mac_ue_set_phy_interface(MacUE mac, PhyUE phy);
+void  mac_ue_destroy(MacUE mac);
+void  mac_ue_set_phy_interface(MacUE mac, PhyUE phy);
 
 /************** MAC INTERFACE FUNCTIONS *************************/
 void mac_ue_set_assignments(MacUE mac, uint8_t* dlslot, uint8_t* ulslot, uint8_t* ulctrl);

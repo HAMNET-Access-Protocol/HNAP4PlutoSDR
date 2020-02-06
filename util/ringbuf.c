@@ -28,6 +28,10 @@ ringbuf ringbuf_create(uint32_t size)
 
 void ringbuf_destroy(ringbuf buf)
 {
+	while (!ringbuf_isempty(buf)) {
+		void* p = ringbuf_get(buf);
+		free(p);
+	}
 	free(buf->data);
 	free(buf);
 }

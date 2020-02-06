@@ -25,6 +25,7 @@ typedef struct MacReassembler_s* MacAssmbl;
 
 // Initialize the fragmenter structure
 MacFrag mac_frag_init();
+void mac_frag_destroy(MacFrag frag);
 
 // Add a frame to the MAC queue
 int mac_frag_add_frame(MacFrag frag, MacDataFrame frame);
@@ -45,6 +46,7 @@ MacMessage mac_frag_get_fragment(MacFrag frag, uint max_frag_size, uint is_uplin
 
 // Initialize the reassembler structure
 MacAssmbl mac_assmbl_init();
+void mac_assmbl_destroy(MacAssmbl assmbl);
 
 // add a new fragment to the reassembler buffer
 // returns a MAC frame if reception of a open frame was completed

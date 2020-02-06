@@ -34,8 +34,6 @@ PhyBS phy_bs_init()
 	phy->fg = ofdmframegen_create(NFFT, CP_LEN, 0, phy->common->pilot_sc);
 
 	// Create OFDM receiver
-	//TODO: use different ofdmframesync structs for different users
-	phy->fs = ofdmframesync_create(NFFT,CP_LEN,0,phy->common->pilot_sc,_bs_rx_symbol_cb, phy);
 	phy->fs_rach = NULL;
 
     // alloc buffer for dl control slot
@@ -62,6 +60,28 @@ PhyBS phy_bs_init()
     phy->rach_remaining_samps = 0;
 
     return phy;
+}
+
+void phy_bs_destroy(PhyBS phy)
+{
+	phy_common_destroy(phy->common);
+	ofdmframegen_destroy(phy->fg);
+	ofdmframesync_destroy(phy->fs_rach);
+
+	free(phy->dlctrl_buf);
+
+	for (int i=0; i<2; i++) {
+		free(phy->ulslot_assignments[i]);
+		free(phy->ulctrl_assignments[i]);
+	}
+	free(phy->ulslot_assignments);
+	free(phy->ulctrl_assignments);
+
+	free(phy->ul_symbol_alloc[0]);
+	free(phy->ul_symbol_alloc[1]);
+	free(phy->ul_symbol_alloc);
+
+	free(phy);
 }
 
 void phy_bs_set_mac_interface(PhyBS phy, struct MacBS_s* mac)
@@ -307,13 +327,12 @@ int phy_bs_proc_rach(PhyBS phy, int timing_diff)
 	if (lchan_verify_crc(chan)) {
 		uint8_t rach_userid = chan->data[0];
 		uint8_t rach_try_cnt = chan->data[1];
+		// change callback from RACH cb to normal cb
+		ofdmframesync_set_cb(phy->fs_rach,_bs_rx_symbol_cb,phy);
 		mac_bs_add_new_ue(phy->mac,rach_userid, rach_try_cnt, phy->fs_rach, timing_diff);
 	}
 	lchan_destroy(chan);
 
-	// TODO correctly handle the framesync object
-	phy->fs = phy->fs_rach;
-	ofdmframesync_set_cb(phy->fs,_bs_rx_symbol_cb,phy);
 	//set to NULL to ensure RA procedure does not use sync object anymore
 	phy->fs_rach = NULL;
 	return 1;

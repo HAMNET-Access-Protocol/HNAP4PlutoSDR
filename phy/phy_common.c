@@ -136,21 +136,13 @@ void phy_common_destroy(PhyCommon phy)
     free(phy->pilot_symbols_rx);
     free(phy->pilot_symbols_tx);
 
-    // delete modulator objects
-    modem_destroy(phy->mcs_modem[0]);
-    modem_destroy(phy->mcs_modem[1]);
-    modem_destroy(phy->mcs_modem[2]);
-
-    // delete FEC modules
-    fec_destroy(phy->mcs_fec[0]);
-    fec_destroy(phy->mcs_fec[1]);
-    fec_destroy(phy->mcs_fec[2]);
-
-    // delete the interleaver
-    interleaver_destroy(phy->mcs_interlvr[0]);
-    interleaver_destroy(phy->mcs_interlvr[1]);
-    interleaver_destroy(phy->mcs_interlvr[2]);
-    interleaver_destroy(phy->mcs_interlvr[3]);
+    // delete modulator, fec and interleaver objects
+    for (int i=0; i<5; i++) {
+        modem_destroy(phy->mcs_modem[i]);
+        fec_destroy(phy->mcs_fec[i]);
+        interleaver_destroy(phy->mcs_interlvr[i]);
+    }
+    free(phy);
 }
 
 

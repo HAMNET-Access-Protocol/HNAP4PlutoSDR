@@ -19,7 +19,6 @@ struct MacBS_s;
 struct PhyBS_s {
 	PhyCommon common;			// pointer to common phy objects
 	ofdmframegen fg;			// OFDM frame generator object
-	ofdmframesync fs;			// OFDM frame receiver. TODO use different objects for each user. currently stored in MAC struct
 	ofdmframesync fs_rach; 		// OFDM receiver for rach slot
 
 	// Variables to store the slot assignments
@@ -51,6 +50,7 @@ typedef struct PhyBS_s* PhyBS;
 
 /*************** Initializer functions *********************/
 PhyBS phy_bs_init();
+void phy_bs_destroy(PhyBS phy);
 void phy_bs_set_mac_interface(PhyBS phy, struct MacBS_s* mac);
 
 /************* TX mapper functions *************************/

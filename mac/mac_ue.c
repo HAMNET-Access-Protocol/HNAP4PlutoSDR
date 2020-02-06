@@ -21,6 +21,18 @@ MacUE mac_ue_init()
 	return mac;
 }
 
+void mac_ue_destroy(MacUE mac)
+{
+	mac_frag_destroy(mac->fragmenter);
+	mac_assmbl_destroy(mac->reassembler);
+	while (!ringbuf_isempty(mac->msg_control_queue)) {
+		MacMessage p = ringbuf_get(mac->msg_control_queue);
+		mac_msg_destroy(p);
+	}
+	ringbuf_destroy(mac->msg_control_queue);
+	free(mac);
+}
+
 // Mac layer needs a pointer to phy layer in order to call
 // interface functions
 void mac_ue_set_phy_interface(MacUE mac, struct PhyUE_s* phy)

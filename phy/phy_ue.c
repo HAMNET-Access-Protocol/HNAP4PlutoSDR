@@ -66,11 +66,27 @@ PhyUE phy_ue_init()
 	phy->rach_try_cnt = 0;
 	phy->userid = -1;
 
-	// Init mutexes etc
-	phy->tx_sync_cond = (pthread_cond_t)PTHREAD_COND_INITIALIZER;
-	phy->tx_sync_lock = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER;
-
     return phy;
+}
+
+void phy_ue_destroy(PhyUE phy)
+{
+	phy_common_destroy(phy->common);
+	ofdmframegen_destroy(phy->fg);
+	ofdmframesync_destroy(phy->fs);
+
+	for (int i=0; i<2; i++) {
+		free(phy->dlslot_assignments[i]);
+		free(phy->ulslot_assignments[i]);
+		free(phy->ulctrl_assignments[i]);
+		free(phy->ul_symbol_alloc[i]);
+	}
+	free(phy->dlslot_assignments);
+	free(phy->ulslot_assignments);
+	free(phy->ulctrl_assignments);
+	free(phy->ul_symbol_alloc);
+
+	free(phy);
 }
 
 // Sets the callback function that is called after a phy slot was received
@@ -314,7 +330,7 @@ void phy_ue_create_assoc_request(PhyUE phy, float complex* txbuf_time)
 	// modulate signal
 	uint written_samps = 0;
 	float complex subcarriers[NFFT];
-	for (int i=0; i<=NFFT; i++) {
+	for (int i=0; i<NFFT; i++) {
 		if (common->pilot_sc[i] == OFDMFRAME_SCTYPE_DATA) {
 			modem_modulate(common->mcs_modem[mcs],(uint)repacked_b[written_samps++], &subcarriers[i]);
 		}
