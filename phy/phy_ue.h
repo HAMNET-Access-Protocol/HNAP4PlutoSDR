@@ -10,6 +10,7 @@
 
 #include "phy_common.h"
 #include "../platform/platform.h"
+#include <pthread.h>
 
 typedef enum {NO_SYNC, HAS_SYNC} phy_states;
 
@@ -58,6 +59,10 @@ struct PhyUE_s {
 	int rach_try_cnt;
 	// assigned userid
 	int userid;
+
+	//define mutex and condition object to run slot processing in separate thread
+	pthread_cond_t* rx_slot_signal;
+	uint rx_slot_nr;
 };
 
 typedef struct PhyUE_s* PhyUE;
@@ -66,6 +71,7 @@ typedef struct PhyUE_s* PhyUE;
 PhyUE phy_ue_init();
 void phy_ue_destroy(PhyUE phy);
 void phy_ue_set_mac_interface(PhyUE phy, void (*mac_rx_cb)(struct MacUE_s*, LogicalChannel), struct MacUE_s* mac);
+void phy_ue_set_rx_slot_th_signal(PhyUE phy, pthread_cond_t* cond);
 
 
 /************* MAC INTERFACE FUNCTIONS *************************/
@@ -79,7 +85,7 @@ int phy_map_ulctrl(PhyUE phy, LogicalChannel chan, uint subframe, uint8_t slot_n
 
 // PHY slot processing
 int phy_ue_proc_dlctrl(PhyUE phy);
-
+void phy_ue_proc_slot(PhyUE phy, uint slotnr);
 
 /***************** PHY RX/TX FUNCTIONS *****************************/
 int phy_ue_initial_sync(PhyUE phy, float complex* rxbuf_time, uint num_samples);

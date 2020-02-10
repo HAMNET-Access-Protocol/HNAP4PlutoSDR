@@ -66,6 +66,11 @@ PhyUE phy_ue_init()
 	phy->rach_try_cnt = 0;
 	phy->userid = -1;
 
+	// receiving a slot (demod, fec decode, interleaver) will be handled in a
+	// separate thread
+	phy->rx_slot_signal = NULL;
+	phy->rx_slot_nr = 0;
+
     return phy;
 }
 
@@ -101,6 +106,12 @@ void phy_ue_set_mac_interface(PhyUE phy, void (*mac_rx_cb)(struct MacUE_s*, Logi
 void phy_ue_set_mcs_dl(PhyUE phy, uint mcs)
 {
 	phy->mcs_dl = mcs;
+}
+
+// Set the condition which is used to signal the slot processing thread
+void phy_ue_set_rx_slot_th_signal(PhyUE phy, pthread_cond_t* cond)
+{
+	phy->rx_slot_signal = cond;
 }
 
 // Searches for the initial sync sequence
@@ -198,28 +209,29 @@ int phy_ue_proc_dlctrl(PhyUE phy)
 // Decode a PHY dl slot and call the MAC callback function
 void phy_ue_proc_slot(PhyUE phy, uint slotnr)
 {
+	uint mcs = phy->mcs_dl;
 	PhyCommon common = phy->common;
 	if (phy->dlslot_assignments[common->rx_subframe%2][slotnr] == 1) {
 
-		uint32_t blocksize = get_tbs_size(common, phy->mcs_dl);
+		uint32_t blocksize = get_tbs_size(common, mcs);
 
-		uint buf_len = 8*fec_get_enc_msg_length(common->mcs_fec_scheme[phy->mcs_dl],blocksize/8);
+		uint buf_len = 8*fec_get_enc_msg_length(common->mcs_fec_scheme[mcs],blocksize/8);
 		uint8_t* demod_buf = malloc(buf_len);
 
 		// demodulate signal
 		uint written_samps = 0;
 		uint first_symb = DLCTRL_LEN+2+(SLOT_LEN+1)*slotnr;
 		uint last_symb = DLCTRL_LEN+2+(SLOT_LEN+1)*(slotnr+1)-2;
-		phy_demod_soft(common, 0, NFFT-1, first_symb, last_symb, phy->mcs_dl,
+		phy_demod_soft(common, 0, NFFT-1, first_symb, last_symb, mcs,
 					   demod_buf, buf_len, &written_samps);
 
 		// decoding
 		uint8_t* interleaved_b = malloc(blocksize/8);
-		fec_decode_soft(common->mcs_fec[phy->mcs_dl], blocksize/8, demod_buf, interleaved_b);
+		fec_decode_soft(common->mcs_fec[mcs], blocksize/8, demod_buf, interleaved_b);
 
 		//deinterleaving
 		LogicalChannel chan = lchan_create(blocksize/8,CRC16);
-		interleaver_decode(common->mcs_interlvr[phy->mcs_dl],interleaved_b,chan->data);
+		interleaver_decode(common->mcs_interlvr[mcs],interleaved_b,chan->data);
 
 #ifdef PHY_TEST_BER
 	uint32_t num_biterr = 0;
@@ -257,19 +269,43 @@ int _ue_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd)
 		break;
 	case DLCTRL_LEN+1+(SLOT_LEN+1):
 		// finished receiving one of the dl data slots
+#ifdef USE_RX_SLOT_THREAD
+		phy->rx_slot_nr = 0;
+		LOG_SFN_PHY(DEBUG,"start slot proc\n");
+		pthread_cond_signal(phy->rx_slot_signal);
+#else
 		phy_ue_proc_slot(phy,0);
+#endif
 		break;
 	case DLCTRL_LEN+1+(SLOT_LEN+1)*2:
 		// finished receiving one of the dl data slots
+#ifdef USE_RX_SLOT_THREAD
+		phy->rx_slot_nr = 1;
+		LOG_SFN_PHY(DEBUG,"start slot proc\n");
+		pthread_cond_signal(phy->rx_slot_signal);
+#else
 		phy_ue_proc_slot(phy,1);
+#endif
 		break;
 	case DLCTRL_LEN+1+(SLOT_LEN+1)*3:
 		// finished receiving one of the dl data slots
+#ifdef USE_RX_SLOT_THREAD
+		phy->rx_slot_nr = 2;
+		LOG_SFN_PHY(DEBUG,"start slot proc\n");
+		pthread_cond_signal(phy->rx_slot_signal);
+#else
 		phy_ue_proc_slot(phy,2);
+#endif
 		break;
 	case DLCTRL_LEN+1+(SLOT_LEN+1)*4:
 		// finished receiving one of the dl data slots
+#ifdef USE_RX_SLOT_THREAD
+		phy->rx_slot_nr = 3;
+		LOG_SFN_PHY(DEBUG,"start slot proc\n");
+		pthread_cond_signal(phy->rx_slot_signal);
+#else
 		phy_ue_proc_slot(phy,3);
+#endif
 		break;
 	default:
 		break;

@@ -15,6 +15,8 @@
 
 #ifdef USE_SIM
 #define PHY_TEST_BER
+#else
+//#define USE_RX_SLOT_THREAD
 #endif
 
 // LO frequency

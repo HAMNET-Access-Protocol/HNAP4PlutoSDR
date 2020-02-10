@@ -22,6 +22,7 @@
 #define UE_RX_CPUID 1
 #define UE_TX_CPUID 1
 #define UE_MAC_CPUID 0
+#define UE_RX_SLOT_CPUID 0
 
 #define SYMBOLS_PER_BUF 2
 #define BUFLEN ((NFFT+CP_LEN)*SYMBOLS_PER_BUF)
@@ -50,6 +51,13 @@ struct mac_th_data_s {
 	pthread_cond_t* scheduler_signal;
 	pthread_mutex_t* scheduler_mutex;
 	MacUE mac;
+};
+
+// struct with args for RX slot thread
+struct rx_slot_th_data_s {
+	PhyUE phy;
+	pthread_cond_t* rx_slot_signal;
+	pthread_mutex_t* rx_slot_mutex;
 };
 
 // Main Thread for UE receive
@@ -199,9 +207,33 @@ void thread_mac_ue_scheduler(struct mac_th_data_s* arg)
 	}
 }
 
+void thread_phy_ue_rx_slot(struct rx_slot_th_data_s* arg)
+{
+	PhyUE phy = arg->phy;
+	pthread_cond_t* cond_signal = arg->rx_slot_signal;
+	pthread_mutex_t* mutex = arg->rx_slot_mutex;
+	struct timespec start, end;
+	double elapsed;
+
+	while (1) {
+		// Wait for signal from UE rx thread
+		pthread_mutex_lock(mutex);
+		pthread_cond_wait(cond_signal, mutex);
+		clock_gettime(CLOCK_MONOTONIC,&start);
+
+		phy_ue_proc_slot(phy,phy->rx_slot_nr);
+
+		pthread_mutex_unlock(mutex);
+		clock_gettime(CLOCK_MONOTONIC,&end);
+		elapsed = (end.tv_sec-start.tv_sec)*1000000.0 +(end.tv_nsec-start.tv_nsec)/1000.0;
+		if (elapsed > 3500)
+			LOG(WARN,"[PHY UE] Timing warn: RX slot processing took %.3fus\n",elapsed);
+	}
+}
+
 int main()
 {
-	pthread_t ue_phy_rx_th, ue_phy_tx_th, ue_mac_th;
+	pthread_t ue_phy_rx_th, ue_phy_tx_th, ue_mac_th, ue_phy_rx_slot_th;
 
 	// Init platform
 #if CLIENT_USE_PLATFORM_SIM
@@ -211,7 +243,7 @@ int main()
 	pluto_set_rxgain(20);
 	pluto_set_tx_freq(LO_FREQ_UL);
 	pluto_set_rx_freq(LO_FREQ_DL);
-	//pluto_start_monitor();
+	pluto_start_monitor();
 #endif
 
 	// Init phy and mac layer
@@ -222,23 +254,44 @@ int main()
 	mac_ue_set_phy_interface(mac, phy);
 
 	// create arguments for MAC scheduler thread
-	pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-	pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
+	pthread_mutex_t mac_mutex = PTHREAD_MUTEX_INITIALIZER;
+	pthread_cond_t mac_cond = PTHREAD_COND_INITIALIZER;
 	struct mac_th_data_s mac_th_data;
 	mac_th_data.mac = mac;
-	mac_th_data.scheduler_mutex = &mutex;
-	mac_th_data.scheduler_signal = &cond;
+	mac_th_data.scheduler_mutex = &mac_mutex;
+	mac_th_data.scheduler_signal = &mac_cond;
 
 	// create arguments for RX thread
 	struct rx_th_data_s rx_th_data;
 	rx_th_data.hw = pluto;
 	rx_th_data.phy = phy;
-	rx_th_data.scheduler_signal = &cond;
+	rx_th_data.scheduler_signal = &mac_cond;
 
 	// create arguments for TX thread
 	struct tx_th_data_s tx_th_data;
 	tx_th_data.hw = pluto;
 	tx_th_data.phy = phy;
+
+	// create arguments for RX slot thread
+	pthread_cond_t rx_slot_cond = PTHREAD_COND_INITIALIZER;
+	pthread_mutex_t rx_slot_mutex = PTHREAD_MUTEX_INITIALIZER;
+	struct rx_slot_th_data_s rx_slot_th_data;
+	rx_slot_th_data.phy = phy;
+	rx_slot_th_data.rx_slot_mutex = &rx_slot_mutex;
+	rx_slot_th_data.rx_slot_signal = &rx_slot_cond;
+	phy_ue_set_rx_slot_th_signal(phy,&rx_slot_cond);
+
+	// start RX slot thread
+	if (pthread_create(&ue_phy_rx_slot_th, NULL, thread_phy_ue_rx_slot, &rx_slot_th_data) !=0) {
+		LOG(ERR,"could not create RX slot processing thread. Abort!\n");
+		exit(EXIT_FAILURE);
+	} else {
+		LOG(INFO,"created RX slot processing thread.\n");
+	}
+	cpu_set_t cpu_set;
+	CPU_ZERO(&cpu_set);
+	CPU_SET(UE_RX_SLOT_CPUID,&cpu_set);
+	pthread_setaffinity_np(ue_phy_rx_slot_th,sizeof(cpu_set_t),&cpu_set);
 
 	// start RX thread
 	if (pthread_create(&ue_phy_rx_th, NULL, thread_phy_ue_rx, &rx_th_data) !=0) {
@@ -247,7 +300,6 @@ int main()
 	} else {
 		LOG(INFO,"created RX thread.\n");
 	}
-	cpu_set_t cpu_set;
 	CPU_ZERO(&cpu_set);
 	CPU_SET(UE_RX_CPUID,&cpu_set);
 	pthread_setaffinity_np(ue_phy_rx_th,sizeof(cpu_set_t),&cpu_set);
@@ -289,11 +341,17 @@ int main()
 	printf("\nMAC Thread CPU mask: ");
 	for (int i=0; i<4; i++)
 		printf("%d ",CPU_ISSET(i, &cpu_set));
+
+	pthread_getaffinity_np(ue_phy_rx_slot_th,sizeof(cpu_set_t),&cpu_set);
+	printf("\nRX slot proc Thread CPU mask: ");
+	for (int i=0; i<4; i++)
+		printf("%d ",CPU_ISSET(i, &cpu_set));
 	printf("\n");
 
-	static int ret[3];
+	static int ret[4];
 	pthread_join(ue_phy_rx_th, &ret[0]);
 	pthread_join(ue_phy_tx_th, &ret[1]);
 	pthread_join(ue_mac_th, &ret[2]);
+	pthread_join(ue_phy_rx_slot_th, &ret[3]);
 	LOG(INFO,"Thread exit codes: RX: %d, TX: %d, MAC: %d\n",ret[0],ret[1],ret[2]);
 }
