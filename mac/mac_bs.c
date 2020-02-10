@@ -243,7 +243,8 @@ int mac_bs_handle_message(MacBS mac, MacMessage msg, uint8_t userID)
 #ifdef MAC_TEST_DELAY
 			uint sfn;
 			memcpy(&sfn, frame->data,sizeof(uint));
-			mac_ul_timestamps[sfn] += global_sfn*SUBFRAME_LEN + global_symbol;
+			if (sfn<num_simulated_subframes)
+				mac_ul_timestamps[sfn] += global_sfn*SUBFRAME_LEN + global_symbol;
 #endif
 			dataframe_destroy(frame);
 		}

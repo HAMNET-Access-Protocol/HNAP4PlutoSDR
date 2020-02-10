@@ -223,10 +223,13 @@ void phy_ue_proc_slot(PhyUE phy, uint slotnr)
 
 #ifdef PHY_TEST_BER
 	uint32_t num_biterr = 0;
-	for (int i=0; i<chan->payload_len;i++)
-		num_biterr += liquid_count_ones(phy_dl[common->rx_subframe%2][slotnr][i]^chan->data[i]);
-	phy_dl_tot_bits += chan->payload_len*8;
-	phy_dl_biterr += num_biterr;
+	// we start calculating ber after subframe 50 to wait that MCS switch happened
+	if (global_sfn>50) {
+		for (int i=0; i<chan->payload_len;i++)
+			num_biterr += liquid_count_ones(phy_dl[common->rx_subframe%2][slotnr][i]^chan->data[i]);
+		phy_dl_tot_bits += chan->payload_len*8;
+		phy_dl_biterr += num_biterr;
+	}
 #endif
 
 		// pass to upper layer

@@ -15,7 +15,6 @@
 #define TX_ENABLE_FILE_LOG 0
 
 #define USE_GSM_MULTIPATH 1
-#define SNR 8
 
 // Struct which stores data necessary for simulation
 // i.e. two buffers and a channel object
@@ -83,7 +82,7 @@ void simulation_connect(platform p, platform remote)
 	remote_data->tx_dest = p_data->rxbuf;
 }
 
-platform platform_init_simulation(uint buflen)
+platform platform_init_simulation(uint buflen, float snr)
 {
 	// Generate platform interface
 	platform sim = malloc(sizeof(struct platform_s));
@@ -106,8 +105,7 @@ platform platform_init_simulation(uint buflen)
     channel_cccf channel = channel_cccf_create();
 
     // AWGN
-    float noise_floor = -60.0;
-    float snr = SNR;
+    float noise_floor = -100.0;
     channel_cccf_add_awgn(channel,noise_floor, snr);
 
     // Multipath
@@ -135,14 +133,14 @@ platform platform_init_simulation(uint buflen)
     uint gsmTUx12c1_len = 18;
     channel_cccf_add_multipath(channel, gsmTUx12c1, gsmTUx12c1_len);
 	#else
-    float complex hc[] = {.1, 1, 0, .1};
+    float complex hc[] = {0, 1, 0, 0};
     uint hc_len = 4;		// number of channel filter taps
     channel_cccf_add_multipath(channel, hc, hc_len);
 	#endif
     // frequency offset
-    float cfo = 50;	// frequency offset in Hertz
+    float cfo = 100;	// frequency offset in Hertz
     float dphi = (2*3.1415*cfo)/256000.0;	//frequency offset in radians/sample
-    float phi = 2;		// phase offset in radians
+    float phi = 0.5;		// phase offset in radians
     channel_cccf_add_carrier_offset(channel, dphi, phi);
 
     // slow-flat fading

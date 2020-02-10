@@ -16,9 +16,10 @@
 #include "test.h"
 
 // size of a mac data frame in bytes [VoIP data + UDP + IP + Ethernet header]
-#define payload_size (20+8+20+0)
+#define payload_size 200//(20+8+20+18)
 // how often mac data frames will be sent in ms
 #define PACKETIZATION_TIME 20
+
 // PHY test variables
 uint8_t phy_ul[FRAME_LEN][4][MAX_SLOT_DATA];
 uint8_t phy_dl[FRAME_LEN][4][MAX_SLOT_DATA];
@@ -46,13 +47,14 @@ uint buflen = NFFT+CP_LEN;
 platform bs;
 platform client;
 
+
 uint get_sim_time_msec()
 {
 	float time =  1000.0*(global_sfn*SUBFRAME_LEN + global_symbol)*(NFFT+CP_LEN)/SAMPLERATE;
 	return time;
 }
 
-int run_simulation(uint num_subframes)
+int run_simulation(uint num_subframes, uint mcs)
 {
 	uint subframe_cnt = 0;
 	global_sfn = 0;
@@ -71,8 +73,12 @@ int run_simulation(uint num_subframes)
 
 	while (subframe_cnt<num_subframes)
 	{
+		// Change MCS at some point
+		if (global_sfn==10 && global_symbol==0)
+			mac_bs_set_mcs(mac_bs,2,mcs,DL);
+
 		// Add some data every 20ms
-		if (get_sim_time_msec() - last_tx > 20) {
+		if (get_sim_time_msec() - last_tx > PACKETIZATION_TIME) {
 			last_tx = get_sim_time_msec();
 			LOG(INFO,"Prepare frame %d\n",packet_id);
 			// add some data to send
@@ -84,8 +90,8 @@ int run_simulation(uint num_subframes)
 				dataframe_destroy(dl_frame);
 			mac_dl_timestamps[packet_id] = -global_sfn*SUBFRAME_LEN - global_symbol;
 			// add some data to send for client
-			MacDataFrame ul_frame = dataframe_create(100);
-			for (int i=0; i<100; i++)
+			MacDataFrame ul_frame = dataframe_create(payload_size);
+			for (int i=0; i<payload_size; i++)
 				ul_frame->data[i] = rand() & 0xFF;
 			memcpy(ul_frame->data,&packet_id,sizeof(uint));
 			mac_ul_timestamps[packet_id] = -global_sfn*SUBFRAME_LEN - global_symbol;
@@ -149,7 +155,7 @@ int run_simulation(uint num_subframes)
 				int new_offset = phy_ue->mac->timing_advance - phy_ue->rx_offset;
 				int diff = new_offset - offset;
 				if (abs(diff)>0) {
-					LOG(INFO,"[Runtime] adapt tx offset. diff: %d old txshift: %d\n",diff, tx_shift);
+					LOG(ERR,"[Runtime] adapt tx offset. diff: %d old txshift: %d\n",diff, tx_shift);
 
 					// if offset shift-diff is <0, we have to skip ofdm symbols
 					while (tx_shift - diff < 0) {
@@ -205,11 +211,11 @@ int run_simulation(uint num_subframes)
 	return 0;
 }
 
-int main()
+void setup_simulation(float snr)
 {
 	// Setup the hardware
-	bs = platform_init_simulation(buflen);
-	client = platform_init_simulation(buflen);
+	bs = platform_init_simulation(buflen, snr);
+	client = platform_init_simulation(buflen, snr);
 	simulation_connect(bs, client);
 
 	// Create PHY and MAC instances
@@ -230,17 +236,73 @@ int main()
 		mac_ul_timestamps[i] = -1;
 	}
 
-	run_simulation(num_simulated_subframes);
+	// init phy measurements
+	phy_ul_tot_bits=0;
+	phy_ul_biterr=0;
+	phy_dl_tot_bits=0;
+	phy_dl_biterr=0;
+}
 
-	FILE* fd = fopen("mac_dl_delays.bin","w");
-	if (fd) {
-		fwrite(mac_dl_timestamps,sizeof(int),num_simulated_subframes,fd);
-		fclose(fd);
+void clean_simulation()
+{
+	phy_bs_destroy(phy_bs);
+	phy_ue_destroy(phy_ue);
+	mac_bs_destroy(mac_bs);
+	mac_ue_destroy(mac_ue);
+	bs->end(bs);
+	client->end(client);
+}
+
+int main()
+{
+	// Arrays to store biterror rates. First index: MCS, second index: SNR
+	double biterr_ul_array[5][40]= {0};
+	double biterr_dl_array[5][40]= {0};
+
+	for (int mcs = 3; mcs<4; mcs++) {
+		for (int snr= 25; snr<26; snr+=1) {
+			printf("Starting simulation with SNR %ddB mcs%d\n",snr,mcs);
+
+			setup_simulation(snr);
+			run_simulation(num_simulated_subframes, mcs);
+			clean_simulation();
+
+			char filename[40];
+			sprintf(filename,"sim/mac_dl_delays_snr%d_mcs%d",snr,mcs);
+			FILE* fd = fopen(filename,"w");
+			if (fd) {
+				fwrite(mac_dl_timestamps,sizeof(int),num_simulated_subframes,fd);
+				fclose(fd);
+			}
+
+			sprintf(filename,"sim/mac_ul_delays_snr%d_mcs%d",snr,mcs);
+			fd = fopen(filename,"w");
+			if (fd) {
+				fwrite(mac_ul_timestamps,sizeof(int),num_simulated_subframes,fd);
+				fclose(fd);
+			}
+
+			//log biterr
+			biterr_ul_array[mcs][snr] = (double)phy_ul_biterr / phy_ul_tot_bits;
+			biterr_dl_array[mcs][snr] = (double)phy_dl_biterr / phy_dl_tot_bits;
+		}
 	}
 
-	fd = fopen("mac_ul_delays.bin","w");
-	if (fd) {
-		fwrite(mac_ul_timestamps,sizeof(int),num_simulated_subframes,fd);
-		fclose(fd);
+	printf("biterr_ul = [");
+	for (int mcs = 0; mcs<5; mcs++) {
+		for (int snr=0; snr<40; snr++) {
+			printf("%.12f ",biterr_ul_array[mcs][snr]);
+		}
+		printf(";");
 	}
+	printf("];\n");
+
+	printf("biterr_dl = [");
+	for (int mcs = 0; mcs<5; mcs++) {
+		for (int snr=0; snr<40; snr++) {
+			printf("%.12f ",biterr_dl_array[mcs][snr]);
+		}
+		printf(";");
+	}
+	printf("];");
 }

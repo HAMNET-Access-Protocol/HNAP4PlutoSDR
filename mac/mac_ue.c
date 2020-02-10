@@ -98,7 +98,8 @@ int mac_ue_handle_message(MacUE mac, MacMessage msg)
 #ifdef MAC_TEST_DELAY
 			static uint sfn=0;
 			memcpy(&sfn,frame->data,sizeof(uint));
-			mac_dl_timestamps[sfn] += global_sfn*SUBFRAME_LEN+global_symbol;
+			if (sfn<num_simulated_subframes)
+				mac_dl_timestamps[sfn] += global_sfn*SUBFRAME_LEN+global_symbol;
 #endif
 			dataframe_destroy(frame);
 		}
