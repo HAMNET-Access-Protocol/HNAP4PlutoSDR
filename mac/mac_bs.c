@@ -407,7 +407,10 @@ void mac_bs_run_scheduler(MacBS mac)
 	if (ue!=NULL) {
 		user_id = ue->userid;
 	}
-	while (slot_idx < MAC_DLDATA_SLOTS) {
+	// assure that the sync slot is not assigned for user traffic
+	uint available_slots = (next_sfn==0) ? (MAC_DLDATA_SLOTS-1):MAC_DLDATA_SLOTS;
+
+	while (slot_idx < available_slots) {
 		if (ue==NULL) {
 			// no active user at all. stop
 			break;
@@ -424,11 +427,6 @@ void mac_bs_run_scheduler(MacBS mac)
 			break; // no other active user found. stop
 		}
 	}
-	// assure that the sync slot is not assigned for user traffic
-	if (next_sfn==0) {
-		mac->dl_data_assignments[MAC_DLDATA_SLOTS-1] = USER_UNUSED;
-	}
-	// TODO assure that no data slot is assigned during RA slot?
 
 	// 4. iterate over each UL slot and assign it
 	// start by disabling all slots
