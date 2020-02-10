@@ -108,11 +108,11 @@ PhyCommon phy_common_init()
     phy->tx_symbol = 0;
 
     // init the interleaver
-    phy->mcs_interlvr[0] = interleaver_create(get_tbs_size(phy,0)/8);
-    phy->mcs_interlvr[1] = interleaver_create(get_tbs_size(phy,1)/8);
-    phy->mcs_interlvr[2] = interleaver_create(get_tbs_size(phy,2)/8);
-    phy->mcs_interlvr[3] = interleaver_create(get_tbs_size(phy,3)/8);
-    phy->mcs_interlvr[4] = interleaver_create(get_tbs_size(phy,4)/8);
+    for (int mcs=0; mcs<NUM_MCS_SCHEMES; mcs++) {
+    	uint payload_size = get_tbs_size(phy,mcs)/8;
+    	uint enc_size = fec_get_enc_msg_length(phy->mcs_fec_scheme[mcs],payload_size);
+        phy->mcs_interlvr[mcs] = interleaver_create(enc_size);
+    }
 
     return phy;
 }
@@ -137,7 +137,7 @@ void phy_common_destroy(PhyCommon phy)
     free(phy->pilot_symbols_tx);
 
     // delete modulator, fec and interleaver objects
-    for (int i=0; i<5; i++) {
+    for (int i=0; i<NUM_MCS_SCHEMES; i++) {
         modem_destroy(phy->mcs_modem[i]);
         fec_destroy(phy->mcs_fec[i]);
         interleaver_destroy(phy->mcs_interlvr[i]);

@@ -17,6 +17,10 @@
 #include <string.h>
 #include <math.h>
 
+// number of defined MCS schemes
+// has to match the number of define schemes in phy_common_init()
+#define NUM_MCS_SCHEMES 5
+
 // log makro to log with subframe number
 #define LOG_SFN_PHY(level, ...) do { if (level>=LOG_LEVEL) \
 	{ printf("[%2d %2d]",phy->common->rx_subframe,phy->common->rx_symbol); \

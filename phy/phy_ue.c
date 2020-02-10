@@ -225,13 +225,13 @@ void phy_ue_proc_slot(PhyUE phy, uint slotnr)
 		phy_demod_soft(common, 0, NFFT-1, first_symb, last_symb, mcs,
 					   demod_buf, buf_len, &written_samps);
 
-		// decoding
-		uint8_t* interleaved_b = malloc(blocksize/8);
-		fec_decode_soft(common->mcs_fec[mcs], blocksize/8, demod_buf, interleaved_b);
-
 		//deinterleaving
+		uint8_t* deinterleaved_b = malloc(buf_len);
+		interleaver_decode_soft(common->mcs_interlvr[phy->mcs_dl],demod_buf,deinterleaved_b);
+
+		// decoding
 		LogicalChannel chan = lchan_create(blocksize/8,CRC16);
-		interleaver_decode(common->mcs_interlvr[mcs],interleaved_b,chan->data);
+		fec_decode_soft(common->mcs_fec[phy->mcs_dl], blocksize/8, deinterleaved_b, chan->data);
 
 #ifdef PHY_TEST_BER
 	uint32_t num_biterr = 0;
@@ -247,7 +247,7 @@ void phy_ue_proc_slot(PhyUE phy, uint slotnr)
 		// pass to upper layer
 		phy->mac_rx_cb(phy->mac, chan);
 
-		free(interleaved_b);
+		free(deinterleaved_b);
 		free(demod_buf);
 
 	}
@@ -530,19 +530,19 @@ int phy_map_ulslot(PhyUE phy, LogicalChannel chan, uint subframe, uint8_t slot_n
 	memcpy(phy_ul[subframe%2][slot_nr], chan->data, chan->payload_len);
 #endif
 
-	//interleaving
-	uint8_t* interleaved_b = malloc(chan->payload_len);
-	interleaver_encode(common->mcs_interlvr[mcs],chan->data,interleaved_b);
-
 	// encode channel
 	uint enc_len = fec_get_enc_msg_length(common->mcs_fec_scheme[mcs],chan->payload_len);
 	uint8_t* enc_b = malloc(enc_len);
-	fec_encode(common->mcs_fec[mcs], blocksize/8, interleaved_b, enc_b);
+	fec_encode(common->mcs_fec[mcs], blocksize/8, chan->data, enc_b);
+
+	//interleaving
+	uint8_t* interleaved_b = malloc(enc_len);
+	interleaver_encode(common->mcs_interlvr[mcs],enc_b, interleaved_b);
 
 	// repack bytes so that each array entry can be mapped to one symbol
 	int num_repacked = ceil(enc_len*8.0/modem_get_bps(common->mcs_modem[mcs]));
 	repacked_b = malloc(num_repacked);
-	liquid_repack_bytes(enc_b,8,enc_len,repacked_b,modem_get_bps(common->mcs_modem[mcs]),num_repacked,&bytes_written);
+	liquid_repack_bytes(interleaved_b,8,enc_len,repacked_b,modem_get_bps(common->mcs_modem[mcs]),num_repacked,&bytes_written);
 
 	uint total_samps = 0;
 	uint first_symb = (SLOT_LEN+1)*slot_nr;
