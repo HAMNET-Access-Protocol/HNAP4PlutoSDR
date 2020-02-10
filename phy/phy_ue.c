@@ -233,6 +233,7 @@ void phy_ue_proc_slot(PhyUE phy, uint slotnr)
 		LogicalChannel chan = lchan_create(blocksize/8,CRC16);
 		fec_decode_soft(common->mcs_fec[phy->mcs_dl], blocksize/8, deinterleaved_b, chan->data);
 
+
 #ifdef PHY_TEST_BER
 	uint32_t num_biterr = 0;
 	// we start calculating ber after subframe 50 to wait that MCS switch happened
