@@ -47,7 +47,6 @@ uint buflen = NFFT+CP_LEN;
 platform bs;
 platform client;
 
-
 uint get_sim_time_msec()
 {
 	float time =  1000.0*(global_sfn*SUBFRAME_LEN + global_symbol)*(NFFT+CP_LEN)/SAMPLERATE;
@@ -74,8 +73,10 @@ int run_simulation(uint num_subframes, uint mcs)
 	while (subframe_cnt<num_subframes)
 	{
 		// Change MCS at some point
-		if (global_sfn==10 && global_symbol==0)
+		if (global_sfn==10 && global_symbol==0) {
 			mac_bs_set_mcs(mac_bs,2,mcs,DL);
+			mac_bs_set_mcs(mac_bs,2,mcs,UL);
+		}
 
 		// Add some data every 20ms
 		if (get_sim_time_msec() - last_tx > PACKETIZATION_TIME) {
@@ -253,56 +254,54 @@ void clean_simulation()
 	client->end(client);
 }
 
-int main()
+int main(int argc, char* argv[])
 {
 	// Arrays to store biterror rates. First index: MCS, second index: SNR
 	double biterr_ul_array[5][40]= {0};
 	double biterr_dl_array[5][40]= {0};
+	int mcs=0;
 
-	for (int mcs = 3; mcs<4; mcs++) {
-		for (int snr= 25; snr<26; snr+=1) {
-			printf("Starting simulation with SNR %ddB mcs%d\n",snr,mcs);
-
-			setup_simulation(snr);
-			run_simulation(num_simulated_subframes, mcs);
-			clean_simulation();
-
-			char filename[40];
-			sprintf(filename,"sim/mac_dl_delays_snr%d_mcs%d",snr,mcs);
-			FILE* fd = fopen(filename,"w");
-			if (fd) {
-				fwrite(mac_dl_timestamps,sizeof(int),num_simulated_subframes,fd);
-				fclose(fd);
-			}
-
-			sprintf(filename,"sim/mac_ul_delays_snr%d_mcs%d",snr,mcs);
-			fd = fopen(filename,"w");
-			if (fd) {
-				fwrite(mac_ul_timestamps,sizeof(int),num_simulated_subframes,fd);
-				fclose(fd);
-			}
-
-			//log biterr
-			biterr_ul_array[mcs][snr] = (double)phy_ul_biterr / phy_ul_tot_bits;
-			biterr_dl_array[mcs][snr] = (double)phy_dl_biterr / phy_dl_tot_bits;
-		}
+	if (argc==2) {
+		char * ptr;
+		mcs = strtol(argv[1],&ptr, 10);
 	}
 
-	printf("biterr_ul = [");
-	for (int mcs = 0; mcs<5; mcs++) {
-		for (int snr=0; snr<40; snr++) {
-			printf("%.12f ",biterr_ul_array[mcs][snr]);
+	for (int snr= 5; snr<40; snr+=1) {
+		printf("Starting simulation with SNR %ddB mcs%d\n",snr,mcs);
+
+		setup_simulation(snr);
+		run_simulation(num_simulated_subframes, mcs);
+		clean_simulation();
+
+		char filename[40];
+		sprintf(filename,"sim/mac_dl_delays_mcs%d_snr%d",mcs,snr);
+		FILE* fd = fopen(filename,"w");
+		if (fd) {
+			fwrite(mac_dl_timestamps,sizeof(int),num_simulated_subframes,fd);
+			fclose(fd);
 		}
-		printf(";");
+
+		sprintf(filename,"sim/mac_ul_delays_mcs%d_snr%d",mcs,snr);
+		fd = fopen(filename,"w");
+		if (fd) {
+			fwrite(mac_ul_timestamps,sizeof(int),num_simulated_subframes,fd);
+			fclose(fd);
+		}
+
+		//log biterr
+		biterr_ul_array[mcs][snr] = (double)phy_ul_biterr / phy_ul_tot_bits;
+		biterr_dl_array[mcs][snr] = (double)phy_dl_biterr / phy_dl_tot_bits;
+	}
+
+	printf("biterr_ul(%d,:) = [",mcs+1);
+	for (int snr=0; snr<40; snr++) {
+		printf("%.12f ",biterr_ul_array[mcs][snr]);
 	}
 	printf("];\n");
 
-	printf("biterr_dl = [");
-	for (int mcs = 0; mcs<5; mcs++) {
-		for (int snr=0; snr<40; snr++) {
-			printf("%.12f ",biterr_dl_array[mcs][snr]);
-		}
-		printf(";");
+	printf("biterr_dl(%d,:) = [",mcs+1);
+	for (int snr=0; snr<40; snr++) {
+		printf("%.12f ",biterr_dl_array[mcs][snr]);
 	}
 	printf("];");
 }

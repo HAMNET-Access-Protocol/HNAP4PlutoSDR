@@ -10,10 +10,8 @@
 
 #include "../config.h"
 
-// Uncomment when compiling for simulation
-//#define USE_SIM
 
-#ifdef USE_SIM
+#ifdef SIM_LOG_BER
 #define PHY_TEST_BER
 #else
 //#define USE_RX_SLOT_THREAD

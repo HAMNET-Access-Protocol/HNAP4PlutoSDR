@@ -23,7 +23,7 @@
 #define MAX_USER 16
 
 // enable MAC testing
-#ifdef USE_SIM
+#ifdef SIM_LOG_DELAY
 #define MAC_TEST_DELAY
 #endif
 
