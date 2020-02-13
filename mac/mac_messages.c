@@ -386,6 +386,8 @@ MacMessage mac_msg_parse(uint8_t* buf, uint buflen, uint8_t ul_flag)
 		break;
 	default:
 		LOG(WARN,"[MAC MSG] Parse: undefined msg type!\n");
+		mac_msg_destroy(genericmsg);
+		return NULL;
 	}
 
 	// if this is a UL/DL data message, we have to add the payload

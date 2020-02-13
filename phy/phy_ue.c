@@ -103,9 +103,13 @@ void phy_ue_set_mac_interface(PhyUE phy, void (*mac_rx_cb)(struct MacUE_s*, Logi
 }
 
 // Setter function for Downlink MCS
-void phy_ue_set_mcs_dl(PhyUE phy, uint mcs)
+int phy_ue_set_mcs_dl(PhyUE phy, uint mcs)
 {
-	phy->mcs_dl = mcs;
+	if (mcs<NUM_MCS_SCHEMES) {
+		phy->mcs_dl = mcs;
+		return 1;
+	}
+	return 0;
 }
 
 // Set the condition which is used to signal the slot processing thread

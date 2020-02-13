@@ -65,6 +65,11 @@ int mac_ue_handle_message(MacUE mac, MacMessage msg)
 		}
 		break;
 	case dl_mcs_info:
+		if (msg->hdr.DLMCSInfo.mcs >= NUM_MCS_SCHEMES) {
+			LOG(WARN,"[MAC UE] received erroneous dl mcs info. MCS %d\n",msg->hdr.DLMCSInfo.mcs);
+			mac_msg_destroy(msg);
+			return 0;
+		}
 		response = mac_msg_create_control_ack(msg->hdr.DLMCSInfo.ctrl_id);
 		if(!ringbuf_put(mac->msg_control_queue,response)) {
 			LOG(ERR,"[MAC UE] cannot ack dl_mcs_info msg!\n");
@@ -76,6 +81,11 @@ int mac_ue_handle_message(MacUE mac, MacMessage msg)
 		}
 		break;
 	case ul_mcs_info:
+		if (msg->hdr.ULMCSInfo.mcs >= NUM_MCS_SCHEMES) {
+			LOG(WARN,"[MAC UE] received erroneous ul mcs info. MCS %d\n",msg->hdr.ULMCSInfo.mcs);
+			mac_msg_destroy(msg);
+			return 0;
+		}
 		response = mac_msg_create_control_ack(msg->hdr.ULMCSInfo.ctrl_id);
 		if(!ringbuf_put(mac->msg_control_queue,response)) {
 			LOG(ERR,"[MAC UE] cannot ack ul_mcs_info msg!\n");
@@ -106,6 +116,7 @@ int mac_ue_handle_message(MacUE mac, MacMessage msg)
 		break;
 	default:
 		LOG(WARN,"[MAC UE] unexpected MacMsg ID: %d\n",msg->type);
+		mac_msg_destroy(msg);
 		return 0;
 	}
 	mac_msg_destroy(msg);

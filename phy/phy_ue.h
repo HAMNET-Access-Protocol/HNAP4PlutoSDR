@@ -76,7 +76,7 @@ void phy_ue_set_rx_slot_th_signal(PhyUE phy, pthread_cond_t* cond);
 
 /************* MAC INTERFACE FUNCTIONS *************************/
 // Configuration
-void phy_ue_set_mcs_dl(PhyUE phy, uint mcs);
+int phy_ue_set_mcs_dl(PhyUE phy, uint mcs);
 void phy_ue_reset_symbol_allocation(PhyUE phy, uint subframe);
 
 // PHY data mapping

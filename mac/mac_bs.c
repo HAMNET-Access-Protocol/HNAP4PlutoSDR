@@ -140,7 +140,10 @@ void mac_bs_set_mcs(MacBS mac, uint userid, uint mcs, uint dl_ul)
 		MacMessage msg = mac_msg_create_ul_mcs_info(mcs);
 		ret = ringbuf_put(mac->UE[userid]->msg_control_queue, msg);
 		if (ret) {
-			mac->UE[userid]->ul_mcs_pending = mcs;
+			// For uplink, we immediately switch to new MCS, so that client can
+			// send ACK using new mcs. If no ack is received we switch back to old mcs
+			mac->UE[userid]->ul_mcs_pending = mac->UE[userid]->ul_mcs;
+			mac->UE[userid]->ul_mcs = mcs;
 			mac->UE[userid]->ul_mcs_pending_time = mac->subframe_cnt+MAX_RESPONSE_TIME;
 		}
 	}
@@ -194,12 +197,14 @@ void mac_bs_handle_control_ack(MacBS mac, MacMessage msg, user_s* ue)
 {
 	switch (msg->hdr.ControlAck.acked_ctrl_id) {
 	case dl_mcs_info:
+		LOG(DEBUG,"[MAC BS] received ctrl ack for dl_mcs_info\n");
 		ue->dl_mcs = ue->dl_mcs_pending;
 		ue->dl_mcs_pending_time = 0;
 		break;
 	case ul_mcs_info:
-		ue->ul_mcs = ue->ul_mcs_pending;
+		LOG(DEBUG,"[MAC BS] received ctrl ack for ul_mcs_info\n");
 		ue->ul_mcs_pending_time = 0;
+		// NOTE: mcs has already been switch. We just cancel the timer which reverts the change
 		break;
 	default:
 		LOG(ERR, "[MAC BS] cannot handle control ack for ctrlID %d\n",
@@ -342,8 +347,9 @@ void mac_bs_process_mcs_change(MacBS mac)
 			if (ue->ul_mcs_pending_time>0 &&
 					ue->ul_mcs_pending_time >= mac->subframe_cnt) {
 				// MCS change pending and unacknowledged
-				// resend mcs_info message
-				MacMessage msg = mac_msg_create_ul_mcs_info(ue->ul_mcs_pending);
+				// resend mcs_info message. Note: use ul_mcs since
+				// for uplink we switch mcs immediately
+				MacMessage msg = mac_msg_create_ul_mcs_info(ue->ul_mcs);
 				if (!ringbuf_put(ue->msg_control_queue, msg))
 					mac_msg_destroy(msg);
 			}
@@ -351,6 +357,8 @@ void mac_bs_process_mcs_change(MacBS mac)
 				ue->ul_mcs_pending_time < mac->subframe_cnt) {
 				// MCS change expired without any ack. Cancel it
 				ue->ul_mcs_pending_time = 0;
+				// switch back to old mcs
+				ue->ul_mcs = ue->ul_mcs_pending;
 			}
 		}
 	}
