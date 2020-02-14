@@ -145,6 +145,9 @@ void phy_map_dlctrl(PhyBS phy, uint subframe)
 	// add CRC
 	phy->dlctrl_buf[buf_size].byte = crc_generate_key(LIQUID_CRC_8, (uint8_t*)phy->dlctrl_buf,buf_size);
 
+	// scrambling
+	scramble_data((uint8_t*)phy->dlctrl_buf,buf_size+1);
+
 	// encode data
 	uint enc_len = fec_get_enc_msg_length(common->mcs_fec_scheme[mcs],buf_size+1);
 	uint8_t* buf_enc = malloc(enc_len);

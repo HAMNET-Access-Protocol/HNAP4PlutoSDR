@@ -169,6 +169,8 @@ int phy_ue_proc_dlctrl(PhyUE phy)
 	dlctrl_alloc_t* dlctrl_buf = malloc(dlctrl_size+1);
 	fec_decode_soft(common->mcs_fec[0],dlctrl_size+1, llr_buf, (uint8_t*)dlctrl_buf);
 
+	//unscrambling
+	unscramble_data((uint8_t*)dlctrl_buf,dlctrl_size+1);
 	// verify CRC
 	if (!crc_validate_message(LIQUID_CRC_8, (uint8_t*)dlctrl_buf, dlctrl_size, dlctrl_buf[dlctrl_size].byte)) {
 		LOG(WARN,"[PHY UE] DLCTRL slot could not be decoded!\n");
