@@ -117,10 +117,10 @@ MacMessage mac_frag_get_fragment(MacFrag frag, uint max_frag_size, uint is_uplin
 	// create MAC Message
 	if (is_uplink) {
 		fragment = mac_msg_create_ul_data(data_len,final_flag,frag->seqNr,
-										  frag->fragNr++,frag->curr_frame->data);
+										  frag->fragNr++,frag->curr_frame->data+frag->bytes_sent);
 	} else {
 		fragment = mac_msg_create_dl_data(data_len,final_flag,frag->seqNr,
-										  frag->fragNr++,frag->curr_frame->data);
+										  frag->fragNr++,frag->curr_frame->data+frag->bytes_sent);
 	}
 
 	// update fragmenter state
