@@ -11,6 +11,7 @@
 #include "mac_config.h"
 #include "mac_fragmentation.h"
 #include "mac_common.h"
+#include "tap_dev.h"
 
 #include "../util/ringbuf.h"
 #include <liquid/liquid.h>
@@ -45,6 +46,8 @@ struct MacBS_s {
 	MacFrag broadcast_data_fragmenter;
 	user_s* UE[MAX_USER];
 
+	tap_dev tapdevice;
+
 	uint8_t ul_ctrl_assignments[MAC_ULCTRL_SLOTS];
 	uint8_t ul_data_assignments[MAC_DLDATA_SLOTS];
 	uint8_t dl_data_assignments[MAC_ULDATA_SLOTS];
@@ -78,5 +81,7 @@ int mac_bs_rx_channel(MacBS mac, LogicalChannel chan, uint userid);
 void mac_bs_set_mcs(MacBS mac, uint userid, uint mcs, uint dl_ul);
 int mac_bs_add_txdata(MacBS mac, uint8_t destUserID, MacDataFrame frame);
 void mac_bs_run_scheduler(MacBS mac);
+
+void mac_bs_tap_rx_th(MacBS mac);
 
 #endif /* MAC_MAC_BS_H_ */

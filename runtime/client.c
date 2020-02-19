@@ -23,6 +23,7 @@
 #define UE_TX_CPUID 1
 #define UE_MAC_CPUID 0
 #define UE_RX_SLOT_CPUID 0
+#define UE_TAP_CPUID 0
 
 #define SYMBOLS_PER_BUF 2
 #define BUFLEN ((NFFT+CP_LEN)*SYMBOLS_PER_BUF)
@@ -233,7 +234,7 @@ void thread_phy_ue_rx_slot(struct rx_slot_th_data_s* arg)
 
 int main()
 {
-	pthread_t ue_phy_rx_th, ue_phy_tx_th, ue_mac_th, ue_phy_rx_slot_th;
+	pthread_t ue_phy_rx_th, ue_phy_tx_th, ue_mac_th, ue_tap_th, ue_phy_rx_slot_th;
 
 	// Init platform
 #if CLIENT_USE_PLATFORM_SIM
@@ -325,6 +326,17 @@ int main()
 	CPU_ZERO(&cpu_set);
 	CPU_SET(UE_MAC_CPUID,&cpu_set);
 	pthread_setaffinity_np(ue_mac_th,sizeof(cpu_set_t),&cpu_set);
+
+	// start thread that binds to TAP and receives data
+	if (pthread_create(&ue_tap_th, NULL, mac_ue_tap_rx_th, mac) != 0) {
+		LOG(ERR,"could not create TAP rx thread. Abort!\n");
+		exit(EXIT_FAILURE);
+	} else {
+		LOG(INFO,"created TAP thread.\n");
+	}
+	CPU_ZERO(&cpu_set);
+	CPU_SET(UE_TAP_CPUID,&cpu_set);
+	pthread_setaffinity_np(ue_tap_th,sizeof(cpu_set_t),&cpu_set);
 
 	// printf affinities
 	pthread_getaffinity_np(ue_phy_rx_th,sizeof(cpu_set_t),&cpu_set);

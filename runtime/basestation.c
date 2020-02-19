@@ -18,6 +18,7 @@
 #include <pthread.h>
 #include <time.h>
 #include <sched.h>
+#include <unistd.h>
 
 // Set to 1 in order to use the simulated platform
 #define BS_USE_PLATFORM_SIM 0
@@ -32,6 +33,7 @@
 #define BS_RX_CPUID 1
 #define BS_TX_CPUID 1
 #define BS_MAC_CPUID 0
+#define BS_TAP_CPUID 0
 
 // struct holds arguments for RX thread
 struct rx_th_data_s {
@@ -150,14 +152,17 @@ void* thread_mac_bs_scheduler(struct mac_th_data_s* arg)
 
 		// add some data to send
 #if BS_SEND_ENABLE
-		MacDataFrame dl_frame = dataframe_create(120);
-		for (int i=0; i<100; i++)
+		uint payload_len = 200;
+		MacDataFrame dl_frame = dataframe_create(payload_len);
+		for (int i=0; i<payload_len; i++)
 			dl_frame->data[i] = rand() & 0xFF;
 		memcpy(dl_frame->data,&subframe_cnt,sizeof(uint));
 		if(!mac_bs_add_txdata(mac, 2, dl_frame)) {
 			dataframe_destroy(dl_frame);
 		}
 #endif
+		if (subframe_cnt==200)
+			mac_bs_set_mcs(mac,2,0,DL);
 		mac_bs_run_scheduler(mac);
 		subframe_cnt++;
 
@@ -169,14 +174,14 @@ void* thread_mac_bs_scheduler(struct mac_th_data_s* arg)
 		pthread_mutex_unlock(mutex);
 		clock_gettime(CLOCK_MONOTONIC, &end);
 		elapsed = (end.tv_sec-start.tv_sec)*1000000.0 +(end.tv_nsec-start.tv_nsec)/1000.0;
-		LOG(INFO,"Prepared frame %d. Time: %.3f\n",subframe_cnt,elapsed);
+		LOG(DEBUG,"Prepared frame %d. Time: %.3f\n",subframe_cnt,elapsed);
 
 	}
 }
 
 int main()
 {
-	pthread_t bs_phy_rx_th, bs_phy_tx_th, bs_mac_th;
+	pthread_t bs_phy_rx_th, bs_phy_tx_th, bs_mac_th, bs_tap_th;
 
 	// Init platform
 #if BS_USE_PLATFORM_SIM
@@ -255,6 +260,18 @@ int main()
 	CPU_ZERO(&cpu_set);
 	CPU_SET(BS_MAC_CPUID,&cpu_set);
 	pthread_setaffinity_np(bs_mac_th,sizeof(cpu_set_t),&cpu_set);
+
+	// start TAP receiver thread
+	if (pthread_create(&bs_tap_th, NULL, mac_bs_tap_rx_th, mac) !=0) {
+		LOG(ERR,"could not create TAP receive thread. Abort!\n");
+		exit(EXIT_FAILURE);
+	} else {
+		LOG(INFO,"created TAP thread.\n");
+	}
+	CPU_ZERO(&cpu_set);
+	CPU_SET(BS_TAP_CPUID,&cpu_set);
+	pthread_setaffinity_np(bs_mac_th,sizeof(cpu_set_t),&cpu_set);
+
 
 	// printf affinities
 	pthread_getaffinity_np(bs_phy_rx_th,sizeof(cpu_set_t),&cpu_set);

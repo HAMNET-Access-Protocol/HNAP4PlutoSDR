@@ -12,6 +12,7 @@
 #include "mac_common.h"
 #include "mac_config.h"
 #include "mac_fragmentation.h"
+#include "tap_dev.h"
 #include "../phy/phy_ue.h"
 
 struct MacUE_s {
@@ -24,6 +25,7 @@ struct MacUE_s {
 	ringbuf msg_control_queue;
 	MacFrag fragmenter;
 	MacAssmbl reassembler;
+	tap_dev tapdevice;
 
 	uint8_t ul_ctrl_assignments[MAC_ULCTRL_SLOTS]; //TODO the assignments are already defined in PHY instance
 	uint8_t ul_data_assignments[MAC_ULDATA_SLOTS];
@@ -50,5 +52,7 @@ void mac_ue_run_scheduler(MacUE mac);
 void mac_ue_rx_channel(MacUE mac, LogicalChannel chan);
 int  mac_ue_add_txdata(MacUE mac, MacDataFrame frame);
 int  mac_ue_is_associated(MacUE mac);
+
+void mac_ue_tap_rx_th(MacUE mac);
 
 #endif /* MAC_MAC_UE_H_ */

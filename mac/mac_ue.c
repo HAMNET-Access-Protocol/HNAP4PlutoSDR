@@ -6,6 +6,7 @@
  */
 
 #include "mac_ue.h"
+#include <unistd.h>
 
 #ifdef MAC_TEST_DELAY
 #include "../runtime/test.h"
@@ -18,6 +19,9 @@ MacUE mac_ue_init()
 	mac->msg_control_queue = ringbuf_create(MAC_CTRL_MSG_BUF_SIZE);
 	mac->fragmenter = mac_frag_init();
 	mac->reassembler = mac_assmbl_init();
+#ifdef MAC_ENABLE_TAP_DEV
+	mac->tapdevice = tap_init("tap0");
+#endif
 	return mac;
 }
 
@@ -77,7 +81,7 @@ int mac_ue_handle_message(MacUE mac, MacMessage msg)
 		} else {
 			mac->dl_mcs = msg->hdr.DLMCSInfo.mcs;
 			phy_ue_set_mcs_dl(mac->phy, mac->dl_mcs);
-			LOG(INFO,"[MAC UE] switching to DL MCS %d\n",mac->dl_mcs);
+			LOG(WARN,"[MAC UE] switching to DL MCS %d\n",mac->dl_mcs);
 		}
 		break;
 	case ul_mcs_info:
@@ -92,19 +96,24 @@ int mac_ue_handle_message(MacUE mac, MacMessage msg)
 			mac_msg_destroy(response);
 		} else {
 			mac->ul_mcs = msg->hdr.ULMCSInfo.mcs;
-			LOG(INFO,"[MAC UE] switching to UL MCS %d\n",mac->ul_mcs);
+			LOG(WARN,"[MAC UE] switching to UL MCS %d\n",mac->ul_mcs);
 		}
 		break;
 	case timing_advance:
 		mac->timing_advance = msg->hdr.TimingAdvance.timingAdvance;
-		LOG(INFO,"[MAC UE] Updated TimingAdvance to: %d\n",mac->timing_advance);
+		LOG(WARN,"[MAC UE] Updated TimingAdvance to: %d\n",mac->timing_advance);
 		break;
 	case dl_data:
 		frame = mac_assmbl_reassemble(mac->reassembler, msg);
 		if (frame != NULL) {
 			mac->stats.bytes_rx += frame->size;
 			LOG(INFO,"[MAC UE] received dataframe of %d bytes\n",frame->size);
-			//TODO forward received frame to higher layer
+			//PRINT_BIN(INFO,frame->data,frame->size); LOG(INFO,"\n");
+
+#ifdef MAC_ENABLE_TAP_DEV
+			tap_send(mac->tapdevice,frame->data,frame->size);
+#endif
+
 #ifdef MAC_TEST_DELAY
 			static uint sfn=0;
 			memcpy(&sfn,frame->data,sizeof(uint));
@@ -216,13 +225,13 @@ void mac_ue_run_scheduler(MacUE mac)
 		for (int i=0; i<MAC_ULCTRL_SLOTS; i++) {
 			if (mac->ul_ctrl_assignments[i] == 1) {
 				phy_map_ulctrl(mac->phy,chan,next_sfn,i);
-				LOG_SFN_MAC(INFO,"[MAC UE] map ulctrl %d %d\n",mac->phy->common->tx_subframe,mac->phy->common->tx_symbol);
+				LOG_SFN_MAC(DEBUG,"[MAC UE] map ulctrl %d %d\n",mac->phy->common->tx_subframe,mac->phy->common->tx_symbol);
 				break;
 			}
 		}
 		lchan_destroy(chan);
 	}
-	LOG_SFN_MAC(INFO,"[MAC UE] scheduler done.\n");
+	LOG_SFN_MAC(TRACE,"[MAC UE] scheduler done.\n");
 }
 
 // Main interface function that is called from PHY when receiving a
@@ -260,4 +269,28 @@ int mac_ue_add_txdata(MacUE mac, MacDataFrame frame)
 int mac_ue_is_associated(MacUE mac)
 {
 	return mac->is_associated;
+}
+
+// Thread listens to a tap device and adds data received from tap to mac txqueue
+void mac_ue_tap_rx_th(MacUE mac)
+{
+	// wait until tap device is created
+	while (mac->tapdevice == NULL) {
+		usleep(10000);
+	}
+	LOG(WARN,"[MAC/TAP] start TAP thread\n");
+	while (1) {
+		// wait for packet from TAP
+		tap_receive(mac->tapdevice);
+
+		// forward to MAC
+		if (mac->tapdevice->bytes_rec>0) {
+			MacDataFrame frame = dataframe_create(mac->tapdevice->bytes_rec);
+			memcpy(frame->data,mac->tapdevice->buffer,frame->size);
+			if (!mac_ue_add_txdata(mac, frame)) {
+				dataframe_destroy(frame);
+				LOG(WARN,"[MAC UE] could not forward TAP data to MAC. queue full\n");
+			}
+		}
+	}
 }

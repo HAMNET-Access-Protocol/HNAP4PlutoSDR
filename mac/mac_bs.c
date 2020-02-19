@@ -6,6 +6,7 @@
  */
 #include "mac_bs.h"
 #include "../util/log.h"
+#include <unistd.h>
 
 #ifdef MAC_TEST_DELAY
 #include "../runtime/test.h"
@@ -49,6 +50,10 @@ MacBS mac_bs_init()
 	}
 	macinst->broadcast_ctrl_queue = ringbuf_create(MAC_CTRL_MSG_BUF_SIZE);
 	macinst->broadcast_data_fragmenter = mac_frag_init();
+
+#ifdef MAC_ENABLE_TAP_DEV
+	macinst->tapdevice = tap_init("tap0");
+#endif
 
 	macinst->last_added_rachuserid=-1;
 	macinst->last_added_userid=-1;
@@ -243,7 +248,11 @@ int mac_bs_handle_message(MacBS mac, MacMessage msg, uint8_t userID)
 		if (frame != NULL) {
 			mac->stats.bytes_rx+=frame->size;
 			LOG_SFN_MAC(INFO,"[MAC BS] received frame with %d bytes!\n",frame->size);
-			//TODO forward received frame to higher layer
+			//PRINT_BIN(INFO,frame->data,frame->size); LOG(INFO,"\n");
+#ifdef MAC_ENABLE_TAP_DEV
+			// TODO: create mapping from src Ether address to userid
+			tap_send(mac->tapdevice,frame->data,frame->size);
+#endif
 
 #ifdef MAC_TEST_DELAY
 			uint sfn;
@@ -496,4 +505,28 @@ void mac_bs_run_scheduler(MacBS mac)
 	// update mac subframe counter
 	// TODO: let phy handle this? What if scheduler is not called
 	mac->subframe_cnt++;
+}
+
+void mac_bs_tap_rx_th(MacBS mac)
+{
+	tap_dev dev = mac->tapdevice;
+
+	// wait until tap device is created
+	while (dev == NULL) {
+		usleep(10000);
+	}
+	LOG(WARN,"[MAC/TAP] start TAP thread\n");
+	while (1)
+	{
+		tap_receive(dev);
+
+		if (mac->tapdevice->bytes_rec>0) {
+			MacDataFrame frame = dataframe_create(dev->bytes_rec);
+			memcpy(frame->data,dev->buffer,dev->bytes_rec);
+			if (!mac_bs_add_txdata(mac, 2, frame)) {
+				dataframe_destroy(frame);
+				LOG(ERR, "[MAC BS] could not add Ether frame to MAC\n");
+			}
+		}
+	}
 }
