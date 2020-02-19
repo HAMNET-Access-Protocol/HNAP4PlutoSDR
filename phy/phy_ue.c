@@ -133,7 +133,7 @@ int phy_ue_initial_sync(PhyUE phy, float complex* rxbuf_time, uint num_samples)
 		if (phy->has_synced_once == 0) {
 			// init TX counters once
 			common->tx_active = 1;
-			common->tx_symbol = SUBFRAME_LEN - DL_UL_SHIFT + DL_UL_SHIFT_COMPENSATION; //TODO clarify what happens for offset=0
+			common->tx_symbol = SUBFRAME_LEN - DL_UL_SHIFT + DL_UL_SHIFT_COMP_UE; //TODO clarify what happens for offset=0
 			common->tx_subframe = 0;
 
 			phy->has_synced_once = 1;

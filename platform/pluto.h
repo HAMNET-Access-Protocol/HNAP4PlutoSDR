@@ -11,6 +11,10 @@
 #include "platform.h"
 #include <pthread.h>
 
+// The number of kernel buffers for TX and RX
+#define KERNEL_BUF_TX 4
+#define KERNEL_BUF_RX 6
+
 // Pluto Platform hardware abstraction
 // use init pluto platform, to generate a platform
 // abstraction. See platform.h on how to use it

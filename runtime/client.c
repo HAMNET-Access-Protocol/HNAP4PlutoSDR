@@ -73,7 +73,7 @@ void thread_phy_ue_rx(struct rx_th_data_s* arg)
 	float complex* rxbuf_time = calloc(sizeof(float complex),BUFLEN);
 
 	// read some rxbuffer objects in order to empty rxbuffer queue
-	for (int i=0; i<10; i++)
+	for (int i=0; i<KERNEL_BUF_RX; i++)
 		hw->platform_rx(hw, rxbuf_time);
 
 	// Main RX loop

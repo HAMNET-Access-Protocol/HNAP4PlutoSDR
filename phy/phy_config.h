@@ -63,8 +63,10 @@
 // variable to compensate for this offset at client side.
 // value range: [0 15] ofdm symbols. Otherwise waveform wont work
 #ifndef USE_SIM
-#define DL_UL_SHIFT_COMPENSATION 9
+#define DL_UL_SHIFT_COMP_BS 12
+#define DL_UL_SHIFT_COMP_UE 9
 #else
-#define DL_UL_SHIFT_COMPENSATION 0
+#define DL_UL_SHIFT_COMP_BS 0
+#define DL_UL_SHIFT_COMP_UE 0
 #endif
 #endif /* PHY_CONFIG_H_ */

@@ -259,10 +259,10 @@ platform init_generic(uint buf_len)
 
 	// set buffer size
 	printf("* Configure kernel buffer count for TXRX\n");
-	if(iio_device_set_kernel_buffers_count(tx,4)!=0) {
+	if(iio_device_set_kernel_buffers_count(tx,KERNEL_BUF_TX)!=0) {
 		printf("Error configuring kernel buffer count for TX!\n");
 	}
-	if(iio_device_set_kernel_buffers_count(rx,6)!=0) {
+	if(iio_device_set_kernel_buffers_count(rx,KERNEL_BUF_RX)!=0) {
 		printf("Error configuring kernel buffer count for RX!\n");
 	}
 

@@ -28,6 +28,9 @@
 
 #define BUFLEN ((NFFT+CP_LEN)*2)
 
+// compensate for offset within a symbol in samples
+// is used to properly align UL and DL over the air and compensate for FIR delays
+#define INTER_SYMB_OFFSET 40
 
 // Configure CPU core affinities for the threads
 #define BS_RX_CPUID 1
@@ -69,7 +72,8 @@ void* thread_phy_bs_rx(struct rx_th_data_s* arg)
 
 	// read some rxbuffer objects in order to empty rxbuffer queue
 	pthread_barrier_wait(arg->thread_sync);
-	for (int i=0; i<10; i++)
+	sleep(1); // wait until buffer filled
+	for (int i=0; i<KERNEL_BUF_RX+1; i++)
 		hw->platform_rx(hw, rxbuf_time);
 
 	pthread_barrier_wait(arg->thread_sync);
@@ -103,7 +107,8 @@ void* thread_phy_bs_tx(struct tx_th_data_s* arg)
 	// generate some txbuffers in order to keep the txbuffer queue full
 	bs->platform_tx_prep(bs, txbuf_time, 0, BUFLEN);
 	pthread_barrier_wait(arg->thread_sync);
-	for (int i=0; i<10; i++)
+	sleep(1); // wait until buffer emptied
+	for (int i=0; i<KERNEL_BUF_TX+1; i++)
 		bs->platform_tx_push(bs);
 
 	pthread_barrier_wait(arg->thread_sync);
@@ -112,11 +117,12 @@ void* thread_phy_bs_tx(struct tx_th_data_s* arg)
 	{
 		for (int symbol=0; symbol<SUBFRAME_LEN/2; symbol++) {
 			bs->platform_tx_push(bs);
+			bs->platform_tx_prep(bs, txbuf_time+BUFLEN-INTER_SYMB_OFFSET, 0, INTER_SYMB_OFFSET);
 			clock_gettime(CLOCK_MONOTONIC, &start);
 			phy_bs_write_symbol(phy, txbuf_time);
 			phy_bs_write_symbol(phy, txbuf_time+1*(NFFT+CP_LEN));
 
-			bs->platform_tx_prep(bs, txbuf_time, 0, BUFLEN);
+			bs->platform_tx_prep(bs, txbuf_time, INTER_SYMB_OFFSET, BUFLEN-INTER_SYMB_OFFSET);
 			// run scheduler
 			if (symbol==30) {
 				pthread_cond_signal(scheduler_signal);
