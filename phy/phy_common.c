@@ -252,7 +252,7 @@ void gen_pilot_symbols(PhyCommon phy, uint is_bs)
     // DL: first OFDM symbol of each data slot shall be pilot
     for (int i=0; i<NUM_SLOT; i++) {
     	pilot_dl[DLCTRL_LEN+2+(SLOT_LEN+1)*i] = PILOT;
-    	//pilot_dl[DLCTRL_LEN+2+(SLOT_LEN+1)*i+8] = PILOT; //test w more pilots
+    	pilot_dl[DLCTRL_LEN+2+(SLOT_LEN+1)*i+8] = PILOT; //test w more pilots
     }
 
     // UL: ulctrl slots
@@ -261,12 +261,16 @@ void gen_pilot_symbols(PhyCommon phy, uint is_bs)
     // and first two symbols of uldata slots have pilots
     pilot_ul[0] = PILOT;
     pilot_ul[1] = PILOT;
+    pilot_ul[8] = PILOT;
     pilot_ul[SLOT_LEN+1] = PILOT;
     pilot_ul[SLOT_LEN+2] = PILOT;
+    pilot_ul[SLOT_LEN+9] = PILOT;
     pilot_ul[2*(SLOT_LEN+1)+4] = PILOT;
     pilot_ul[2*(SLOT_LEN+1)+5] = PILOT;
+    pilot_ul[2*(SLOT_LEN+1)+12] = PILOT;
     pilot_ul[3*(SLOT_LEN+1)+4] = PILOT;
     pilot_ul[3*(SLOT_LEN+1)+5] = PILOT;
+    pilot_ul[3*(SLOT_LEN+1)+12] = PILOT;
 }
 
 // generate a more robust pilot distribution within a subframe

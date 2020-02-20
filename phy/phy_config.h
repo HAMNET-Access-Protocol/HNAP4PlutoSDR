@@ -42,8 +42,8 @@
 
 // Two types of pilot allocation schemes are supported:
 // 1. Normal (P=ofdm symbol with pilot, D=symbol without pilot)
-//		UL: P P D D D D D D D D D D D D
-//		DL: P D D D D D D D D D D D D D
+//		UL: P P D D D D D D P D D D D D
+//		DL: P P D D D D D D P D D D D D
 // 2. Robust allocation:
 //		UL: P D P D P D P D P D P D P D
 //		DL: P D P D P D P D P D P D P D
