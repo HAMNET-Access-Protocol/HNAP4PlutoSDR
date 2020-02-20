@@ -38,14 +38,14 @@ PhyUE phy_ue_init()
 	phy->fs = ofdmframesync_create(NFFT, CP_LEN, 0, phy->common->pilot_sc, _ue_rx_symbol_cb, phy);
 
 	// Alloc memory for slot assignments
-	phy->dlslot_assignments = malloc(2*sizeof(uint8_t*));
-	phy->ulslot_assignments = malloc(2*sizeof(uint8_t*));
-	phy->ulctrl_assignments = malloc(2*sizeof(uint8_t*));
+	phy->dlslot_assignments = malloc(2*sizeof(assignment_t*));
+	phy->ulslot_assignments = malloc(2*sizeof(assignment_t*));
+	phy->ulctrl_assignments = malloc(2*sizeof(assignment_t*));
 
 	for (int i=0; i<2; i++) {
-		phy->dlslot_assignments[i] = calloc(sizeof(uint8_t),NUM_SLOT);
-		phy->ulslot_assignments[i] = calloc(sizeof(uint8_t),NUM_SLOT);
-		phy->ulctrl_assignments[i] = calloc(sizeof(uint8_t),NUM_ULCTRL_SLOT);
+		phy->dlslot_assignments[i] = calloc(sizeof(assignment_t),NUM_SLOT);
+		phy->ulslot_assignments[i] = calloc(sizeof(assignment_t),NUM_SLOT);
+		phy->ulctrl_assignments[i] = calloc(sizeof(assignment_t),NUM_ULCTRL_SLOT);
 	}
 
     // buffer for ofdm symbol allocation
@@ -173,7 +173,10 @@ int phy_ue_proc_dlctrl(PhyUE phy)
 	unscramble_data((uint8_t*)dlctrl_buf,dlctrl_size+1);
 	// verify CRC
 	if (!crc_validate_message(LIQUID_CRC_8, (uint8_t*)dlctrl_buf, dlctrl_size, dlctrl_buf[dlctrl_size].byte)) {
-		LOG(WARN,"[PHY UE] DLCTRL slot could not be decoded!\n");
+		LOG(WARN,"[PHY UE] DLCTRL slot could not be decoded! ");
+		for (int i=0; i<dlctrl_size+1; i++)
+			LOG(WARN,"%02x",dlctrl_buf[i].byte);
+		LOG(WARN,"\n");
 		// set dlctrl buf to 0 so that mac will think no slots allocated
 		memset(dlctrl_buf,0,dlctrl_size);
 	}
@@ -183,22 +186,22 @@ int phy_ue_proc_dlctrl(PhyUE phy)
 	uint idx = 0;
 	for (int i=0; i<NUM_SLOT/2; i++) {
 		LOG(DEBUG,"%02x",dlctrl_buf[idx].byte);
-		phy->dlslot_assignments[sfn][2*i  ] = (dlctrl_buf[idx].h4 == phy->userid ||
-											   dlctrl_buf[idx].h4 == USER_BROADCAST) ? 1 : 0;
-		phy->dlslot_assignments[sfn][2*i+1] = (dlctrl_buf[idx].l4 == phy->userid ||
-											   dlctrl_buf[idx].l4 == USER_BROADCAST) ? 1 : 0;
+		phy->dlslot_assignments[sfn][2*i  ] = dlctrl_buf[idx].h4 == phy->userid ? UE_ASSIGNED : NOT_ASSIGNED;
+		phy->dlslot_assignments[sfn][2*i  ] = dlctrl_buf[idx].h4 == USER_BROADCAST ? BRCST_ASSIGNED : phy->dlslot_assignments[sfn][2*i];
+		phy->dlslot_assignments[sfn][2*i+1] = dlctrl_buf[idx].l4 == phy->userid ? UE_ASSIGNED : NOT_ASSIGNED;
+		phy->dlslot_assignments[sfn][2*i+1] = dlctrl_buf[idx].l4 == USER_BROADCAST ? BRCST_ASSIGNED : phy->dlslot_assignments[sfn][2*i+1];
 		idx++;
 	}
 	for (int i=0; i<NUM_SLOT/2; i++) {
 		LOG(DEBUG,"%02x",dlctrl_buf[idx].byte);
-		phy->ulslot_assignments[sfn][2*i  ] = (dlctrl_buf[idx].h4 == phy->userid) ? 1 : 0;
-		phy->ulslot_assignments[sfn][2*i+1] = (dlctrl_buf[idx].l4 == phy->userid) ? 1 : 0;
+		phy->ulslot_assignments[sfn][2*i  ] = (dlctrl_buf[idx].h4 == phy->userid) ? UE_ASSIGNED : NOT_ASSIGNED;
+		phy->ulslot_assignments[sfn][2*i+1] = (dlctrl_buf[idx].l4 == phy->userid) ? UE_ASSIGNED : NOT_ASSIGNED;
 		idx++;
 	}
 	for (int i=0; i<NUM_ULCTRL_SLOT/2; i++) {
 		LOG(DEBUG,"%02x\n",dlctrl_buf[idx].byte);
-		phy->ulctrl_assignments[sfn][2*i  ] = (dlctrl_buf[idx].h4 == phy->userid) ? 1 : 0;
-		phy->ulctrl_assignments[sfn][2*i+1] = (dlctrl_buf[idx].l4 == phy->userid) ? 1 : 0;
+		phy->ulctrl_assignments[sfn][2*i  ] = (dlctrl_buf[idx].h4 == phy->userid) ? UE_ASSIGNED : NOT_ASSIGNED;
+		phy->ulctrl_assignments[sfn][2*i+1] = (dlctrl_buf[idx].l4 == phy->userid) ? UE_ASSIGNED : NOT_ASSIGNED;
 		idx++;
 	}
 
@@ -217,8 +220,10 @@ void phy_ue_proc_slot(PhyUE phy, uint slotnr)
 {
 	uint mcs = phy->mcs_dl;
 	PhyCommon common = phy->common;
-	if (phy->dlslot_assignments[common->rx_subframe%2][slotnr] == 1) {
-
+	assignment_t slot_type = phy->dlslot_assignments[common->rx_subframe%2][slotnr];
+	if (slot_type != NOT_ASSIGNED) {
+		// MCS0 is used for Broadcast. For UE specific traffic use the set mcs
+		uint mcs = (slot_type == UE_ASSIGNED) ? phy->mcs_dl : 0;
 		uint32_t blocksize = get_tbs_size(common, mcs);
 
 		uint buf_len = 8*fec_get_enc_msg_length(common->mcs_fec_scheme[mcs],blocksize/8);
@@ -233,11 +238,11 @@ void phy_ue_proc_slot(PhyUE phy, uint slotnr)
 
 		//deinterleaving
 		uint8_t* deinterleaved_b = malloc(buf_len);
-		interleaver_decode_soft(common->mcs_interlvr[phy->mcs_dl],demod_buf,deinterleaved_b);
+		interleaver_decode_soft(common->mcs_interlvr[mcs],demod_buf,deinterleaved_b);
 
 		// decoding
 		LogicalChannel chan = lchan_create(blocksize/8,CRC16);
-		fec_decode_soft(common->mcs_fec[phy->mcs_dl], blocksize/8, deinterleaved_b, chan->data);
+		fec_decode_soft(common->mcs_fec[mcs], blocksize/8, deinterleaved_b, chan->data);
 
 
 #ifdef PHY_TEST_BER
