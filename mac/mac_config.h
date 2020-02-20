@@ -26,6 +26,11 @@
 // Maximum number of users. Fixed and should not be changed
 #define MAX_USER 16
 
+// MAC MTU size. Should be larger than 1514 in order to support ether
+// forwarding. Max possible value depends on MCS and amount of control data
+// theoretic max for MCS0: 32fragments*60bytes/fragment ~= 1900
+#define MAC_MTU 1550
+
 // enable MAC testing
 #ifdef SIM_LOG_DELAY
 #define MAC_TEST_DELAY

@@ -54,6 +54,10 @@ void mac_frag_destroy(MacFrag frag)
 
 int mac_frag_add_frame(MacFrag frag, MacDataFrame frame)
 {
+	if (frame->size>MAC_MTU) {
+		LOG(WARN,"[MAC FRAG] frame size exceeds MTU! %dbytes\n",frame->size);
+		return 0;
+	}
 	if (ringbuf_isfull(frag->frame_queue)) {
 		LOG(WARN,"[MAC FRAG] cannot enqueue frame. queue full\n");
 		return 0;
