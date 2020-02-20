@@ -24,7 +24,7 @@ extern uint32_t phy_dl_tot_bits;
 extern uint32_t phy_dl_biterr;
 
 // store timestamps when mac payload was sent/received
-#define num_simulated_subframes 3000
+#define num_simulated_subframes 75000
 extern int mac_dl_timestamps[num_simulated_subframes];
 extern int mac_ul_timestamps[num_simulated_subframes];
 

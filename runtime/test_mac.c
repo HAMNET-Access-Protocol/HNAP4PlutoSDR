@@ -73,9 +73,17 @@ int run_simulation(uint num_subframes, uint mcs)
 	while (subframe_cnt<num_subframes)
 	{
 		// Change MCS at some point
-		if (global_sfn==10 && global_symbol==0) {
-			mac_bs_set_mcs(mac_bs,2,mcs,DL);
-			mac_bs_set_mcs(mac_bs,2,mcs,UL);
+		if (1) {
+			//mac_bs_set_mcs(mac_bs,2,mcs,DL);
+			//mac_bs_set_mcs(mac_bs,2,mcs,UL);
+			// hard set instead of signaling.
+			if (mac_bs->UE[2])  {
+				mac_bs->UE[2]->dl_mcs = mcs;
+				mac_bs->UE[2]->ul_mcs = mcs;
+			}
+			phy_ue->mcs_dl = mcs;
+			mac_ue->dl_mcs = mcs;
+			mac_ue->ul_mcs = mcs;
 		}
 
 		// Add some data every 20ms
