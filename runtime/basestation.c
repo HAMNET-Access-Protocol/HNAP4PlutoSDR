@@ -24,7 +24,7 @@
 #define BS_USE_PLATFORM_SIM 0
 
 // set to one if the BS shall send random MAC data frames
-#define BS_SEND_ENABLE 1
+#define BS_SEND_ENABLE 0
 
 #define BUFLEN ((NFFT+CP_LEN)*2)
 

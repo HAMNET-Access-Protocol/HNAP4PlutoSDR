@@ -31,7 +31,7 @@
 // Set to 1 in order to use the simulated platform
 #define CLIENT_USE_PLATFORM_SIM 0
 
-#define CLIENT_SEND_ENABLE 1
+#define CLIENT_SEND_ENABLE 0
 
 
 // struct holds arguments for RX thread
