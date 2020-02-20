@@ -33,6 +33,9 @@ struct MacUE_s {
 
 	uint8_t is_associated;
 
+	long unsigned int last_assignment;	// Subframe in which user was assigned a slot the last time
+										// used to detect disconnection
+	long unsigned int subframe_cnt;
 
 	struct PhyUE_s* phy;
 

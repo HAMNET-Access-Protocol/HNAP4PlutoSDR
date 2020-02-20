@@ -19,6 +19,10 @@
 // Unit: number of subframes
 #define MAX_RESPONSE_TIME 32
 
+// Inactivity timer for removing unresponsive/disconnected users
+// Unit: number of subframes
+#define TMR_USER_INACTIVE 200
+
 // Maximum number of users. Fixed and should not be changed
 #define MAX_USER 16
 

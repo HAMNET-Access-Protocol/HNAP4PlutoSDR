@@ -36,6 +36,9 @@ typedef struct {
 	uint8_t ul_mcs_pending;
 	long int dl_mcs_pending_time;
 	long int ul_mcs_pending_time;
+
+	long unsigned int last_seen; // subframe No in which user has sent sth the last time
+	uint8_t will_end;			 // flag is set to indicate that the connection will be ended
 }user_s;
 
 //forward declaration of phy struct that is needed in mac struct

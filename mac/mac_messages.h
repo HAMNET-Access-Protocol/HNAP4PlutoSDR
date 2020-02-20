@@ -27,6 +27,7 @@ typedef enum {
 	dl_mcs_info,
 	ul_mcs_info,
 	timing_advance,
+	session_end,
 	dl_data = 7,
 	ul_req = 9,
 	channel_quality,
@@ -135,6 +136,7 @@ MacMessage mac_msg_create_associate_response(uint userID, uint rachUserID,
 MacMessage mac_msg_create_dl_mcs_info(uint mcs);
 MacMessage mac_msg_create_ul_mcs_info(uint mcs);
 MacMessage mac_msg_create_timing_advance(uint timingAdvance);
+MacMessage mac_msg_create_session_end();
 MacMessage mac_msg_create_dl_data(uint data_length, uint8_t fragment,
 								  uint8_t seqNr, uint8_t fragNr, uint8_t* data );
 // Uplink

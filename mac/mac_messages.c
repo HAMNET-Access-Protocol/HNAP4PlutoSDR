@@ -24,6 +24,8 @@ int mac_msg_get_hdrlen(CtrlID_e type)
 		return 1;
 	case timing_advance:
 		return 2;
+	case session_end:
+		return 1;
 	case dl_data:
 		return 3;
 	case ul_req:
@@ -118,6 +120,15 @@ MacMessage mac_msg_create_timing_advance(uint timingAdvance)
 
 	msg->ctrl_id = timing_advance & 0b111;
 	msg->timingAdvance = timingAdvance;
+	return genericmsg;
+}
+
+MacMessage mac_msg_create_session_end()
+{
+	MacMessage genericmsg = mac_msg_create_generic(session_end);
+
+	genericmsg->hdr_bin[0] = (session_end & 0b111) << 5;
+
 	return genericmsg;
 }
 
@@ -365,6 +376,8 @@ MacMessage mac_msg_parse(uint8_t* buf, uint buflen, uint8_t ul_flag)
 		break;
 	case timing_advance:
 		mac_msg_parse_timing_advance(genericmsg);
+		break;
+	case session_end:
 		break;
 	case dl_data:
 		mac_msg_parse_dl_data(genericmsg);

@@ -60,6 +60,7 @@ int mac_ue_handle_message(MacUE mac, MacMessage msg)
 		// Check whether we were successfully added
 		if (msg->hdr.AssociateResponse.response == assoc_resp_success) {
 			mac->is_associated = 1;
+			mac->phy->rach_try_cnt = 0; // reset number of association tries
 			mac->userid = msg->hdr.AssociateResponse.userid;
 			LOG_SFN_MAC(INFO,"[MAC UE] successfully associated! userid: %d\n",mac->userid);
 			mac->phy->userid = mac->userid; // Notify phy about the userid. TODO define interface functions?
@@ -102,6 +103,11 @@ int mac_ue_handle_message(MacUE mac, MacMessage msg)
 	case timing_advance:
 		mac->timing_advance = msg->hdr.TimingAdvance.timingAdvance;
 		LOG(WARN,"[MAC UE] Updated TimingAdvance to: %d\n",mac->timing_advance);
+		break;
+	case session_end:
+		// Basestation ended connection. Reset connection state
+		mac->is_associated = 0;
+		mac->timing_advance = 0;
 		break;
 	case dl_data:
 		frame = mac_assmbl_reassemble(mac->reassembler, msg);
@@ -162,6 +168,15 @@ void mac_ue_run_scheduler(MacUE mac)
 	if (mac->is_associated == 0) {
 		return;
 	}
+
+	// Check whether the user hasnt been assigned any slots for a long time
+	// if so we assume that the client disconnected us
+	if (mac->last_assignment + TMR_USER_INACTIVE < mac->subframe_cnt) {
+		mac->is_associated = 0;
+		mac->timing_advance = 0;
+		LOG(WARN,"[MAC UE] assume lost connection to BS!\n");
+	}
+
 	// reset symbol allocation. Will be set during phy modulation
 	phy_ue_reset_symbol_allocation(mac->phy, next_sfn%2);
 
@@ -169,6 +184,7 @@ void mac_ue_run_scheduler(MacUE mac)
 	// TODO check if we can transmit all our data or if we have
 	// to request more slots
 	if (num_assigned>0) {
+		mac->last_assignment = mac->subframe_cnt;
 		for (int i=0; i<MAC_ULDATA_SLOTS; i++) {
 			if (mac->ul_data_assignments[i] == 1) {
 				num_assigned--;
@@ -205,6 +221,8 @@ void mac_ue_run_scheduler(MacUE mac)
 
 	// check for ULctrl slots
 	if (num_slot_assigned(mac->ul_ctrl_assignments, MAC_ULCTRL_SLOTS, 1)>0) {
+		mac->last_assignment = mac->subframe_cnt;
+
 		// check if we have to create ul_req
 		if (queuesize>0) {
 			MacMessage msg = mac_msg_create_ul_req(queuesize);
@@ -226,12 +244,12 @@ void mac_ue_run_scheduler(MacUE mac)
 			if (mac->ul_ctrl_assignments[i] == 1) {
 				phy_map_ulctrl(mac->phy,chan,next_sfn,i);
 				LOG_SFN_MAC(DEBUG,"[MAC UE] map ulctrl %d %d\n",mac->phy->common->tx_subframe,mac->phy->common->tx_symbol);
-				break;
 			}
 		}
 		lchan_destroy(chan);
 	}
 	LOG_SFN_MAC(TRACE,"[MAC UE] scheduler done.\n");
+	mac->subframe_cnt++;
 }
 
 // Main interface function that is called from PHY when receiving a
@@ -239,6 +257,9 @@ void mac_ue_run_scheduler(MacUE mac)
 // the message handler
 void mac_ue_rx_channel(MacUE mac, LogicalChannel chan)
 {
+	// Note that user was assigned some slot
+	mac->last_assignment = mac->subframe_cnt;
+
 	// Verify the CRC
 	if(!lchan_verify_crc(chan)) {
 		LOG_SFN_MAC(WARN, "[MAC UE] lchan CRC invalid. Dropping.\n");

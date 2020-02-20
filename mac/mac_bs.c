@@ -89,7 +89,8 @@ void mac_bs_add_new_ue(MacBS mac, uint8_t rachuserid, uint8_t rach_try_cnt, ofdm
 
 	// if this isnt the first time an association is tried,
 	// check if this is the same user as the last one added
-	if (rach_try_cnt > 0 && mac->last_added_rachuserid==rachuserid) {
+	if (rach_try_cnt > 0 && mac->last_added_rachuserid==rachuserid &&
+			mac->UE[mac->last_added_rachuserid]!=NULL) {
 		userid = mac->last_added_userid;
 		response = mac_msg_create_associate_response(userid,rachuserid, assoc_resp_success);
 		LOG(INFO,"[MAC BS] Double assoc req! rachuserid %d, user ID %d\n",rachuserid,userid);
@@ -113,6 +114,7 @@ void mac_bs_add_new_ue(MacBS mac, uint8_t rachuserid, uint8_t rach_try_cnt, ofdm
 			// create new UE struct
 			mac->UE[userid] = ue_create(userid);
 			mac->UE[userid]->fs = fs;
+			mac->UE[userid]->last_seen = mac->subframe_cnt;
 			response = mac_msg_create_associate_response(userid,rachuserid, assoc_resp_success);
 			LOG(INFO,"[MAC BS] add new user! rachuserid %d, new ID %d\n",rachuserid,userid);
 			// Response will be sent via broadcast channel
@@ -296,6 +298,7 @@ int mac_bs_rx_channel(MacBS mac, LogicalChannel chan, uint userid)
 
 	lchan_destroy(chan);
 	mac->stats.chan_rx_succ++;
+	mac->UE[userid]->last_seen = mac->subframe_cnt;
 	return 1;
 }
 
@@ -331,6 +334,34 @@ void mac_bs_map_slot(MacBS mac, uint subframe, uint slot, user_s* ue)
 	lchan_calc_crc(chan);
     phy_map_dlslot(mac->phy, chan, subframe%2, slot, ue->userid, ue->dl_mcs);
     lchan_destroy(chan);
+}
+
+// Remove users which did not answer to any slot assignments
+// for some time
+void mac_bs_remove_inactive_users(MacBS mac)
+{
+	for (int userid=0; userid<MAX_USER; userid++) {
+		if (mac->UE[userid]!=NULL) {
+			// check if session end started and remove user all remaining data
+			// has been sent
+			if (mac->UE[userid]->will_end && ringbuf_isempty(mac->UE[userid]->msg_control_queue)) {
+				user_s* ue = mac->UE[userid];
+				mac->UE[userid] = NULL;
+				ue_destroy(ue);
+				continue;
+			}
+
+			// check if the user is unresponsive and start connection end procedure
+			if (mac->UE[userid]->last_seen + TMR_USER_INACTIVE < mac->subframe_cnt) {
+				MacMessage msg = mac_msg_create_session_end();
+				if (!ringbuf_put(mac->UE[userid]->msg_control_queue,msg))
+					mac_msg_destroy(msg);
+				// set the flag to end this session
+				mac->UE[userid]->will_end = 1;
+				LOG(WARN,"[MAC BS] user %d is unresponsive! End connection\n",userid);
+			}
+		}
+	}
 }
 
 // Checks whether there are pending or expired MCS changes
@@ -378,11 +409,15 @@ void mac_bs_run_scheduler(MacBS mac)
 	uint slot_idx = 0;
 	uint user_id = 0;
 	uint next_sfn;
+	user_s* ue = NULL;
 
 	LOG(TRACE,"[MAC BS] run scheduler\n");
 
 	// Run MAC procedures
 	mac_bs_process_mcs_change(mac);
+
+	// Run unresponsive user detection
+	mac_bs_remove_inactive_users(mac);
 
 	if (mac->phy->common->tx_symbol==0) {
 		// subframe just started. schedule for this one.
@@ -421,7 +456,7 @@ void mac_bs_run_scheduler(MacBS mac)
 	// assign slots to active users
 	// get first active user
 	// TODO if there is much traffic, users with high userid do not get assignments. Better do round robin over multiple subframes
-	user_s* ue = get_next_user(mac,0);
+	ue = get_next_user(mac,0);
 	if (ue!=NULL) {
 		user_id = ue->userid;
 	}
