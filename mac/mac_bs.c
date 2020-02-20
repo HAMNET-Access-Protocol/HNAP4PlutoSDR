@@ -336,22 +336,12 @@ void mac_bs_map_slot(MacBS mac, uint subframe, uint slot, user_s* ue)
     lchan_destroy(chan);
 }
 
-// Remove users which did not answer to any slot assignments
-// for some time
-void mac_bs_remove_inactive_users(MacBS mac)
+// Find users which did not answer to any slot assignments
+// for some time and start session_end procedure
+void mac_bs_detect_inactive_users(MacBS mac)
 {
 	for (int userid=0; userid<MAX_USER; userid++) {
 		if (mac->UE[userid]!=NULL) {
-			// check if session end started and remove user all remaining data
-			// has been sent
-			if (mac->UE[userid]->will_end && ringbuf_isempty(mac->UE[userid]->msg_control_queue)) {
-				user_s* ue = mac->UE[userid];
-				mac->UE[userid] = NULL;
-				ue_destroy(ue);
-				continue;
-			}
-
-			// check if the user is unresponsive and start connection end procedure
 			if (mac->UE[userid]->last_seen + TMR_USER_INACTIVE < mac->subframe_cnt) {
 				MacMessage msg = mac_msg_create_session_end();
 				if (!ringbuf_put(mac->UE[userid]->msg_control_queue,msg))
@@ -359,6 +349,21 @@ void mac_bs_remove_inactive_users(MacBS mac)
 				// set the flag to end this session
 				mac->UE[userid]->will_end = 1;
 				LOG(WARN,"[MAC BS] user %d is unresponsive! End connection\n",userid);
+			}
+		}
+	}
+}
+
+// check if session end started and remove user all remaining data
+// has been sent
+void mac_bs_remove_inactive_users(MacBS mac)
+{
+	for (int userid=0; userid<MAX_USER; userid++) {
+		if (mac->UE[userid]!=NULL) {
+			if (mac->UE[userid]->will_end && ringbuf_isempty(mac->UE[userid]->msg_control_queue)) {
+				user_s* ue = mac->UE[userid];
+				mac->UE[userid] = NULL;
+				ue_destroy(ue);
 			}
 		}
 	}
@@ -417,7 +422,7 @@ void mac_bs_run_scheduler(MacBS mac)
 	mac_bs_process_mcs_change(mac);
 
 	// Run unresponsive user detection
-	mac_bs_remove_inactive_users(mac);
+	mac_bs_detect_inactive_users(mac);
 
 	if (mac->phy->common->tx_symbol==0) {
 		// subframe just started. schedule for this one.
@@ -428,10 +433,10 @@ void mac_bs_run_scheduler(MacBS mac)
 	}
 
 	// 1. Assign UL ctrl slots
-	// TODO correctly assign UL ctrl slots. This assigns to userids that are inactive
+	// Every active user gets an assignment every 8th subframe
 	uint id = mac->phy->common->tx_subframe *2;
-	mac->ul_ctrl_assignments[0] = id;
-	mac->ul_ctrl_assignments[1] = id+1;
+	mac->ul_ctrl_assignments[0] = mac->UE[id] != NULL ? id : 0;
+	mac->ul_ctrl_assignments[1] = mac->UE[id] != NULL ? id : 0;
 
 	// 2. check Broadcast queue
 	// TODO enable data broadcasting
@@ -536,6 +541,9 @@ void mac_bs_run_scheduler(MacBS mac)
 	LOG(TRACE,"         UL data slots: %4d %4d %4d %4d\n", mac->ul_data_assignments[0],
 			mac->ul_data_assignments[1],mac->ul_data_assignments[2],mac->ul_data_assignments[3]);
 	LOG(TRACE,"         UL ctrl slots: %4d %4d\n", mac->ul_ctrl_assignments[0],mac->ul_ctrl_assignments[1]);
+
+	// Remove inactive users
+	mac_bs_remove_inactive_users(mac);
 
 	// update mac subframe counter
 	// TODO: let phy handle this? What if scheduler is not called

@@ -62,6 +62,9 @@ int mac_ue_handle_message(MacUE mac, MacMessage msg)
 			mac->is_associated = 1;
 			mac->phy->rach_try_cnt = 0; // reset number of association tries
 			mac->userid = msg->hdr.AssociateResponse.userid;
+			mac->dl_mcs = 0;
+			mac->ul_mcs = 0;
+			phy_ue_set_mcs_dl(mac->phy,0);
 			LOG_SFN_MAC(INFO,"[MAC UE] successfully associated! userid: %d\n",mac->userid);
 			mac->phy->userid = mac->userid; // Notify phy about the userid. TODO define interface functions?
 			phy_ue_proc_dlctrl(mac->phy);	// Decode CTRL slot again, since we now know our userid
@@ -108,6 +111,8 @@ int mac_ue_handle_message(MacUE mac, MacMessage msg)
 		// Basestation ended connection. Reset connection state
 		mac->is_associated = 0;
 		mac->timing_advance = 0;
+		mac->phy->userid = -1;
+		mac->userid = 0;
 		break;
 	case dl_data:
 		frame = mac_assmbl_reassemble(mac->reassembler, msg);
