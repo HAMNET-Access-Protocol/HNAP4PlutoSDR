@@ -203,7 +203,7 @@ void thread_mac_ue_scheduler(struct mac_th_data_s* arg)
 
 		clock_gettime(CLOCK_MONOTONIC, &end);
 		elapsed = (end.tv_sec-start.tv_sec)*1000000.0 +(end.tv_nsec-start.tv_nsec)/1000.0;
-		LOG(INFO,"Prepared frame %d. Time: %.3f\n",sched_rounds,elapsed);
+		LOG(DEBUG,"Prepared frame %d. Time: %.3f\n",sched_rounds,elapsed);
 
 	}
 }

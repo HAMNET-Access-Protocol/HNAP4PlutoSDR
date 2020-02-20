@@ -281,7 +281,8 @@ int mac_bs_rx_channel(MacBS mac, LogicalChannel chan, uint userid)
 {
 	// Verify the CRC
 	if(!lchan_verify_crc(chan)) {
-		LOG_SFN_MAC(WARN, "[MAC BS] lchan CRC%d invalid. Dropping %d bytes.\n",8*chan->crc_type, chan->payload_len);
+		LOG_SFN_MAC(WARN, "[MAC BS] lchan CRC%d invalid. Dropping %d bytes from user %d\n",
+						8*chan->crc_type, chan->payload_len, userid);
 		mac->stats.chan_rx_fail++;
 		lchan_destroy(chan);
 		return 0;

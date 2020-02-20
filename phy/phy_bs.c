@@ -66,7 +66,8 @@ void phy_bs_destroy(PhyBS phy)
 {
 	phy_common_destroy(phy->common);
 	ofdmframegen_destroy(phy->fg);
-	ofdmframesync_destroy(phy->fs_rach);
+	if (phy->fs_rach!=NULL)
+		ofdmframesync_destroy(phy->fs_rach);
 
 	free(phy->dlctrl_buf);
 
@@ -264,7 +265,8 @@ void phy_bs_proc_slot(PhyBS phy, uint slotnr)
 	if(!mac_bs_rx_channel(phy->mac,chan, userid)) {
 		// log when crc check failed
 		ofdmframesync fs = mac_bs_get_receiver(phy->mac,userid);
-		LOG_SFN_PHY(DEBUG,"cfo was: %.3fHz\n",ofdmframesync_get_cfo(fs)*SAMPLERATE/6.28);
+		if (fs!=NULL)
+			LOG_SFN_PHY(DEBUG,"cfo was: %.3fHz\n",ofdmframesync_get_cfo(fs)*SAMPLERATE/6.28);
 	}
 	free(deinterleaved_b);
 	free(demod_buf);

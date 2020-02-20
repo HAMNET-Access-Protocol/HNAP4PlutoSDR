@@ -25,7 +25,7 @@ enum {TRACE, DEBUG,INFO,WARN,ERR,NONE};
 		{ printf(__VA_ARGS__); } } while(0);
 
 #define PRINT_BIN(level,data,len) do { if (level>=LOG_LEVEL) \
-						{ for(int i=0; i<len; i++) {printf("%2x",data[i])}}} while(0);
+						{ for(int i=0; i<len; i++) {printf("%02x",data[i]);}}} while(0)
 
 // Log makros for matlab including the log level
 #define LOG_MATLAB_FC(level,x,y,z) do { if (level>=LOG_LEVEL) \
