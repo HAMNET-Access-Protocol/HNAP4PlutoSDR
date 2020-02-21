@@ -30,9 +30,9 @@ struct PhyUE_s {
 	// Set to 1 if the corresponding slot is allocated for this client, 0 otherwise
 	// 1. array index: 0 for even subframes, 1 for uneven subframe
 	// 2. array index: slot index
-	assignment_t** dlslot_assignments;
-	assignment_t** ulslot_assignments;
-	assignment_t** ulctrl_assignments;
+	uint8_t** dlslot_assignments;
+	uint8_t** ulslot_assignments;
+	uint8_t** ulctrl_assignments;
 
 	// store resource allocation on OFDM symbol basis
 	// UE has to refrain from sending if no data is allocated

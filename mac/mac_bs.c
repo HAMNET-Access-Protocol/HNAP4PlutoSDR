@@ -437,7 +437,7 @@ void mac_bs_run_scheduler(MacBS mac)
 	// Every active user gets an assignment every 8th subframe
 	uint id = mac->phy->common->tx_subframe *2;
 	mac->ul_ctrl_assignments[0] = mac->UE[id] != NULL ? id : 0;
-	mac->ul_ctrl_assignments[1] = mac->UE[id] != NULL ? id : 0;
+	mac->ul_ctrl_assignments[1] = mac->UE[id+1] != NULL ? id+1 : 0;
 
 	// 2. check Broadcast queue
 	// TODO enable data broadcasting

@@ -159,7 +159,7 @@ void mac_ue_run_scheduler(MacUE mac)
 {
 	uint queuesize = mac_frag_get_buffersize(mac->fragmenter);
 	uint slotsize = get_tbs_size(mac->phy->common,mac->ul_mcs)/8;
-	int num_assigned = num_slot_assigned(mac->ul_data_assignments,MAC_ULDATA_SLOTS,1);
+	int num_assigned = num_slot_assigned(mac->ul_data_assignments,MAC_ULDATA_SLOTS,UE_ASSIGNED);
 	uint next_sfn = (mac->phy->common->tx_subframe+1) % 2; // subframe for which the scheduler is run
 	// Log schedule
 	LOG(TRACE,"[MAC UE] Scheduler user assignments:\n");
@@ -246,7 +246,7 @@ void mac_ue_run_scheduler(MacUE mac)
 		lchan_calc_crc(chan);
 		// find the ulctrl slot in which we can transmit
 		for (int i=0; i<MAC_ULCTRL_SLOTS; i++) {
-			if (mac->ul_ctrl_assignments[i] == 1) {
+			if (mac->ul_ctrl_assignments[i] == UE_ASSIGNED) {
 				phy_map_ulctrl(mac->phy,chan,next_sfn,i);
 				LOG_SFN_MAC(DEBUG,"[MAC UE] map ulctrl %d %d\n",mac->phy->common->tx_subframe,mac->phy->common->tx_symbol);
 			}
