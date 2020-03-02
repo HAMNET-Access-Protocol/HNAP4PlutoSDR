@@ -33,6 +33,9 @@ int mac_frag_add_frame(MacFrag frag, MacDataFrame frame);
 // Check whether the fragmenter has some data in the queue
 int mac_frag_has_fragment(MacFrag frag);
 
+// Check whether the fragmenter queue is full
+int mac_frag_queue_full(MacFrag frag);
+
 // Get the number of bytes that are currently buffered,
 // i.e. bytes that could be sent
 int mac_frag_get_buffersize(MacFrag frag);

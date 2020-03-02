@@ -77,6 +77,11 @@ int mac_frag_has_fragment(MacFrag frag)
 	}
 }
 
+int mac_frag_queue_full(MacFrag frag)
+{
+	return ringbuf_isfull(frag->frame_queue);
+}
+
 int mac_frag_get_buffersize(MacFrag frag)
 {
 	if (frag->curr_frame) {

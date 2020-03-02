@@ -306,6 +306,11 @@ void mac_ue_tap_rx_th(MacUE mac)
 	}
 	LOG(WARN,"[MAC/TAP] start TAP thread\n");
 	while (1) {
+		// ensure that we we have space to add a packet to the mac queue
+		while (mac_frag_queue_full(mac->fragmenter)) {
+			usleep(10000);
+		}
+
 		// wait for packet from TAP
 		tap_receive(mac->tapdevice);
 
