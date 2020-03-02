@@ -346,6 +346,8 @@ int _ue_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd)
 }
 
 // Create the symbol containing association request data
+// TODO implement backoff algorithm. If two users try to assoc at the same time
+//      they currently interfere with each other in every RA slot
 void phy_ue_create_assoc_request(PhyUE phy, float complex* txbuf_time)
 {
 	PhyCommon common = phy->common;
@@ -365,6 +367,7 @@ void phy_ue_create_assoc_request(PhyUE phy, float complex* txbuf_time)
 	}
 	chan->data[0] = (uint8_t)phy->rachuserid;
 	chan->data[1] = (uint8_t)phy->rach_try_cnt++;
+	chan->writepos = 2;
 	lchan_calc_crc(chan);
 
 	// encode channel

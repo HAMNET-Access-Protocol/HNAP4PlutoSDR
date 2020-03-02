@@ -90,7 +90,7 @@ void mac_bs_add_new_ue(MacBS mac, uint8_t rachuserid, uint8_t rach_try_cnt, ofdm
 	// if this isnt the first time an association is tried,
 	// check if this is the same user as the last one added
 	if (rach_try_cnt > 0 && mac->last_added_rachuserid==rachuserid &&
-			mac->UE[mac->last_added_rachuserid]!=NULL) {
+			mac->UE[mac->last_added_userid]!=NULL) {
 		userid = mac->last_added_userid;
 		response = mac_msg_create_associate_response(userid,rachuserid, assoc_resp_success);
 		LOG(INFO,"[MAC BS] Double assoc req! rachuserid %d, user ID %d\n",rachuserid,userid);
