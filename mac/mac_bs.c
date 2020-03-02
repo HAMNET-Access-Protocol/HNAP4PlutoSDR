@@ -410,6 +410,36 @@ void mac_bs_process_mcs_change(MacBS mac)
 	}
 }
 
+// Check whether the slot that is about to be assigned is colliding with
+// a slot in the other link direction. Need to perform this check since
+// clients are only half-duplex
+// NOTE: we assume that the scheduler first assignes DL slots in a subframe
+// Returns: 1 if there is a overlap, otherwise 0
+int dl_ul_overlap_check(MacBS mac, uint userid, int subframe, int slotnr, int is_dl)
+{
+    if (is_dl) {
+        // ensure that the user is not already mapped to a UL slot at the same time from previous scheduler iteration
+        if (slotnr<2 && userid == mac->ul_data_assignments[(subframe-1)%FRAME_LEN][slotnr+2]){
+            return 1; // there is an overlap
+        }
+    } else { // is uplink
+        // ensure that the user is not already mapped to a DL slot at the same time from current scheduler iteration
+        if (slotnr<2 && userid == mac->dl_data_assignments[subframe][slotnr+2]){
+            return 1; // there is an overlap
+        }
+        // ensure that UL slot does not overlap with RA slot
+        if (subframe==0 && slotnr==1)
+            return 1;
+    }
+    // ensure that the user was not mapped to a ULCTRL slot in previous subframe
+    // user wont be able to decode DLCTRL slot in this case, to he cannot be assigned at all
+    if (userid == mac->ul_ctrl_assignments[(subframe-1)%FRAME_LEN][0] ||
+            userid == mac->ul_ctrl_assignments[(subframe-1)%FRAME_LEN][1]){
+        return 1; // there is an overlap
+    }
+    return 0; // no overlap
+}
+
 void mac_bs_run_scheduler(MacBS mac)
 {
 	uint slot_idx = 0;
@@ -436,8 +466,8 @@ void mac_bs_run_scheduler(MacBS mac)
 	// 1. Assign UL ctrl slots
 	// Every active user gets an assignment every 8th subframe
 	uint id = mac->phy->common->tx_subframe *2;
-	mac->ul_ctrl_assignments[0] = mac->UE[id] != NULL ? id : 0;
-	mac->ul_ctrl_assignments[1] = mac->UE[id+1] != NULL ? id+1 : 0;
+	mac->ul_ctrl_assignments[next_sfn][0] = mac->UE[id] != NULL ? id : 0;
+	mac->ul_ctrl_assignments[next_sfn][1] = mac->UE[id+1] != NULL ? id+1 : 0;
 
 	// 2. check Broadcast queue
 	// TODO enable data broadcasting
@@ -446,7 +476,7 @@ void mac_bs_run_scheduler(MacBS mac)
 		bchan = lchan_create(get_tbs_size(mac->phy->common,0)/8, CRC16);
 		lchan_add_all_msgs(bchan,mac->broadcast_ctrl_queue);
 		// reserve a slot for broadcasting
-		mac->dl_data_assignments[slot_idx] = USER_BROADCAST;
+		mac->dl_data_assignments[next_sfn][slot_idx] = USER_BROADCAST;
 		// Map slot
 		lchan_calc_crc(bchan);
         phy_map_dlslot(mac->phy, bchan, next_sfn%2, slot_idx, USER_BROADCAST, 0);
@@ -457,7 +487,7 @@ void mac_bs_run_scheduler(MacBS mac)
 	// 3. iterate over all DL slots and assign it to the users
 	// start by disabling all slots
 	for (int i=slot_idx; i<MAC_DLDATA_SLOTS; i++) {
-		mac->dl_data_assignments[i] = USER_UNUSED;
+		mac->dl_data_assignments[next_sfn][i] = USER_UNUSED;
 	}
 	// assign slots to active users
 	// get first active user
@@ -477,29 +507,33 @@ void mac_bs_run_scheduler(MacBS mac)
 		// get next user. Round robin allocation
 		ue = get_next_user(mac,ue->userid);
 
-		// check whether the user has DL data or DL ctrl data
-		if (ue_has_dldata(ue)) {
+        // check whether the user has DL data or DL ctrl data and we can assign it
+        if (ue_has_dldata(ue) && !dl_ul_overlap_check(mac,ue->userid,next_sfn,slot_idx,1)) {
 			mac_bs_map_slot(mac,next_sfn,slot_idx,ue);
-			mac->dl_data_assignments[slot_idx++] = ue->userid;
+			mac->dl_data_assignments[next_sfn][slot_idx++] = ue->userid;
 			user_id = ue->userid; // update last active user
 		} else if (ue->userid == user_id) {
-			break; // no other active user found. stop
+            // no active that can be mapped was found. try next slot
+            mac->dl_data_assignments[next_sfn][slot_idx++] = USER_UNUSED;
 		}
 	}
 
 	// 4. iterate over each UL slot and assign it
 	// start by disabling all slots
 	for (int i=0; i<MAC_ULDATA_SLOTS; i++) {
-		mac->ul_data_assignments[i] = USER_UNUSED;
+		mac->ul_data_assignments[next_sfn][i] = USER_UNUSED;
 	}
-	// TODO check that assignment do not overlap with DL slots
 	slot_idx = 0;
 	// get first active user
 	ue = get_next_user(mac,0);
 	if (ue!=NULL) {
 		user_id = ue->userid;
 	}
-	while (slot_idx < MAC_ULDATA_SLOTS) {
+
+    // force RA slot to be not assigned. (Slot 3 in subframe 0)
+    available_slots = (next_sfn==0) ? (MAC_ULDATA_SLOTS-1):MAC_ULDATA_SLOTS;
+
+    while (slot_idx < available_slots) {
 		if (ue==NULL) {
 			// no active user at all. stop
 			break;
@@ -507,41 +541,34 @@ void mac_bs_run_scheduler(MacBS mac)
 		// get next user. Round robin allocation
 		ue = get_next_user(mac,ue->userid);
 
-		// check whether the user has pending ul data
-		if (ue->ul_queue > 0) {
-			mac->ul_data_assignments[slot_idx++] = ue->userid;
+        // check whether the user has pending ul data
+        if (ue->ul_queue > 0 && !dl_ul_overlap_check(mac,ue->userid,next_sfn,slot_idx,0)) {
+			mac->ul_data_assignments[next_sfn][slot_idx++] = ue->userid;
 			user_id = ue->userid; // update last active user
 			// update ul queue len:
 			ue->ul_queue -= get_tbs_size(mac->phy->common, ue->ul_mcs)/8-5;
 			if (ue->ul_queue<0)
 				ue->ul_queue = 0;
 		} else if (ue->userid == user_id) {
-			// no other active user found. assign to
-			// current user even if there is no ul req
-			//mac->ul_data_assignments[slot_idx++] = ue->userid;
-			//user_id = ue->userid; // update last active user
-			break; //Disable proactive assignment
-		}
-	}
-	// force RA slot to be not assigned.
-	if (next_sfn==0) {
-		mac->ul_data_assignments[MAC_ULDATA_SLOTS-1] = USER_UNUSED;
+            // no user has data / can be assigned to this slot. Try next
+            mac->ul_data_assignments[next_sfn][slot_idx++] = USER_UNUSED;
+        }
 	}
 
 	// 5. set slot assignments in PHY
-	phy_assign_dlctrl_dd(mac->phy, mac->dl_data_assignments);
-	phy_assign_dlctrl_ud(mac->phy, next_sfn%2, mac->ul_data_assignments);
-	phy_assign_dlctrl_uc(mac->phy, next_sfn%2, mac->ul_ctrl_assignments);
+	phy_assign_dlctrl_dd(mac->phy, mac->dl_data_assignments[next_sfn]);
+	phy_assign_dlctrl_ud(mac->phy, next_sfn%2, mac->ul_data_assignments[next_sfn]);
+	phy_assign_dlctrl_uc(mac->phy, next_sfn%2, mac->ul_ctrl_assignments[next_sfn]);
 	// write the Downlink control channel to the subcarriers
 	phy_map_dlctrl(mac->phy, next_sfn%2);
 
 	// Log schedule
-	LOG(TRACE,"[MAC BS] Scheduler user assignments:\n");
-	LOG(TRACE,"         DL data slots: %4d %4d %4d %4d\n", mac->dl_data_assignments[0],
-			mac->dl_data_assignments[1],mac->dl_data_assignments[2],mac->dl_data_assignments[3]);
-	LOG(TRACE,"         UL data slots: %4d %4d %4d %4d\n", mac->ul_data_assignments[0],
-			mac->ul_data_assignments[1],mac->ul_data_assignments[2],mac->ul_data_assignments[3]);
-	LOG(TRACE,"         UL ctrl slots: %4d %4d\n", mac->ul_ctrl_assignments[0],mac->ul_ctrl_assignments[1]);
+    LOG(TRACE,"[MAC BS] Scheduler user assignments for subframe %d:\n",next_sfn);
+	LOG(TRACE,"         DL data slots: %4d %4d %4d %4d\n", mac->dl_data_assignments[next_sfn][0],
+			mac->dl_data_assignments[next_sfn][1],mac->dl_data_assignments[next_sfn][2],mac->dl_data_assignments[next_sfn][3]);
+	LOG(TRACE,"         UL data slots: %4d %4d %4d %4d\n", mac->ul_data_assignments[next_sfn][0],
+			mac->ul_data_assignments[next_sfn][1],mac->ul_data_assignments[next_sfn][2],mac->ul_data_assignments[next_sfn][3]);
+	LOG(TRACE,"         UL ctrl slots: %4d %4d\n", mac->ul_ctrl_assignments[next_sfn][0],mac->ul_ctrl_assignments[next_sfn][1]);
 
 	// Remove inactive users
 	mac_bs_remove_inactive_users(mac);

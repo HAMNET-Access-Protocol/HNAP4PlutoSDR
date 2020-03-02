@@ -51,9 +51,9 @@ struct MacBS_s {
 
 	tap_dev tapdevice;
 
-	uint8_t ul_ctrl_assignments[MAC_ULCTRL_SLOTS];
-	uint8_t ul_data_assignments[MAC_DLDATA_SLOTS];
-	uint8_t dl_data_assignments[MAC_ULDATA_SLOTS];
+	uint8_t ul_ctrl_assignments[FRAME_LEN][MAC_ULCTRL_SLOTS];
+	uint8_t ul_data_assignments[FRAME_LEN][MAC_DLDATA_SLOTS];
+	uint8_t dl_data_assignments[FRAME_LEN][MAC_ULDATA_SLOTS];
 
 	struct PhyBS_s* phy;
 
