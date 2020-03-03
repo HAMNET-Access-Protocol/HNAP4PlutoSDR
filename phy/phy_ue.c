@@ -96,7 +96,7 @@ void phy_ue_destroy(PhyUE phy)
 
 // Sets the callback function that is called after a phy slot was received
 // and the Mac UE instance
-void phy_ue_set_mac_interface(PhyUE phy, void (*mac_rx_cb)(struct MacUE_s*, LogicalChannel), struct MacUE_s* mac)
+void phy_ue_set_mac_interface(PhyUE phy, void (*mac_rx_cb)(struct MacUE_s*, LogicalChannel, uint), struct MacUE_s* mac)
 {
 	phy->mac_rx_cb = mac_rx_cb;
 	phy->mac = mac;
@@ -257,7 +257,7 @@ void phy_ue_proc_slot(PhyUE phy, uint slotnr)
 #endif
 
 		// pass to upper layer
-		phy->mac_rx_cb(phy->mac, chan);
+        phy->mac_rx_cb(phy->mac, chan, (slot_type==BRCST_ASSIGNED) ? 1:0);
 
 		free(deinterleaved_b);
 		free(demod_buf);

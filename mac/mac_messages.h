@@ -48,6 +48,7 @@ typedef struct {
 	uint32_t rachuserid :4;
 	uint32_t response :3;
 	uint32_t protoVersion : 2;
+    uint32_t timing_advance : 8;
 } MacAssociateResponse;
 
 typedef struct {
@@ -132,7 +133,7 @@ int mac_msg_get_hdrlen(CtrlID_e type);
 //// Functions for creating/destroying MAC messages ////
 // Downlink
 MacMessage mac_msg_create_associate_response(uint userID, uint rachUserID,
-											 uint response);
+                                             uint response, uint timing_advance);
 MacMessage mac_msg_create_dl_mcs_info(uint mcs);
 MacMessage mac_msg_create_ul_mcs_info(uint mcs);
 MacMessage mac_msg_create_timing_advance(uint timingAdvance);

@@ -44,7 +44,7 @@ struct PhyUE_s {
 	uint mcs_dl;
 
 	// MAC layer function that will be called when a slot was received
-	void (*mac_rx_cb)(struct MacUE_s*, LogicalChannel);
+    void (*mac_rx_cb)(struct MacUE_s*, LogicalChannel, uint is_broadcast);
 	struct MacUE_s* mac;	// Pointer to MAC layer. Needed to call mac interface function
 
 	// old cfo estimate for filtering
@@ -72,8 +72,8 @@ typedef struct PhyUE_s* PhyUE;
 /************ GENERAL PHY CONFIG FUNCTIONS **********************/
 PhyUE phy_ue_init();
 void phy_ue_destroy(PhyUE phy);
-void phy_ue_set_mac_interface(PhyUE phy, void (*mac_rx_cb)(struct MacUE_s*, LogicalChannel), struct MacUE_s* mac);
 void phy_ue_set_rx_slot_th_signal(PhyUE phy, pthread_cond_t* cond);
+void phy_ue_set_mac_interface(PhyUE phy, void (*mac_rx_cb)(struct MacUE_s*, LogicalChannel, uint), struct MacUE_s* mac);
 
 
 /************* MAC INTERFACE FUNCTIONS *************************/

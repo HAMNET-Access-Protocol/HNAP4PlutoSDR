@@ -15,6 +15,7 @@
 
 #include "../util/ringbuf.h"
 #include <liquid/liquid.h>
+#include <sys/queue.h>
 #include "../phy/phy_bs.h"
 
 enum {DL=0, UL};
@@ -44,6 +45,14 @@ typedef struct {
 //forward declaration of phy struct that is needed in mac struct
 struct PhyBS_s;
 
+// Struct for linked list that contains etheraddr to userid mapping
+SLIST_HEAD(slisthead, entry);
+struct entry {
+    char EtherAddr[6];
+    uint userid;
+    SLIST_ENTRY(entry) entries;
+};
+
 struct MacBS_s {
 	ringbuf broadcast_ctrl_queue;
 	MacFrag broadcast_data_fragmenter;
@@ -58,6 +67,9 @@ struct MacBS_s {
 	struct PhyBS_s* phy;
 
 	MACstat_s stats;
+
+    // Store mapping of EtherAddr to userid
+    struct slisthead etheraddr_map;
 
 	int last_added_rachuserid;
 	int last_added_userid;

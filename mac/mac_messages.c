@@ -17,7 +17,7 @@ int mac_msg_get_hdrlen(CtrlID_e type)
 {
 	switch (type) {
 	case associate_response:
-		return 2;
+        return 3;
 	case dl_mcs_info:
 		return 1;
 	case ul_mcs_info:
@@ -63,7 +63,7 @@ MacMessage mac_msg_create_generic(CtrlID_e type)
 /* Mac Message functinons */
 
 MacMessage mac_msg_create_associate_response(uint userID, uint rachUserID,
-												uint response)
+                                                uint response, uint timing_advance)
 {
 	MacMessage genericmsg = mac_msg_create_generic(associate_response);
 	MacAssociateResponse* msg = &genericmsg->hdr.AssociateResponse;
@@ -74,12 +74,14 @@ MacMessage mac_msg_create_associate_response(uint userID, uint rachUserID,
 	genericmsg->hdr_bin[1] = (rachUserID & 0b111) << 5;
 	genericmsg->hdr_bin[1] |= (response & 0b111) << 2;
 	genericmsg->hdr_bin[1] |= (PROTO_VERSION & 0b11);
+    genericmsg->hdr_bin[2] = timing_advance & 0xff;
 
 	msg->ctrl_id = associate_response & 0b111;
 	msg->userid = userID;
 	msg->rachuserid = rachUserID;
 	msg->response = response;
 	msg->protoVersion = PROTO_VERSION;
+    msg->timing_advance = timing_advance & 0xff;
 	return genericmsg;
 }
 
@@ -267,6 +269,7 @@ void mac_msg_parse_associate_response(MacMessage msg)
 											| (msg->hdr_bin[1] & 0b11100000) >> 5;
 	msg->hdr.AssociateResponse.response = (msg->hdr_bin[1] & 0b11100) >>2;
 	msg->hdr.AssociateResponse.protoVersion = msg->hdr_bin[1] & 0b11;
+    msg->hdr.AssociateResponse.timing_advance = msg->hdr_bin[2];
 }
 
 void mac_msg_parse_dl_mcs_info(MacMessage msg)

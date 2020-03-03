@@ -19,6 +19,7 @@ MacUE mac_ue_init()
 	mac->msg_control_queue = ringbuf_create(MAC_CTRL_MSG_BUF_SIZE);
 	mac->fragmenter = mac_frag_init();
 	mac->reassembler = mac_assmbl_init();
+    mac->reassembler_brcst = mac_assmbl_init();
 #ifdef MAC_ENABLE_TAP_DEV
 	mac->tapdevice = tap_init("tap0");
 #endif
@@ -45,7 +46,7 @@ void mac_ue_set_phy_interface(MacUE mac, struct PhyUE_s* phy)
 }
 
 // Generic handler for received messages
-int mac_ue_handle_message(MacUE mac, MacMessage msg)
+int mac_ue_handle_message(MacUE mac, MacMessage msg, uint is_broadcast)
 {
 	MacDataFrame frame;
 	MacMessage response;
@@ -64,6 +65,7 @@ int mac_ue_handle_message(MacUE mac, MacMessage msg)
 			mac->userid = msg->hdr.AssociateResponse.userid;
 			mac->dl_mcs = 0;
 			mac->ul_mcs = 0;
+            mac->timing_advance = msg->hdr.AssociateResponse.timing_advance;
 			phy_ue_set_mcs_dl(mac->phy,0);
 			LOG_SFN_MAC(INFO,"[MAC UE] successfully associated! userid: %d\n",mac->userid);
 			mac->phy->userid = mac->userid; // Notify phy about the userid. TODO define interface functions?
@@ -115,10 +117,13 @@ int mac_ue_handle_message(MacUE mac, MacMessage msg)
 		mac->userid = 0;
 		break;
 	case dl_data:
-		frame = mac_assmbl_reassemble(mac->reassembler, msg);
+        if (is_broadcast)
+            frame = mac_assmbl_reassemble(mac->reassembler_brcst, msg);
+        else
+            frame = mac_assmbl_reassemble(mac->reassembler, msg);
 		if (frame != NULL) {
 			mac->stats.bytes_rx += frame->size;
-			LOG(INFO,"[MAC UE] received dataframe of %d bytes\n",frame->size);
+            LOG(INFO,"[MAC UE] received dataframe of %d bytes. brdcst: %d\n",frame->size, is_broadcast);
 			//PRINT_BIN(INFO,frame->data,frame->size); LOG(INFO,"\n");
 
 #ifdef MAC_ENABLE_TAP_DEV
@@ -260,7 +265,7 @@ void mac_ue_run_scheduler(MacUE mac)
 // Main interface function that is called from PHY when receiving a
 // logical channel. Function will extract messages and call
 // the message handler
-void mac_ue_rx_channel(MacUE mac, LogicalChannel chan)
+void mac_ue_rx_channel(MacUE mac, LogicalChannel chan, uint is_broadcast)
 {
 	// Note that user was assigned some slot
 	mac->last_assignment = mac->subframe_cnt;
@@ -278,7 +283,7 @@ void mac_ue_rx_channel(MacUE mac, LogicalChannel chan)
 	do {
 		msg = lchan_parse_next_msg(chan, 0);
 		if (msg!=NULL) {
-			mac_ue_handle_message(mac,msg);
+            mac_ue_handle_message(mac,msg, is_broadcast);
 		}
 	} while (msg != NULL);
 

@@ -55,6 +55,8 @@ MacBS mac_bs_init()
 	macinst->tapdevice = tap_init("tap0");
 #endif
 
+    SLIST_INIT(&macinst->etheraddr_map);
+
 	macinst->last_added_rachuserid=-1;
 	macinst->last_added_userid=-1;
 
@@ -74,6 +76,12 @@ void mac_bs_destroy(MacBS mac)
 	}
 	ringbuf_destroy(mac->broadcast_ctrl_queue);
 	mac_frag_destroy(mac->broadcast_data_fragmenter);
+
+    while (!SLIST_EMPTY(&mac->etheraddr_map)) {
+        struct entry* n1 = SLIST_FIRST(&mac->etheraddr_map);
+        SLIST_REMOVE_HEAD(&mac->etheraddr_map, entries);
+        free(n1);
+    }
 	free(mac);
 }
 
@@ -92,12 +100,11 @@ void mac_bs_add_new_ue(MacBS mac, uint8_t rachuserid, uint8_t rach_try_cnt, ofdm
 	if (rach_try_cnt > 0 && mac->last_added_rachuserid==rachuserid &&
 			mac->UE[mac->last_added_userid]!=NULL) {
 		userid = mac->last_added_userid;
-		response = mac_msg_create_associate_response(userid,rachuserid, assoc_resp_success);
+        mac->UE[userid]->timingadvance = timing_diff;
+        response = mac_msg_create_associate_response(userid,rachuserid, assoc_resp_success, timing_diff);
 		LOG(INFO,"[MAC BS] Double assoc req! rachuserid %d, user ID %d\n",rachuserid,userid);
 		// Response will be sent via broadcast channel
 		ringbuf_put(mac->broadcast_ctrl_queue, response);
-		// Inform the UE of its TA
-		mac_bs_update_timingadvance(mac, userid, timing_diff);
 	} else {
 		// find the first unused userid
 		while((userid<MAX_USER) && ((mac->UE[userid]!=NULL) ||
@@ -107,7 +114,7 @@ void mac_bs_add_new_ue(MacBS mac, uint8_t rachuserid, uint8_t rach_try_cnt, ofdm
 		if (userid==MAX_USER) {
 			// no free userid. generate NAK
 			LOG(INFO,"[MAC BS] add_new_ue: no free userID\n");
-			response = mac_msg_create_associate_response(0,rachuserid, assoc_resp_full);
+            response = mac_msg_create_associate_response(0,rachuserid, assoc_resp_full, 0);
 			// Response will be sent via broadcast channel
 			ringbuf_put(mac->broadcast_ctrl_queue, response);
 		} else {
@@ -115,12 +122,11 @@ void mac_bs_add_new_ue(MacBS mac, uint8_t rachuserid, uint8_t rach_try_cnt, ofdm
 			mac->UE[userid] = ue_create(userid);
 			mac->UE[userid]->fs = fs;
 			mac->UE[userid]->last_seen = mac->subframe_cnt;
-			response = mac_msg_create_associate_response(userid,rachuserid, assoc_resp_success);
+            mac->UE[userid]->timingadvance = timing_diff;
+            response = mac_msg_create_associate_response(userid,rachuserid, assoc_resp_success, timing_diff);
 			LOG(INFO,"[MAC BS] add new user! rachuserid %d, new ID %d\n",rachuserid,userid);
 			// Response will be sent via broadcast channel
 			ringbuf_put(mac->broadcast_ctrl_queue, response);
-			// Inform the UE of its TA
-			mac_bs_update_timingadvance(mac, userid, timing_diff);
 			mac->last_added_userid = userid;
 			mac->last_added_rachuserid = rachuserid;
 		}
@@ -169,15 +175,17 @@ ofdmframesync mac_bs_get_receiver(MacBS mac, uint userid)
 
 int mac_bs_add_txdata(MacBS mac, uint8_t destUserID, MacDataFrame frame)
 {
-	//TODO function arg could be ethernet-MAC packet or sth?
-	user_s* destUser = mac->UE[destUserID];
-
-	if (destUser == NULL) {
+    MacFrag fragmenter = NULL;
+    if (destUserID == USER_BROADCAST) {
+        fragmenter = mac->broadcast_data_fragmenter;
+    } else if (mac->UE[destUserID] != NULL) {
+        fragmenter = mac->UE[destUserID]->fragmenter;
+    } else {
 		LOG(WARN,"[MAC BS] add_txdata: user %d does not exist!\n",destUserID);
 		return 0;
 	}
 
-	uint ret = mac_frag_add_frame(destUser->fragmenter,frame);
+    uint ret = mac_frag_add_frame(fragmenter,frame);
 	if (ret == 0) {
 		LOG(WARN,"[MAC BS] add_txdata: msg queue is full. dropping packet!\n");
 		return 0;
@@ -252,8 +260,24 @@ int mac_bs_handle_message(MacBS mac, MacMessage msg, uint8_t userID)
 			LOG_SFN_MAC(INFO,"[MAC BS] received frame with %d bytes!\n",frame->size);
 			//PRINT_BIN(INFO,frame->data,frame->size); LOG(INFO,"\n");
 #ifdef MAC_ENABLE_TAP_DEV
-			// TODO: create mapping from src Ether address to userid
-			tap_send(mac->tapdevice,frame->data,frame->size);
+            //check if source EtherAddr is already included in our address mapping
+            struct entry *np = NULL;
+            char* EtherSrcAddr = frame->data+6;
+            SLIST_FOREACH(np,&mac->etheraddr_map, entries) {
+                if (strncmp(np->EtherAddr,EtherSrcAddr,6)==0)
+                    break;
+            }
+            if (np==NULL) {
+                // EtherAddr not yet in list, add it
+                np = malloc(sizeof(struct entry));
+                strncpy(np->EtherAddr,EtherSrcAddr,6);
+                np->userid = userID;
+                SLIST_INSERT_HEAD(&mac->etheraddr_map,np,entries);
+                LOG(INFO, "[MAC] Add EtherAddr: %02x:%02x:%02x:%02x:%02x:%02x -> userid %d\n",
+                            EtherSrcAddr[0],EtherSrcAddr[1],EtherSrcAddr[2],EtherSrcAddr[3],
+                            EtherSrcAddr[4],EtherSrcAddr[5], userID);
+            }
+            tap_send(mac->tapdevice,frame->data,frame->size);
 #endif
 
 #ifdef MAC_TEST_DELAY
@@ -342,7 +366,7 @@ void mac_bs_map_slot(MacBS mac, uint subframe, uint slot, user_s* ue)
 void mac_bs_detect_inactive_users(MacBS mac)
 {
 	for (int userid=0; userid<MAX_USER; userid++) {
-		if (mac->UE[userid]!=NULL) {
+        if (mac->UE[userid]!=NULL && userid != USER_BROADCAST) {
 			if (mac->UE[userid]->last_seen + TMR_USER_INACTIVE < mac->subframe_cnt) {
 				MacMessage msg = mac_msg_create_session_end();
 				if (!ringbuf_put(mac->UE[userid]->msg_control_queue,msg))
@@ -360,11 +384,23 @@ void mac_bs_detect_inactive_users(MacBS mac)
 void mac_bs_remove_inactive_users(MacBS mac)
 {
 	for (int userid=0; userid<MAX_USER; userid++) {
-		if (mac->UE[userid]!=NULL) {
+        if (mac->UE[userid]!=NULL && userid!=USER_BROADCAST) {
 			if (mac->UE[userid]->will_end && ringbuf_isempty(mac->UE[userid]->msg_control_queue)) {
 				user_s* ue = mac->UE[userid];
 				mac->UE[userid] = NULL;
 				ue_destroy(ue);
+
+                // remove entries from etheraddr_map belonging to userid
+                struct entry* np = SLIST_FIRST(&mac->etheraddr_map);
+                struct entry* np_next = NULL;
+                while (np !=NULL) {
+                    np_next = SLIST_NEXT(np,entries);
+                    if (np->userid == userid) {
+                        SLIST_REMOVE(&mac->etheraddr_map,np,entry,entries);
+                        free(np);
+                    }
+                    np = np_next;
+                }
 			}
 		}
 	}
@@ -424,10 +460,10 @@ int dl_ul_overlap_check(MacBS mac, uint userid, int subframe, int slotnr, int is
         }
     } else { // is uplink
         // ensure that the user is not already mapped to a DL slot at the same time from current scheduler iteration
-        if (slotnr<2 && userid == mac->dl_data_assignments[subframe][slotnr+2]){
+        if (slotnr<2 && (userid == mac->dl_data_assignments[subframe][slotnr+2] || userid==USER_BROADCAST)){
             return 1; // there is an overlap
         }
-        // ensure that UL slot does not overlap with RA slot
+        // ensure that UL slot does not overlap with Sync slot
         if (subframe==0 && slotnr==1)
             return 1;
     }
@@ -463,32 +499,45 @@ void mac_bs_run_scheduler(MacBS mac)
 		next_sfn = (mac->phy->common->tx_subframe+1) % FRAME_LEN;
 	}
 
+    // assure that the sync slot is not assigned for user traffic
+    uint available_slots = (next_sfn==0) ? (MAC_DLDATA_SLOTS-1):MAC_DLDATA_SLOTS;
+
 	// 1. Assign UL ctrl slots
 	// Every active user gets an assignment every 8th subframe
 	uint id = mac->phy->common->tx_subframe *2;
 	mac->ul_ctrl_assignments[next_sfn][0] = mac->UE[id] != NULL ? id : 0;
 	mac->ul_ctrl_assignments[next_sfn][1] = mac->UE[id+1] != NULL ? id+1 : 0;
 
-	// 2. check Broadcast queue
-	// TODO enable data broadcasting
-	LogicalChannel bchan = NULL;
-	if (!ringbuf_isempty(mac->broadcast_ctrl_queue)) {
-		bchan = lchan_create(get_tbs_size(mac->phy->common,0)/8, CRC16);
-		lchan_add_all_msgs(bchan,mac->broadcast_ctrl_queue);
-		// reserve a slot for broadcasting
-		mac->dl_data_assignments[next_sfn][slot_idx] = USER_BROADCAST;
-		// Map slot
-		lchan_calc_crc(bchan);
-        phy_map_dlslot(mac->phy, bchan, next_sfn%2, slot_idx, USER_BROADCAST, 0);
-        lchan_destroy(bchan);
-        slot_idx++;
-	}
+    // 2. DL mapping: start by disabling all slots
+    for (int i=slot_idx; i<MAC_DLDATA_SLOTS; i++) {
+        mac->dl_data_assignments[next_sfn][i] = USER_UNUSED;
+    }
+    // 2.1 check Broadcast queue
+    // We allocate max 1 slot per subframe for broadcasting with priority
+    // over unicast traffic
+    // Map possible broadcast slot to the end of the subframe, since we can be
+    // sure that there is no user assigned to a colliding UL slot yet
+    if (mac_frag_has_fragment(mac->broadcast_data_fragmenter) ||
+            !ringbuf_isempty(mac->broadcast_ctrl_queue)) {
+        // Generate logical channel
+        uint tbs = get_tbs_size(mac->phy->common, 0);
+        LogicalChannel chan = lchan_create(tbs/8, CRC16);
+        lchan_add_all_msgs(chan, mac->broadcast_ctrl_queue);
+        if (mac_frag_has_fragment(mac->broadcast_data_fragmenter)) {
+            uint payload_size = lchan_unused_bytes(chan);
+            MacMessage msg = mac_frag_get_fragment(mac->broadcast_data_fragmenter, payload_size, 0);
+            lchan_add_message(chan,msg);
+            mac->stats.bytes_tx+=msg->payload_len;
+            mac_msg_destroy(msg);
+        }
+        lchan_calc_crc(chan);
+        phy_map_dlslot(mac->phy, chan, next_sfn%2, available_slots-1, USER_BROADCAST, 0);
+        lchan_destroy(chan);
+        mac->dl_data_assignments[next_sfn][available_slots-1] = USER_BROADCAST;
+        available_slots--;
+    }
 
-	// 3. iterate over all DL slots and assign it to the users
-	// start by disabling all slots
-	for (int i=slot_idx; i<MAC_DLDATA_SLOTS; i++) {
-		mac->dl_data_assignments[next_sfn][i] = USER_UNUSED;
-	}
+    // 2.2. iterate over all remaining DL slots and assign it to the users
 	// assign slots to active users
 	// get first active user
 	// TODO if there is much traffic, users with high userid do not get assignments. Better do round robin over multiple subframes
@@ -496,8 +545,6 @@ void mac_bs_run_scheduler(MacBS mac)
 	if (ue!=NULL) {
 		user_id = ue->userid;
 	}
-	// assure that the sync slot is not assigned for user traffic
-	uint available_slots = (next_sfn==0) ? (MAC_DLDATA_SLOTS-1):MAC_DLDATA_SLOTS;
 
 	while (slot_idx < available_slots) {
 		if (ue==NULL) {
@@ -518,7 +565,7 @@ void mac_bs_run_scheduler(MacBS mac)
 		}
 	}
 
-	// 4. iterate over each UL slot and assign it
+    // 3. iterate over each UL slot and assign it
 	// start by disabling all slots
 	for (int i=0; i<MAC_ULDATA_SLOTS; i++) {
 		mac->ul_data_assignments[next_sfn][i] = USER_UNUSED;
@@ -555,7 +602,7 @@ void mac_bs_run_scheduler(MacBS mac)
         }
 	}
 
-	// 5. set slot assignments in PHY
+    // 4. set slot assignments in PHY
 	phy_assign_dlctrl_dd(mac->phy, mac->dl_data_assignments[next_sfn]);
 	phy_assign_dlctrl_ud(mac->phy, next_sfn%2, mac->ul_data_assignments[next_sfn]);
 	phy_assign_dlctrl_uc(mac->phy, next_sfn%2, mac->ul_ctrl_assignments[next_sfn]);
@@ -594,10 +641,21 @@ void mac_bs_tap_rx_th(MacBS mac)
 		if (mac->tapdevice->bytes_rec>0) {
 			MacDataFrame frame = dataframe_create(dev->bytes_rec);
 			memcpy(frame->data,dev->buffer,dev->bytes_rec);
-			if (!mac_bs_add_txdata(mac, 2, frame)) {
-				dataframe_destroy(frame);
-				LOG(ERR, "[MAC BS] could not add Ether frame to MAC\n");
-			}
+
+            // find correct userid to forward EtherFrame to
+            // if no entry is found, broadcast channel is used
+            struct entry * np = NULL;
+            uint userid = USER_BROADCAST;
+            SLIST_FOREACH(np, &mac->etheraddr_map, entries) {
+                if (strncmp(frame->data,np->EtherAddr, 6)==0) {
+                    userid = np->userid;
+                    break;
+                }
+            }
+            if (!mac_bs_add_txdata(mac, userid, frame)) {
+                dataframe_destroy(frame);
+                LOG(ERR, "[MAC BS] could not add Ether frame to MAC\n");
+            }
 		}
 	}
 }
