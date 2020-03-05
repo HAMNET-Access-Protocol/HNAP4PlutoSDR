@@ -16,9 +16,12 @@
 #include "test.h"
 
 // size of a mac data frame in bytes [VoIP data + UDP + IP + Ethernet header]
-#define payload_size 200//(20+8+20+18)
+#define payload_size (20+8+20+14)
 // how often mac data frames will be sent in ms
 #define PACKETIZATION_TIME 20
+
+#define CLIENT_SEND_ENABLE 1
+#define BS_SEND_ENABLE 0
 
 // PHY test variables
 uint8_t phy_ul[FRAME_LEN][4][MAX_SLOT_DATA];
@@ -91,13 +94,16 @@ int run_simulation(uint num_subframes, uint mcs)
 			last_tx = get_sim_time_msec();
 			LOG(INFO,"Prepare frame %d\n",packet_id);
 			// add some data to send
-			MacDataFrame dl_frame = dataframe_create(payload_size);
+#if BS_SEND_ENABLE
+            MacDataFrame dl_frame = dataframe_create(payload_size);
 			for (int i=0; i<payload_size; i++)
 				dl_frame->data[i] = rand() & 0xFF;
 			memcpy(dl_frame->data,&packet_id,sizeof(uint));
 			if(!mac_bs_add_txdata(mac_bs, 2, dl_frame))
 				dataframe_destroy(dl_frame);
 			mac_dl_timestamps[packet_id] = -global_sfn*SUBFRAME_LEN - global_symbol;
+#endif
+#if CLIENT_SEND_ENABLE
 			// add some data to send for client
 			MacDataFrame ul_frame = dataframe_create(payload_size);
 			for (int i=0; i<payload_size; i++)
@@ -108,6 +114,7 @@ int run_simulation(uint num_subframes, uint mcs)
 			if(!mac_ue_add_txdata(mac_ue, ul_frame)) {
 				dataframe_destroy(ul_frame);
 			}
+#endif
 			packet_id++;
 		}
 
