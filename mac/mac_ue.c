@@ -190,9 +190,7 @@ void mac_ue_run_scheduler(MacUE mac)
 	// reset symbol allocation. Will be set during phy modulation
 	phy_ue_reset_symbol_allocation(mac->phy, next_sfn%2);
 
-	// iterate over slots and check if the client is assigned to one
-	// TODO check if we can transmit all our data or if we have
-	// to request more slots
+    // iterate over slots and check if the client is assigned to it
 	if (num_assigned>0) {
 		mac->last_assignment = mac->subframe_cnt;
 		for (int i=0; i<MAC_ULDATA_SLOTS; i++) {
@@ -202,10 +200,11 @@ void mac_ue_run_scheduler(MacUE mac)
 				lchan_add_all_msgs(chan, mac->msg_control_queue);
 				if (queuesize>0) {
 					// client is assigned to slot and has data
-					if (num_assigned==0) {
+                    if (num_assigned==0 && queuesize>lchan_unused_bytes(chan)) {
 						// this is the last assigned slot within subframe
 						// if we still have remaining data, add a ul_req to this slot
-						MacMessage msg = mac_msg_create_ul_req(queuesize);
+                        uint remaining_bytes = queuesize-lchan_unused_bytes(chan)+mac_msg_get_hdrlen(ul_req);
+                        MacMessage msg = mac_msg_create_ul_req(remaining_bytes);
 						lchan_add_message(chan, msg);
 						mac_msg_destroy(msg);
 					}
