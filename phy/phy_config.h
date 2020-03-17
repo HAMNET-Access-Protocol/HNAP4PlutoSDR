@@ -18,8 +18,8 @@
 #endif
 
 // LO frequency
-#define LO_FREQ_DL 434900000 // Hz
-#define LO_FREQ_UL 439700000 // Hz
+#define LO_FREQ_UL 434900000 // Hz
+#define LO_FREQ_DL 439700000 // Hz
 
 // OFDM Parameters
 #define NFFT 64				// FFT size
