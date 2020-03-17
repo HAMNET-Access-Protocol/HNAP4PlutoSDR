@@ -301,6 +301,16 @@ int mac_ue_is_associated(MacUE mac)
 	return mac->is_associated;
 }
 
+// Send a request to switch to another MCS in DL or UL
+void mac_ue_req_mcs_change(MacUE mac, uint mcs, uint is_ul)
+{
+    MacMessage msg = mac_msg_create_mcs_change_req(is_ul,mcs);
+    if (!ringbuf_put(mac->msg_control_queue,msg)) {
+        LOG(WARN,"[MAC UE] could not add mcs change request to control queue\n");
+        mac_msg_destroy(msg);
+    }
+}
+
 // Thread listens to a tap device and adds data received from tap to mac txqueue
 void mac_ue_tap_rx_th(MacUE mac)
 {

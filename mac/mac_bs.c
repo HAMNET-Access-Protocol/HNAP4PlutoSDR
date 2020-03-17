@@ -253,6 +253,11 @@ int mac_bs_handle_message(MacBS mac, MacMessage msg, uint8_t userID)
 	case control_ack:
 		mac_bs_handle_control_ack(mac,msg,user);
 		break;
+    case mcs_chance_req:
+        mac_bs_set_mcs(mac,userID,msg->hdr.MCSChangeReq.mcs,msg->hdr.MCSChangeReq.ul_flag);
+        LOG_SFN_MAC(DEBUG,"[MAC BS] mcs_change_request from user %. mcs: % is_ul %d\n",userID,
+                            msg->hdr.MCSChangeReq.mcs,msg->hdr.MCSChangeReq.ul_flag)
+        break;
 	case ul_data:
 		frame = mac_assmbl_reassemble(user->reassembler,msg);
 		if (frame != NULL) {

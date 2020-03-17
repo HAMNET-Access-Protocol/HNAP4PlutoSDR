@@ -56,6 +56,7 @@ void mac_ue_run_scheduler(MacUE mac);
 void mac_ue_rx_channel(MacUE mac, LogicalChannel chan, uint is_broadcast);
 int  mac_ue_add_txdata(MacUE mac, MacDataFrame frame);
 int  mac_ue_is_associated(MacUE mac);
+void mac_ue_req_mcs_change(MacUE mac, uint mcs, uint is_ul);
 
 void mac_ue_tap_rx_th(MacUE mac);
 

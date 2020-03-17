@@ -36,6 +36,8 @@ int mac_msg_get_hdrlen(CtrlID_e type)
 		return 1;
 	case control_ack:
 		return 1;
+    case mcs_chance_req:
+        return 1;
 	case ul_data:
 		return 3;
 	default:
@@ -210,6 +212,21 @@ MacMessage mac_msg_create_control_ack(uint acked_ctrl_id)
 	return genericmsg;
 }
 
+MacMessage mac_msg_create_mcs_change_req(uint is_ul, uint mcs)
+{
+    MacMessage genericmsg = mac_msg_create_generic(mcs_chance_req);
+    MacMCSChangeReq* msg = &genericmsg->hdr.MCSChangeReq;
+
+    genericmsg->hdr_bin[0] = (mcs_chance_req & 0b111)<< 5;
+    genericmsg->hdr_bin[0] |= (is_ul & 0b1) << 4;
+    genericmsg->hdr_bin[0] |= (mcs & 0b1111);
+
+    msg->ctrl_id = mcs_chance_req  & 0b111;
+    msg->ul_flag = is_ul;
+    msg->mcs = mcs;
+    return genericmsg;
+}
+
 MacMessage mac_msg_create_ul_data(uint data_length, uint8_t final,
 							uint8_t seqNr, uint8_t fragNr, uint8_t* data)
 {
@@ -324,6 +341,13 @@ void mac_msg_parse_control_ack(MacMessage msg)
 	msg->hdr.ControlAck.acked_ctrl_id = (msg->hdr_bin[0] & 0b11100) >>2;
 }
 
+void mac_msg_parse_mcs_change_req(MacMessage msg)
+{
+    msg->hdr.MCSChangeReq.ctrl_id = msg->type & 0b111;
+    msg->hdr.MCSChangeReq.ul_flag = (msg->hdr_bin[0] & 0b10000) >>4;
+    msg->hdr.MCSChangeReq.mcs = (msg->hdr_bin[0] & 0b1111);
+}
+
 void mac_msg_parse_ul_data(MacMessage msg)
 {
 	msg->hdr.ULdata.ctrl_id = msg->type & 0b111;
@@ -397,6 +421,9 @@ MacMessage mac_msg_parse(uint8_t* buf, uint buflen, uint8_t ul_flag)
 	case control_ack:
 		mac_msg_parse_control_ack(genericmsg);
 		break;
+    case mcs_chance_req:
+        mac_msg_parse_mcs_change_req(genericmsg);
+        break;
 	case ul_data:
 		mac_msg_parse_ul_data(genericmsg);
 		break;

@@ -33,6 +33,7 @@ typedef enum {
 	channel_quality,
 	keepalive,
 	control_ack,
+    mcs_chance_req,
 	ul_data = 15
 } CtrlID_e;
 
@@ -90,9 +91,15 @@ typedef struct {
 } MacKeepalive;
 
 typedef struct {
-	uint32_t ctrl_id :3;
-	uint32_t acked_ctrl_id :3;
+    uint32_t ctrl_id :3;
+    uint32_t acked_ctrl_id :3;
 } MacControlAck;
+
+typedef struct {
+    uint32_t ctrl_id :3;
+    uint32_t ul_flag :1;
+    uint32_t mcs :4;
+} MacMCSChangeReq;
 
 typedef struct {
 	uint32_t ctrl_id :3;
@@ -116,6 +123,7 @@ typedef struct {
 		MacChannelQuality ChannelQuality;
 		MacKeepalive Keepalive;
 		MacControlAck ControlAck;
+        MacMCSChangeReq MCSChangeReq;
 		MacULdata ULdata;
 	} hdr;
 	CtrlID_e type;
@@ -145,6 +153,7 @@ MacMessage mac_msg_create_ul_req(uint PacketQueueSize);
 MacMessage mac_msg_create_channel_quality(uint quality_idx);
 MacMessage mac_msg_create_keepalive();
 MacMessage mac_msg_create_control_ack(uint acked_ctrl_id);
+MacMessage mac_msg_create_mcs_change_req(uint is_ul, uint mcs);
 MacMessage mac_msg_create_ul_data(uint data_length, uint8_t final,
 								  uint8_t seqNr, uint8_t fragNr, uint8_t* data);
 
