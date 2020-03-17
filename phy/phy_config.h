@@ -14,7 +14,7 @@
 #ifdef SIM_LOG_BER
 #define PHY_TEST_BER
 #else
-//#define USE_RX_SLOT_THREAD
+#define USE_RX_SLOT_THREAD
 #endif
 
 // LO frequency
