@@ -182,12 +182,12 @@ int pluto_prep_tx(platform hw, float complex* buf_tx, uint offset, uint num_samp
 	for (p_dat = p_start; p_dat < p_end && i<num_samples; p_dat += p_inc) {
 		// 12-bit sample needs to be MSB aligned
 		// https://wiki.analog.com/resources/eval/user-guides/ad-fmcomms2-ebz/software/basic_iq_datafiles#binary_format
-		((int16_t*)p_dat)[0] = (int16_t)(8196.0*creal(buf_tx[i])); // Real (I)
-		((int16_t*)p_dat)[1] = (int16_t)(8196.0*cimag(buf_tx[i++])); // Imag (Q)
+        ((int16_t*)p_dat)[0] = (int16_t)(8196.0*creal(buf_tx[i])); // Real (I)
+        ((int16_t*)p_dat)[1] = (int16_t)(8196.0*cimag(buf_tx[i++])); // Imag (Q)
 
 		// data check
-		if (((int16_t*)p_dat)[0]==32768 || ((int16_t*)p_dat)[0]==-32767 ||
-				((int16_t*)p_dat)[1]==32768 || ((int16_t*)p_dat)[1]==-32767) {
+        if (creal(buf_tx[i-1])>=4 || creal(buf_tx[i-1])<=-4
+                || cimag(buf_tx[i-1])>=4 || cimag(buf_tx[i-1])<=-4) {
 			LOG(WARN,"[Platform] Clipping in TX buffer!\n");
 		}
 	}
@@ -377,7 +377,7 @@ int pluto_set_tx_on()
 // Initialize a pluto network context
 platform init_pluto_network_platform(uint buf_len)
 {
-	char ipaddr[] = "192.168.3.1";
+    char ipaddr[] = "192.168.4.1";
 	printf("* Acquiring IIO Device at %s\n",ipaddr);
 	ASSERT((ctx = iio_create_network_context(ipaddr)) && "No context");
 	ASSERT(iio_context_get_devices_count(ctx) > 0 && "No devices");

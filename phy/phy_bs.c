@@ -90,6 +90,12 @@ void phy_bs_set_mac_interface(PhyBS phy, struct MacBS_s* mac)
 	phy->mac = mac;
 }
 
+// Set the condition which is used to signal the slot processing thread
+void phy_bs_set_rx_slot_th_signal(PhyBS phy, pthread_cond_t* cond)
+{
+    phy->rx_slot_signal = cond;
+}
+
 // create phy data channel in frequency domain
 int phy_map_dlslot(PhyBS phy, LogicalChannel chan, uint subframe, uint8_t slot_nr, uint userid, uint mcs)
 {
@@ -356,11 +362,23 @@ int _bs_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd)
 	switch (common->rx_symbol) {
 	case (SLOT_LEN-1):
 		// finished receiving one of the UL slots
-		phy_bs_proc_slot(phy, 0);
+#ifdef USE_RX_SLOT_THREAD
+            phy->rx_slot_nr = 0;
+            if (phy->rx_slot_signal)
+                pthread_cond_signal(phy->rx_slot_signal);
+            else
+#endif
+                phy_bs_proc_slot(phy,0);
 		break;
 	case (2*SLOT_LEN):
 		// finished receiving one of the UL slots
-		phy_bs_proc_slot(phy, 1);
+#ifdef USE_RX_SLOT_THREAD
+            phy->rx_slot_nr = 1;
+            if (phy->rx_slot_signal)
+                pthread_cond_signal(phy->rx_slot_signal);
+            else
+#endif
+		        phy_bs_proc_slot(phy, 1);
 		break;
 	case 2*(SLOT_LEN+1):
 		// finished receiving first ULCTRL slot
@@ -372,11 +390,23 @@ int _bs_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd)
 		break;
 	case 2*(SLOT_LEN+1)+4+SLOT_LEN-1:
 		// finished receiving one of the UL slots
-		phy_bs_proc_slot(phy,2);
+#ifdef USE_RX_SLOT_THREAD
+            phy->rx_slot_nr = 2;
+            if (phy->rx_slot_signal)
+                pthread_cond_signal(phy->rx_slot_signal);
+            else
+#endif
+		        phy_bs_proc_slot(phy,2);
 		break;
 	case 3*(SLOT_LEN+1)+4+SLOT_LEN-1:
 		// finished receiving one of the UL slots
-		phy_bs_proc_slot(phy,3);
+#ifdef USE_RX_SLOT_THREAD
+            phy->rx_slot_nr = 3;
+            if (phy->rx_slot_signal)
+                pthread_cond_signal(phy->rx_slot_signal);
+            else
+#endif
+		        phy_bs_proc_slot(phy,3);
 		break;
 	default:
 		break;

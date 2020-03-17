@@ -44,6 +44,11 @@ struct PhyBS_s {
 	int rach_remaining_samps;
 
 	struct MacBS_s* mac;
+
+	// Pthread condition used to trigger slot processing
+	pthread_cond_t* rx_slot_signal;
+	// indicates received slot nr to the slot processing thread
+	int rx_slot_nr;
 };
 
 typedef struct PhyBS_s* PhyBS;
@@ -52,6 +57,7 @@ typedef struct PhyBS_s* PhyBS;
 PhyBS phy_bs_init();
 void phy_bs_destroy(PhyBS phy);
 void phy_bs_set_mac_interface(PhyBS phy, struct MacBS_s* mac);
+void phy_bs_set_rx_slot_th_signal(PhyBS phy, pthread_cond_t* cond);
 
 /************* TX mapper functions *************************/
 int phy_map_dlslot(PhyBS phy, LogicalChannel chan, uint subframe, uint8_t slot_nr, uint userid, uint mcs);
@@ -63,5 +69,6 @@ void phy_assign_dlctrl_uc(PhyBS phy, uint subframe, uint8_t* slot_assignment);
 /************** Main RX/TX functions ***********************/
 void phy_bs_rx_symbol(PhyBS phy, float complex* rxbuf_time);
 void phy_bs_write_symbol(PhyBS phy, float complex* txbuf_time);
+void phy_bs_proc_slot(PhyBS phy, uint slotnr);
 
 #endif /* PHY_BS_H_ */

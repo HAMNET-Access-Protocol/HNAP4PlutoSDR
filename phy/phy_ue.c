@@ -284,40 +284,44 @@ int _ue_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd)
 #ifdef USE_RX_SLOT_THREAD
 		phy->rx_slot_nr = 0;
 		LOG_SFN_PHY(DEBUG,"start slot proc\n");
-		pthread_cond_signal(phy->rx_slot_signal);
-#else
-		phy_ue_proc_slot(phy,0);
+        if (phy->rx_slot_signal)
+            pthread_cond_signal(phy->rx_slot_signal);
+        else
 #endif
+            phy_ue_proc_slot(phy,0);
 		break;
 	case DLCTRL_LEN+1+(SLOT_LEN+1)*2:
 		// finished receiving one of the dl data slots
 #ifdef USE_RX_SLOT_THREAD
 		phy->rx_slot_nr = 1;
 		LOG_SFN_PHY(DEBUG,"start slot proc\n");
-		pthread_cond_signal(phy->rx_slot_signal);
-#else
-		phy_ue_proc_slot(phy,1);
+        if (phy->rx_slot_signal)
+            pthread_cond_signal(phy->rx_slot_signal);
+        else
 #endif
+            phy_ue_proc_slot(phy,1);
 		break;
 	case DLCTRL_LEN+1+(SLOT_LEN+1)*3:
 		// finished receiving one of the dl data slots
 #ifdef USE_RX_SLOT_THREAD
 		phy->rx_slot_nr = 2;
 		LOG_SFN_PHY(DEBUG,"start slot proc\n");
-		pthread_cond_signal(phy->rx_slot_signal);
-#else
-		phy_ue_proc_slot(phy,2);
+        if (phy->rx_slot_signal)
+            pthread_cond_signal(phy->rx_slot_signal);
+        else
 #endif
+            phy_ue_proc_slot(phy,2);
 		break;
 	case DLCTRL_LEN+1+(SLOT_LEN+1)*4:
 		// finished receiving one of the dl data slots
 #ifdef USE_RX_SLOT_THREAD
 		phy->rx_slot_nr = 3;
 		LOG_SFN_PHY(DEBUG,"start slot proc\n");
-		pthread_cond_signal(phy->rx_slot_signal);
-#else
-		phy_ue_proc_slot(phy,3);
+        if (phy->rx_slot_signal)
+            pthread_cond_signal(phy->rx_slot_signal);
+        else
 #endif
+            phy_ue_proc_slot(phy,3);
 		break;
 	default:
 		break;
