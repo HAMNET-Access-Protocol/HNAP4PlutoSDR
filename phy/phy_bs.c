@@ -317,7 +317,14 @@ int phy_bs_proc_rach(PhyBS phy, int timing_diff)
 	uint mcs = 0; // CTRL slots use MCS 0
 	uint32_t blocksize = get_ulctrl_slot_size(common);
 
-	uint buf_len = 8*fec_get_enc_msg_length(common->mcs_fec_scheme[mcs],blocksize/8);
+    if (timing_diff<0) {
+        // Client sent too early. This should not happen, ignore the request
+        LOG(WARN,"[PHY BS] Some client sent Assoc request too early! ignore\n");
+        phy->fs_rach = NULL;
+        return 0;
+    }
+
+    uint buf_len = 8*fec_get_enc_msg_length(common->mcs_fec_scheme[mcs],blocksize/8);
 	uint8_t* demod_buf = malloc(buf_len);
 
 	// demodulate signal
@@ -488,7 +495,7 @@ void phy_bs_rx_symbol(PhyBS phy, float complex* rxbuf_time)
 			}
 		} else if (phy->fs_rach){
 			// receive the last samps of the association request
-			if (phy->rach_timing == 0)
+            if (phy->rach_timing <= 0)
 				ofdmframesync_execute(phy->fs_rach, rxbuf_time, NFFT+CP_LEN);
 			else
 				ofdmframesync_execute(phy->fs_rach, rxbuf_time, phy->rach_timing);
