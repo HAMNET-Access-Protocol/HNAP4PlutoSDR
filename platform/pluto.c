@@ -72,7 +72,6 @@ void shutdown()
 
 	printf("* Destroying context\n");
 	if (ctx) { iio_context_destroy(ctx); }
-	exit(0);
 }
 
 
@@ -287,8 +286,8 @@ platform init_generic(uint buf_len)
 
     // Set RX AGC to slow attack
     get_phy_chan(ctx, RX, 0, &chn);
-    wr_ch_str(chn, "gain_control_mode", "manual"); // fast_attack, slow_attack, manual
-    wr_ch_lli(chn, "hardwaregain", 26.0);
+    wr_ch_str(chn, "gain_control_mode", "slow_attack"); // fast_attack, slow_attack, manual
+    //wr_ch_lli(chn, "hardwaregain", 26.0);
 
 	printf("* Enabling IIO streaming channels\n");
 	iio_channel_enable(rx0_i);
@@ -318,10 +317,28 @@ platform init_generic(uint buf_len)
 	return pluto;
 }
 
+long long pluto_get_rxgain()
+{
+    long long gain = 0;
+    struct iio_channel* chn;
+    get_phy_chan(ctx, RX, 0, &chn);
+    iio_channel_attr_read_longlong(chn, "hardwaregain", &gain);
+    return gain;
+}
+
 void pluto_set_rxgain(int gain)
 {
 	struct iio_channel* chn;
     get_phy_chan(ctx, RX, 0, &chn);
+    wr_ch_str(chn, "gain_control_mode", "manual");
+    wr_ch_lli(chn, "hardwaregain", gain);
+}
+
+// set TX gain in dBm
+void pluto_set_txgain(int gain)
+{
+    struct iio_channel* chn;
+    get_phy_chan(ctx, TX, 0, &chn);
     wr_ch_lli(chn, "hardwaregain", gain);
 }
 
@@ -339,6 +356,22 @@ int pluto_set_rx_freq(long long rxfreq)
 	if (!get_lo_chan(ctx, RX, &chn)) { return false; }
 	wr_ch_lli(chn, "frequency", rxfreq);
 	return true;
+}
+
+int pluto_set_tx_off()
+{
+    struct iio_channel* chn;
+    if (!get_lo_chan(ctx, TX, &chn)) { return false; }
+    wr_ch_lli(chn, "powerdown", 1);
+    return true;
+}
+
+int pluto_set_tx_on()
+{
+    struct iio_channel* chn;
+    if (!get_lo_chan(ctx, TX, &chn)) { return false; }
+    wr_ch_lli(chn, "powerdown", 0);
+    return true;
 }
 
 // Initialize a pluto network context

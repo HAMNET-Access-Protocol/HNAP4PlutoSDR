@@ -17,6 +17,9 @@
 #include <pthread.h>
 #include <sched.h>
 #include <time.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <getopt.h>
 
 // Config thread core affinities
 #define UE_RX_CPUID 1
@@ -33,6 +36,31 @@
 
 #define CLIENT_SEND_ENABLE 0
 
+// program options
+struct option Options[] = {
+  {"rxgain",required_argument,NULL,'g'},
+  {"txgain",required_argument,NULL,'t'},
+  {"frequency",required_argument,NULL,'f'},
+  {"dl-mcs",required_argument,NULL,'d'},
+  {"ul-mcs",required_argument,NULL,'u'},
+  {"help",no_argument,NULL,'h'},
+  {NULL},
+};
+char* helpstring = "Client for 70cm Waveform.\n\n \
+Options:\n \
+   --rxgain -g:    fix the rxgain to a value [-1 73]\n \
+   --txgain -t:    fix the txgain to a value [-89 0]\n \
+   --frequency -f: tune to a specific (DL) frequency\n \
+   --ul-mcs -u:    use given mcs in UL. Default: 0.\n \
+   --dl-mcs -d:    use given mcs in DL. Default: 0.\n";
+
+extern char *optarg;
+int rxgain = 40;
+int txgain = 0;
+int dl_frequency = LO_FREQ_DL;
+int ul_frequency = LO_FREQ_UL;
+int ul_mcs = 0;
+int dl_mcs = 0;
 
 // struct holds arguments for RX thread
 struct rx_th_data_s {
@@ -92,7 +120,7 @@ void thread_phy_ue_rx(struct rx_th_data_s* arg)
 		clock_gettime(CLOCK_MONOTONIC, &end);
 		elapsed = (end.tv_sec-start.tv_sec)*1000000.0 +(end.tv_nsec-start.tv_nsec)/1000.0;
 
-		if (elapsed > 2000)
+		if (elapsed > 530)
 			LOG(WARN,"RX timing warn: Iteration took %.1fus in %d %d\n",elapsed,
 					phy->common->rx_subframe, phy->common->rx_symbol);
 
@@ -135,7 +163,7 @@ void thread_phy_ue_tx(struct tx_th_data_s* arg)
 
 		clock_gettime(CLOCK_MONOTONIC, &end);
 		elapsed = (end.tv_sec-start.tv_sec)*1000000.0 +(end.tv_nsec-start.tv_nsec)/1000.0;
-		if (elapsed > 1000) //TODO calculate based in buf size and kernel buffer amount
+		if (elapsed > 530) //TODO calculate based in buf size and kernel buffer amount
 			LOG(WARN,"TX timing warn: Iteration took %.1fus. %d %d\n",elapsed,
 					phy->common->tx_subframe, phy->common->tx_symbol);
 		// push buffer
@@ -176,11 +204,16 @@ void thread_mac_ue_scheduler(struct mac_th_data_s* arg)
 	double elapsed;
 	uint sched_rounds=0;
 
+    if (ul_mcs>0)
+        mac_ue_req_mcs_change(mac,ul_mcs,1);
+    if (dl_mcs>0)
+        mac_ue_req_mcs_change(mac,dl_mcs,0);
+
 	while (1) {
 		// Wait for signal from UE rx thread
-		clock_gettime(CLOCK_MONOTONIC,&start);
 		pthread_mutex_lock(mutex);
 		pthread_cond_wait(cond_signal, mutex);
+        clock_gettime(CLOCK_MONOTONIC,&start);
 
 		// add some data to send for client
 #if CLIENT_SEND_ENABLE
@@ -204,6 +237,9 @@ void thread_mac_ue_scheduler(struct mac_th_data_s* arg)
 		clock_gettime(CLOCK_MONOTONIC, &end);
 		elapsed = (end.tv_sec-start.tv_sec)*1000000.0 +(end.tv_nsec-start.tv_nsec)/1000.0;
 		LOG(DEBUG,"Prepared frame %d. Time: %.3f\n",sched_rounds,elapsed);
+        if (elapsed > 2000)
+            LOG(WARN,"MAC timing warn: Iteration took %.1fus in %d %d\n",elapsed,
+                mac->phy->common->rx_subframe, mac->phy->common->rx_symbol);
 
 	}
 }
@@ -227,25 +263,114 @@ void thread_phy_ue_rx_slot(struct rx_slot_th_data_s* arg)
 		pthread_mutex_unlock(mutex);
 		clock_gettime(CLOCK_MONOTONIC,&end);
 		elapsed = (end.tv_sec-start.tv_sec)*1000000.0 +(end.tv_nsec-start.tv_nsec)/1000.0;
-		if (elapsed > 3500)
+        if (elapsed > 3000)
 			LOG(WARN,"[PHY UE] Timing warn: RX slot processing took %.3fus\n",elapsed);
 	}
 }
 
-int main()
+// Get first estimates of the carrier frequency offset and tune to the
+// correct frequency
+void  phy_carrier_sync(PhyUE phy, platform hw)
+{
+    float complex* rxbuf_time = calloc(sizeof(float complex),BUFLEN);
+
+    // Find synchronization sequence for the first time
+    while(!phy->has_synced_once) {
+        hw->platform_rx(hw, rxbuf_time);
+        phy_ue_do_rx(phy, rxbuf_time, BUFLEN);
+    }
+
+    // receive some slots to get a better cfo estimation
+    for (int i=0; i<64; i++) {
+        hw->platform_rx(hw, rxbuf_time);
+        phy_ue_do_rx(phy, rxbuf_time, BUFLEN);
+    }
+
+    // tune to the correct frequency
+    int cfo_hz = ofdmframesync_get_cfo(phy->fs)*SAMPLERATE/(2*M_PI);
+    pluto_set_tx_freq(LO_FREQ_UL+cfo_hz);
+    pluto_set_rx_freq(LO_FREQ_DL+cfo_hz);
+    LOG(INFO,"[CLIENT] retune transceiver with cfo %dHz:\n",cfo_hz);
+    LOG(INFO,"[CLIENT] TX LO freq: %dHz\n",LO_FREQ_UL+cfo_hz);
+    LOG(INFO,"[CLIENT] RX LO freq: %dHz\n",LO_FREQ_DL+cfo_hz);
+    free(rxbuf_time);
+
+    // fix gain. AGC was used during sync phase but we have to switch
+    // to manual mode because of OFDM modulation
+    /*int gain = pluto_get_rxgain()-10;
+    LOG(INFO,"[CLIENT] fix RX gain to %d\n",gain);
+    LOG(INFO,"[CLIENT] fix TX gain to %d\n",-73+gain);
+    pluto_set_rxgain(gain);
+    pluto_set_txgain(-70+gain);*/
+
+}
+
+int main(int argc,char *argv[])
 {
 	pthread_t ue_phy_rx_th, ue_phy_tx_th, ue_mac_th, ue_tap_th, ue_phy_rx_slot_th;
 
+    // parse program args
+    int d;
+    while((d = getopt_long(argc,argv,"g:t:f:d:u:h",Options,NULL)) != EOF){
+        switch(d){
+        case 'g':
+            rxgain = atoi(optarg);
+            if (rxgain < -1 || rxgain > 73) {
+                printf ("Error: rxgain %d out of range [-1 73]!\n",rxgain);
+                exit(0);
+            }
+            break;
+        case 't':
+            txgain = atoi(optarg);
+            if (txgain < -89 || txgain > 0) {
+                printf ("Error: txgain %d out of range [-89 0]!\n",txgain);
+                exit(0);
+            }
+            break;
+        case 'f':
+            dl_frequency = atoi(optarg);
+            ul_frequency = ul_frequency + (dl_frequency-LO_FREQ_DL);
+            break;
+        case 'd':
+            dl_mcs = atoi(optarg);
+            if (dl_mcs<0 || dl_mcs>=NUM_MCS_SCHEMES) {
+                printf ("Error: DL MCS %d undefined!\n",dl_mcs);
+                exit(0);
+            }
+            break;
+        case 'u':
+            ul_mcs = atoi(optarg);
+            if (ul_mcs<0 || ul_mcs>=NUM_MCS_SCHEMES) {
+                printf ("Error: UL MCS %d undefined!\n",ul_mcs);
+                exit(0);
+            }
+            break;
+        case 'h':
+            printf("%s",helpstring);
+            exit(0);
+            break;
+        default:
+            printf("%s",helpstring);
+            exit(0);
+        }
+    }
 	// Init platform
 #if CLIENT_USE_PLATFORM_SIM
 	platform pluto = platform_init_simulation(NFFT+CP_LEN);
 #else
-	platform pluto = init_pluto_platform(BUFLEN);
-	pluto_set_rxgain(20);
-	pluto_set_tx_freq(LO_FREQ_UL);
-	pluto_set_rx_freq(LO_FREQ_DL);
-	pluto_start_monitor();
+    platform pluto = init_pluto_platform(BUFLEN);
+    //platform pluto = init_pluto_network_platform(BUFLEN);
+
+    pluto_set_tx_freq(ul_frequency);
+    pluto_set_rx_freq(dl_frequency);
+
+    pluto_set_rxgain(rxgain);
+    pluto_set_txgain(txgain);
+    pluto_start_monitor();
 #endif
+
+    // seed random
+    srand(time(0));
 
 	// Init phy and mac layer
 	PhyUE phy = phy_ue_init();
@@ -254,7 +379,18 @@ int main()
 	phy_ue_set_mac_interface(phy, mac_ue_rx_channel, mac);
 	mac_ue_set_phy_interface(mac, phy);
 
-	// create arguments for MAC scheduler thread
+    // Tune to the correct frequency and set gain
+    phy_carrier_sync(phy, pluto);
+    sleep(1); // wait till the transceiver adjusted LO freqs
+    phy_ue_destroy(phy);
+
+    // Re Init phy and mac layer for clean startup
+    phy = phy_ue_init();
+
+    phy_ue_set_mac_interface(phy, mac_ue_rx_channel, mac);
+    mac_ue_set_phy_interface(mac, phy);
+
+    // create arguments for MAC scheduler thread
 	pthread_mutex_t mac_mutex = PTHREAD_MUTEX_INITIALIZER;
 	pthread_cond_t mac_cond = PTHREAD_COND_INITIALIZER;
 	struct mac_th_data_s mac_th_data;
@@ -292,7 +428,11 @@ int main()
 	cpu_set_t cpu_set;
 	CPU_ZERO(&cpu_set);
 	CPU_SET(UE_RX_SLOT_CPUID,&cpu_set);
+    struct sched_param prio_rt_high, prio_rt_normal;
+    prio_rt_high.sched_priority = 2;
+    prio_rt_normal.sched_priority = 1;
 	pthread_setaffinity_np(ue_phy_rx_slot_th,sizeof(cpu_set_t),&cpu_set);
+    pthread_setschedparam(ue_phy_rx_slot_th, SCHED_FIFO, &prio_rt_normal);
 
 	// start RX thread
 	if (pthread_create(&ue_phy_rx_th, NULL, thread_phy_ue_rx, &rx_th_data) !=0) {
@@ -304,6 +444,7 @@ int main()
 	CPU_ZERO(&cpu_set);
 	CPU_SET(UE_RX_CPUID,&cpu_set);
 	pthread_setaffinity_np(ue_phy_rx_th,sizeof(cpu_set_t),&cpu_set);
+    pthread_setschedparam(ue_phy_rx_th, SCHED_FIFO, &prio_rt_high);
 
 	// start TX thread
 	if (pthread_create(&ue_phy_tx_th, NULL, thread_phy_ue_tx, &tx_th_data) !=0) {
@@ -315,6 +456,7 @@ int main()
 	CPU_ZERO(&cpu_set);
 	CPU_SET(UE_TX_CPUID,&cpu_set);
 	pthread_setaffinity_np(ue_phy_tx_th,sizeof(cpu_set_t),&cpu_set);
+    pthread_setschedparam(ue_phy_tx_th, SCHED_FIFO, &prio_rt_high);
 
 	// start MAC thread
 	if (pthread_create(&ue_mac_th, NULL, thread_mac_ue_scheduler, &mac_th_data) !=0) {
@@ -326,6 +468,7 @@ int main()
 	CPU_ZERO(&cpu_set);
 	CPU_SET(UE_MAC_CPUID,&cpu_set);
 	pthread_setaffinity_np(ue_mac_th,sizeof(cpu_set_t),&cpu_set);
+    pthread_setschedparam(ue_mac_th, SCHED_FIFO, &prio_rt_high);
 
 	// start thread that binds to TAP and receives data
 	if (pthread_create(&ue_tap_th, NULL, mac_ue_tap_rx_th, mac) != 0) {

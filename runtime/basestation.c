@@ -19,6 +19,7 @@
 #include <time.h>
 #include <sched.h>
 #include <unistd.h>
+#include <getopt.h>
 
 // Set to 1 in order to use the simulated platform
 #define BS_USE_PLATFORM_SIM 0
@@ -30,13 +31,33 @@
 
 // compensate for offset within a symbol in samples
 // is used to properly align UL and DL over the air and compensate for FIR delays
-#define INTER_SYMB_OFFSET 40
+#define INTER_SYMB_OFFSET 0
 
 // Configure CPU core affinities for the threads
+#define BS_RX_SLOT_CPUID 0
 #define BS_RX_CPUID 1
 #define BS_TX_CPUID 1
 #define BS_MAC_CPUID 0
 #define BS_TAP_CPUID 0
+
+// program options
+struct option Options[] = {
+  {"rxgain",required_argument,NULL,'g'},
+  {"txgain",required_argument,NULL,'t'},
+  {"frequency",required_argument,NULL,'f'},
+  {"help",no_argument,NULL,'h'},
+  {NULL},
+};
+char* helpstring = "Basestation for 70cm Waveform.\n\n \
+Options:\n \
+   --rxgain -g:    fix the rxgain to a value [-1 73]\n \
+   --txgain -t:    fix the txgain to a value [-89 0]\n \
+   --frequency -f: tune to a specific (DL) frequency\n";
+
+extern char *optarg;
+int rxgain = 40;
+int txgain = 0;
+int frequency = LO_FREQ_DL;
 
 // struct holds arguments for RX thread
 struct rx_th_data_s {
@@ -58,6 +79,13 @@ struct mac_th_data_s {
 	pthread_cond_t* scheduler_signal;
 	pthread_mutex_t* scheduler_mutex;
 	MacBS mac;
+};
+
+// struct with args for RX slot thread
+struct rx_slot_th_data_s {
+    PhyBS phy;
+    pthread_cond_t* rx_slot_signal;
+    pthread_mutex_t* rx_slot_mutex;
 };
 
 // Main Thread for BS receive
@@ -87,9 +115,33 @@ void* thread_phy_bs_rx(struct rx_th_data_s* arg)
 		clock_gettime(CLOCK_MONOTONIC, &end);
 		elapsed = (end.tv_sec-start.tv_sec)*1000000.0 +(end.tv_nsec-start.tv_nsec)/1000.0;
 
-		if (elapsed > 2000)
+		if (elapsed > 530)
 			LOG(WARN,"RX timing warn: Iteration took %.1fus\n",elapsed);
 	}
+}
+
+void thread_phy_ue_rx_slot(struct rx_slot_th_data_s* arg)
+{
+    PhyBS phy = arg->phy;
+    pthread_cond_t* cond_signal = arg->rx_slot_signal;
+    pthread_mutex_t* mutex = arg->rx_slot_mutex;
+    struct timespec start, end;
+    double elapsed;
+
+    while (1) {
+        // Wait for signal from UE rx thread
+        pthread_mutex_lock(mutex);
+        pthread_cond_wait(cond_signal, mutex);
+        clock_gettime(CLOCK_MONOTONIC,&start);
+
+        phy_bs_proc_slot(phy,phy->rx_slot_nr);
+
+        pthread_mutex_unlock(mutex);
+        clock_gettime(CLOCK_MONOTONIC,&end);
+        elapsed = (end.tv_sec-start.tv_sec)*1000000.0 +(end.tv_nsec-start.tv_nsec)/1000.0;
+        if (elapsed > 3000)
+            LOG(WARN,"[PHY BS] Timing warn: RX slot processing took %.3fus\n",elapsed);
+    }
 }
 
 // Main Thread for BS transmit
@@ -115,6 +167,7 @@ void* thread_phy_bs_tx(struct tx_th_data_s* arg)
 	LOG(INFO,"TX thread started: RX symbol %d. TX symbol %d\n",phy->common->rx_symbol,phy->common->tx_symbol);
 	while (1)
 	{
+	    LOG(TRACE,"[TX Thread] start subframe %d\n",subframe_cnt);
 		for (int symbol=0; symbol<SUBFRAME_LEN/2; symbol++) {
 			bs->platform_tx_push(bs);
 			bs->platform_tx_prep(bs, txbuf_time+BUFLEN-INTER_SYMB_OFFSET, 0, INTER_SYMB_OFFSET);
@@ -123,13 +176,13 @@ void* thread_phy_bs_tx(struct tx_th_data_s* arg)
 			phy_bs_write_symbol(phy, txbuf_time+1*(NFFT+CP_LEN));
 
 			bs->platform_tx_prep(bs, txbuf_time, INTER_SYMB_OFFSET, BUFLEN-INTER_SYMB_OFFSET);
-			// run scheduler
-			if (symbol==30) {
+            // run scheduler. TODO tweak signaling time: after ULCTRL is received, but early enough to finish
+            if (symbol==23) {
 				pthread_cond_signal(scheduler_signal);
 			}
 			clock_gettime(CLOCK_MONOTONIC, &end);
 			elapsed = (end.tv_sec-start.tv_sec)*1000000.0 +(end.tv_nsec-start.tv_nsec)/1000.0;
-			if (elapsed > 1000)
+			if (elapsed > 530)
 				LOG(WARN,"TX timing warn: Iteration took %.1fus. %d %d\n",elapsed,
 						phy->common->tx_subframe, phy->common->tx_symbol);
 
@@ -152,9 +205,9 @@ void* thread_mac_bs_scheduler(struct mac_th_data_s* arg)
 
 	while (1) {
 		// Wait for signal from BS tx thread
-		clock_gettime(CLOCK_MONOTONIC,&start);
 		pthread_mutex_lock(mutex);
 		pthread_cond_wait(cond_signal, mutex);
+        clock_gettime(CLOCK_MONOTONIC,&start);
 
 		// add some data to send
 #if BS_SEND_ENABLE
@@ -167,8 +220,10 @@ void* thread_mac_bs_scheduler(struct mac_th_data_s* arg)
 			dataframe_destroy(dl_frame);
 		}
 #endif
-		if (subframe_cnt==200)
-			mac_bs_set_mcs(mac,2,0,DL);
+        /*if (subframe_cnt==200) {
+            mac_bs_set_mcs(mac,2,2,DL);
+            mac_bs_set_mcs(mac,2,2,UL);
+        }*/
 		mac_bs_run_scheduler(mac);
 		subframe_cnt++;
 
@@ -181,26 +236,60 @@ void* thread_mac_bs_scheduler(struct mac_th_data_s* arg)
 		clock_gettime(CLOCK_MONOTONIC, &end);
 		elapsed = (end.tv_sec-start.tv_sec)*1000000.0 +(end.tv_nsec-start.tv_nsec)/1000.0;
 		LOG(DEBUG,"Prepared frame %d. Time: %.3f\n",subframe_cnt,elapsed);
+        if (elapsed > 3500)
+            LOG(WARN,"MAC timing warn: Iteration took %.1fus. %d %d\n",elapsed,
+                    mac->phy->common->tx_subframe, mac->phy->common->tx_symbol);
 
 	}
 }
 
-int main()
+int main(int argc,char *argv[])
 {
-	pthread_t bs_phy_rx_th, bs_phy_tx_th, bs_mac_th, bs_tap_th;
+	pthread_t bs_phy_rx_slot_th, bs_phy_rx_th, bs_phy_tx_th, bs_mac_th, bs_tap_th;
 
+    // parse program args
+    int d;
+    while((d = getopt_long(argc,argv,"g:t:f:h",Options,NULL)) != EOF){
+        switch(d){
+        case 'g':
+            rxgain = atoi(optarg);
+            if (rxgain < -1 || rxgain > 73) {
+                printf ("Error: rxgain %d out of range [-1 73]!\n",rxgain);
+                exit(0);
+            }
+            break;
+        case 't':
+            txgain = atoi(optarg);
+            if (txgain < -89 || txgain > 0) {
+                printf ("Error: txgain %d out of range [-89 0]!\n",txgain);
+                exit(0);
+            }
+            break;
+        case 'f':
+            frequency = atoi(optarg);
+            break;
+        case 'h':
+            printf("%s",helpstring);
+            exit(0);
+            break;
+        default:
+            printf("%s",helpstring);
+            exit(0);
+        }
+    }
 	// Init platform
 #if BS_USE_PLATFORM_SIM
 	platform pluto = platform_init_simulation(BUFLEN);
 #else
 	platform pluto = init_pluto_platform(BUFLEN);
-	pluto_set_rxgain(40);
-	pluto_set_tx_freq(LO_FREQ_DL);
-	pluto_set_rx_freq(LO_FREQ_UL);
-	pluto_start_monitor();
+    pluto_set_rxgain(rxgain);
+    pluto_set_txgain(txgain);
+    pluto_set_tx_freq(frequency);
+    pluto_set_rx_freq(LO_FREQ_UL+(frequency-LO_FREQ_DL));
 #endif
+    printf("Pluto config: rxgain %d txgain %d DL_LO %dHz UL_LO %dHz\n",rxgain,txgain,frequency,LO_FREQ_UL+(frequency-LO_FREQ_DL));
 
-	// Init phy and mac layer
+    // Init phy and mac layer
 	PhyBS phy = phy_bs_init();
 	MacBS mac = mac_bs_init();
 
@@ -233,17 +322,42 @@ int main()
 	tx_th_data.scheduler_signal = &cond;
 	tx_th_data.thread_sync = &sync_barrier;
 
-	// start RX thread
+    // create arguments for RX slot thread
+    pthread_cond_t rx_slot_cond = PTHREAD_COND_INITIALIZER;
+    pthread_mutex_t rx_slot_mutex = PTHREAD_MUTEX_INITIALIZER;
+    struct rx_slot_th_data_s rx_slot_th_data;
+    rx_slot_th_data.phy = phy;
+    rx_slot_th_data.rx_slot_mutex = &rx_slot_mutex;
+    rx_slot_th_data.rx_slot_signal = &rx_slot_cond;
+    phy_bs_set_rx_slot_th_signal(phy,&rx_slot_cond);
+
+    // start RX slot thread
+    if (pthread_create(&bs_phy_rx_slot_th, NULL, thread_phy_ue_rx_slot, &rx_slot_th_data) !=0) {
+        LOG(ERR,"could not create RX slot processing thread. Abort!\n");
+        exit(EXIT_FAILURE);
+    } else {
+        LOG(INFO,"created RX slot processing thread.\n");
+    }
+    cpu_set_t cpu_set;
+    CPU_ZERO(&cpu_set);
+    CPU_SET(BS_RX_SLOT_CPUID,&cpu_set);
+    struct sched_param prio_rt_high, prio_rt_normal;
+    prio_rt_high.sched_priority = 2;
+    prio_rt_normal.sched_priority = 1;
+    pthread_setaffinity_np(bs_phy_rx_slot_th,sizeof(cpu_set_t),&cpu_set);
+    pthread_setschedparam(bs_phy_rx_slot_th, SCHED_FIFO, &prio_rt_normal);
+
+    // start RX thread
 	if (pthread_create(&bs_phy_rx_th, NULL, thread_phy_bs_rx, &rx_th_data) !=0) {
 		LOG(ERR,"could not create RX thread. Abort!\n");
 		exit(EXIT_FAILURE);
 	} else {
 		LOG(INFO,"created RX thread.\n");
 	}
-	cpu_set_t cpu_set;
 	CPU_ZERO(&cpu_set);
 	CPU_SET(BS_RX_CPUID,&cpu_set);
 	pthread_setaffinity_np(bs_phy_rx_th,sizeof(cpu_set_t),&cpu_set);
+    pthread_setschedparam(bs_phy_rx_th, SCHED_FIFO, &prio_rt_high);
 
 	// start TX thread
 	if (pthread_create(&bs_phy_tx_th, NULL, thread_phy_bs_tx, &tx_th_data) !=0) {
@@ -255,6 +369,7 @@ int main()
 	CPU_ZERO(&cpu_set);
 	CPU_SET(BS_TX_CPUID,&cpu_set);
 	pthread_setaffinity_np(bs_phy_tx_th,sizeof(cpu_set_t),&cpu_set);
+    pthread_setschedparam(bs_phy_tx_th, SCHED_FIFO, &prio_rt_high);
 
 	// start MAC thread
 	if (pthread_create(&bs_mac_th, NULL, thread_mac_bs_scheduler, &mac_th_data) !=0) {
@@ -266,6 +381,7 @@ int main()
 	CPU_ZERO(&cpu_set);
 	CPU_SET(BS_MAC_CPUID,&cpu_set);
 	pthread_setaffinity_np(bs_mac_th,sizeof(cpu_set_t),&cpu_set);
+    pthread_setschedparam(bs_mac_th, SCHED_FIFO, &prio_rt_high);
 
 	// start TAP receiver thread
 	if (pthread_create(&bs_tap_th, NULL, mac_bs_tap_rx_th, mac) !=0) {
@@ -276,8 +392,8 @@ int main()
 	}
 	CPU_ZERO(&cpu_set);
 	CPU_SET(BS_TAP_CPUID,&cpu_set);
-	pthread_setaffinity_np(bs_mac_th,sizeof(cpu_set_t),&cpu_set);
-
+    pthread_setaffinity_np(bs_tap_th,sizeof(cpu_set_t),&cpu_set);
+    //pthread_setschedparam(bs_tap_th, SCHED_FIFO, &prio_rt_normal);
 
 	// printf affinities
 	pthread_getaffinity_np(bs_phy_rx_th,sizeof(cpu_set_t),&cpu_set);
@@ -294,6 +410,11 @@ int main()
 	printf("\nMAC Thread CPU mask: ");
 	for (int i=0; i<4; i++)
 		printf("%d ",CPU_ISSET(i, &cpu_set));
+
+    pthread_getaffinity_np(bs_phy_rx_slot_th,sizeof(cpu_set_t),&cpu_set);
+    printf("\nRX slot Thread CPU mask: ");
+    for (int i=0; i<4; i++)
+        printf("%d ",CPU_ISSET(i, &cpu_set));
 	printf("\n");
 
 

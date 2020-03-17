@@ -24,8 +24,16 @@ platform init_pluto_network_platform(unsigned int buf_len);
 
 // ---------------- Configuration --------------------- //
 void pluto_set_rxgain(int gain);
+void pluto_set_txgain(int gain);
+
 int pluto_set_rx_freq(long long rxfreq);
 int pluto_set_tx_freq(long long txfreq);
+
+int pluto_set_tx_off();
+int pluto_set_tx_on();
+
+// --------------- Read device config ----------------- //
+long long pluto_get_rxgain();
 
 // start a thread that monitors for Buffer over/underflows
 pthread_t pluto_start_monitor();
