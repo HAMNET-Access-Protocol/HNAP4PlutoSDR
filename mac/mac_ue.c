@@ -53,10 +53,15 @@ int mac_ue_handle_message(MacUE mac, MacMessage msg, uint is_broadcast)
 
 	switch (msg->type) {
 	case associate_response:
+	    // make sure we are not synced yet and the rachuserid is correct
+	    if (mac->is_associated || (msg->hdr.AssociateResponse.rachuserid != mac->phy->rachuserid))
+	        break;
+
 		// Assert correct version
 		if (msg->hdr.AssociateResponse.protoVersion != PROTO_VERSION) {
 			LOG(ERR,"[MAC UE] Wrong Protocol version! got %d expected %d",
 					msg->hdr.AssociateResponse.protoVersion,PROTO_VERSION);
+			break;
 		}
 		// Check whether we were successfully added
 		if (msg->hdr.AssociateResponse.response == assoc_resp_success) {
