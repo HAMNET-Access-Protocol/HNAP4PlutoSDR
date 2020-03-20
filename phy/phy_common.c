@@ -88,6 +88,7 @@ PhyCommon phy_common_init()
     phy->mcs_modem[4] = modem_create(LIQUID_MODEM_QAM64);
 
     // init FEC modules
+    phy->fec_ctrl = fec_create(LIQUID_FEC_CONV_V27, NULL);
     phy->mcs_fec[0] = fec_create(LIQUID_FEC_CONV_V27, NULL);
     phy->mcs_fec[1] = fec_create(LIQUID_FEC_CONV_V27P34, NULL);
     phy->mcs_fec[2] = fec_create(LIQUID_FEC_CONV_V27, NULL);

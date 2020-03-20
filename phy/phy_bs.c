@@ -302,7 +302,7 @@ void phy_bs_proc_ulctrl(PhyBS phy, uint slotnr)
 
 	// decoding
 	LogicalChannel chan = lchan_create(blocksize/8,CRC8);
-	fec_decode_soft(common->mcs_fec[mcs], blocksize/8, demod_buf, chan->data);
+	fec_decode_soft(common->fec_ctrl, blocksize/8, demod_buf, chan->data);
 
 	// pass to upper layer
 	mac_bs_rx_channel(phy->mac,chan, userid);
@@ -338,7 +338,7 @@ int phy_bs_proc_rach(PhyBS phy, int timing_diff)
 
 	// decoding
 	LogicalChannel chan = lchan_create(blocksize/8,CRC8);
-	fec_decode_soft(common->mcs_fec[mcs], blocksize/8, demod_buf, chan->data);
+	fec_decode_soft(common->fec_ctrl, blocksize/8, demod_buf, chan->data);
 
 	free(demod_buf);
 
@@ -515,7 +515,7 @@ void phy_bs_rx_symbol(PhyBS phy, float complex* rxbuf_time)
 			if (common->pilot_symbols_rx[common->rx_symbol] == PILOT) {
 				ofdmframesync_reset_msequence(fs);
 				ofdmframesync_execute(fs,rxbuf_time,rx_sym);
-				LOG_SFN_PHY(DEBUG,"[PHY BS] cfo was: %.3fHz\n",ofdmframesync_get_cfo(fs)*SAMPLERATE/6.28)
+				LOG_SFN_PHY(DEBUG,"[PHY BS] cfo was: %.3fHz\n",ofdmframesync_get_cfo(fs)*SAMPLERATE/6.28);
 				//ofdmframesync_set_cfo(fs,0); // TODO cfo estimation. Currently not working since we often receive if no data is sent. -> wrong pilot -> wrong cfo
 			} else {
 				ofdmframesync_execute_nopilot(fs,rxbuf_time,rx_sym);

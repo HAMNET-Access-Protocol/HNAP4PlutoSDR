@@ -167,7 +167,7 @@ int phy_ue_proc_dlctrl(PhyUE phy)
 
 	// soft decoding
 	dlctrl_alloc_t* dlctrl_buf = malloc(dlctrl_size+1);
-	fec_decode_soft(common->mcs_fec[0],dlctrl_size+1, llr_buf, (uint8_t*)dlctrl_buf);
+	fec_decode_soft(common->fec_ctrl,dlctrl_size+1, llr_buf, (uint8_t*)dlctrl_buf);
 
 	//unscrambling
 	unscramble_data((uint8_t*)dlctrl_buf,dlctrl_size+1);

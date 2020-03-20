@@ -24,7 +24,7 @@
 // log makro to log with subframe number
 #define LOG_SFN_PHY(level, ...) do { if (level>=LOG_LEVEL) \
 	{ printf("[%2d %2d]",phy->common->rx_subframe,phy->common->rx_symbol); \
-	  printf(__VA_ARGS__); }} while(0);
+	  printf(__VA_ARGS__); }} while(0)
 
 
 // typedef for easier dlctrl slot access
@@ -63,6 +63,8 @@ typedef struct {
 	float complex** rxdata_f;
 
 	modem mcs_modem[8];	// array of modems for different mcs
+	fec fec_ctrl;       // ctrl slots are encoded with MCS 0. we add a separate coder, because data and control slots
+	                    // might be decoded in parallel (multithreading) and cannot use the same coder
 	fec mcs_fec[8];		// array of encoders/decoders for different mcs
 	fec_scheme mcs_fec_scheme[8];
 
