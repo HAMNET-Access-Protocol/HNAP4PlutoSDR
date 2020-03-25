@@ -282,10 +282,10 @@ int main(int argc,char *argv[])
 	platform pluto = platform_init_simulation(BUFLEN);
 #else
 	platform pluto = init_pluto_platform(BUFLEN);
-    pluto_set_rxgain(rxgain);
-    pluto_set_txgain(txgain);
-    pluto_set_tx_freq(frequency);
-    pluto_set_rx_freq(LO_FREQ_UL+(frequency-LO_FREQ_DL));
+    pluto_set_rxgain(pluto, rxgain);
+    pluto_set_txgain(pluto, txgain);
+    pluto_set_tx_freq(pluto, frequency);
+    pluto_set_rx_freq(pluto, LO_FREQ_UL+(frequency-LO_FREQ_DL));
 #endif
     printf("Pluto config: rxgain %d txgain %d DL_LO %dHz UL_LO %dHz\n",rxgain,txgain,frequency,LO_FREQ_UL+(frequency-LO_FREQ_DL));
 

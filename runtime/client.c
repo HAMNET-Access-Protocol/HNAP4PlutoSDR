@@ -288,8 +288,8 @@ void  phy_carrier_sync(PhyUE phy, platform hw)
 
     // tune to the correct frequency
     int cfo_hz = ofdmframesync_get_cfo(phy->fs)*SAMPLERATE/(2*M_PI);
-    pluto_set_tx_freq(LO_FREQ_UL+cfo_hz);
-    pluto_set_rx_freq(LO_FREQ_DL+cfo_hz);
+    pluto_set_tx_freq(hw, LO_FREQ_UL+cfo_hz);
+    pluto_set_rx_freq(hw, LO_FREQ_DL+cfo_hz);
     LOG(INFO,"[CLIENT] retune transceiver with cfo %dHz:\n",cfo_hz);
     LOG(INFO,"[CLIENT] TX LO freq: %dHz\n",LO_FREQ_UL+cfo_hz);
     LOG(INFO,"[CLIENT] RX LO freq: %dHz\n",LO_FREQ_DL+cfo_hz);
@@ -361,12 +361,12 @@ int main(int argc,char *argv[])
     platform pluto = init_pluto_platform(BUFLEN);
     //platform pluto = init_pluto_network_platform(BUFLEN);
 
-    pluto_set_tx_freq(ul_frequency);
-    pluto_set_rx_freq(dl_frequency);
+    pluto_set_tx_freq(pluto, ul_frequency);
+    pluto_set_rx_freq(pluto, dl_frequency);
 
-    pluto_set_rxgain(rxgain);
-    pluto_set_txgain(txgain);
-    pluto_start_monitor();
+    pluto_set_rxgain(pluto, rxgain);
+    pluto_set_txgain(pluto, txgain);
+    pluto_start_monitor(pluto);
 #endif
 
     // seed random

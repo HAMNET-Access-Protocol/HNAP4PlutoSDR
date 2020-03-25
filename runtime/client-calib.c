@@ -89,8 +89,8 @@ void  phy_carrier_sync(PhyUE phy, platform hw)
 
     // tune to the correct frequency
     int avg_cfo = round(cfo_hz/64);
-    pluto_set_tx_freq(LO_FREQ_UL+avg_cfo);
-    pluto_set_rx_freq(LO_FREQ_DL+avg_cfo);
+    pluto_set_tx_freq(hw, LO_FREQ_UL+avg_cfo);
+    pluto_set_rx_freq(hw, LO_FREQ_DL+avg_cfo);
     LOG(INFO,"[CLIENT] retune transceiver with cfo %dHz:\n",avg_cfo);
     LOG(INFO,"[CLIENT] TX LO freq: %dHz\n",LO_FREQ_UL+avg_cfo);
     LOG(INFO,"[CLIENT] RX LO freq: %dHz\n",LO_FREQ_DL+avg_cfo);
@@ -139,9 +139,9 @@ int main(int argc,char *argv[])
 	platform pluto = platform_init_simulation(NFFT+CP_LEN);
 #else
     pluto = init_pluto_platform(BUFLEN);
-    pluto_set_rxgain(rxgain);
-    pluto_set_tx_freq(LO_FREQ_UL);
-	pluto_set_rx_freq(LO_FREQ_DL);
+    pluto_set_rxgain(pluto, rxgain);
+    pluto_set_tx_freq(pluto, LO_FREQ_UL);
+	pluto_set_rx_freq(pluto, LO_FREQ_DL);
     usleep(100000);
 #endif
 
