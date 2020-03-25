@@ -84,22 +84,28 @@ PhyCommon phy_common_init()
     phy->mcs_modem[0] = modem_create(LIQUID_MODEM_QPSK);
     phy->mcs_modem[1] = modem_create(LIQUID_MODEM_QPSK);
     phy->mcs_modem[2] = modem_create(LIQUID_MODEM_QAM16);
-    phy->mcs_modem[3] = modem_create(LIQUID_MODEM_QAM64);
+    phy->mcs_modem[3] = modem_create(LIQUID_MODEM_QAM16);
     phy->mcs_modem[4] = modem_create(LIQUID_MODEM_QAM64);
+    phy->mcs_modem[5] = modem_create(LIQUID_MODEM_QAM64);
+    phy->mcs_modem[6] = modem_create(LIQUID_MODEM_QAM256);
 
     // init FEC modules
     phy->fec_ctrl = fec_create(LIQUID_FEC_CONV_V27, NULL);
     phy->mcs_fec[0] = fec_create(LIQUID_FEC_CONV_V27, NULL);
     phy->mcs_fec[1] = fec_create(LIQUID_FEC_CONV_V27P34, NULL);
     phy->mcs_fec[2] = fec_create(LIQUID_FEC_CONV_V27, NULL);
-    phy->mcs_fec[3] = fec_create(LIQUID_FEC_CONV_V27, NULL);
-    phy->mcs_fec[4] = fec_create(LIQUID_FEC_CONV_V27P34, NULL);
+    phy->mcs_fec[3] = fec_create(LIQUID_FEC_CONV_V27P34, NULL);
+    phy->mcs_fec[4] = fec_create(LIQUID_FEC_CONV_V27, NULL);
+    phy->mcs_fec[5] = fec_create(LIQUID_FEC_CONV_V27P34, NULL);
+    phy->mcs_fec[6] = fec_create(LIQUID_FEC_CONV_V27, NULL);
 
     phy->mcs_fec_scheme[0] = LIQUID_FEC_CONV_V27;
     phy->mcs_fec_scheme[1] = LIQUID_FEC_CONV_V27P34;
     phy->mcs_fec_scheme[2] = LIQUID_FEC_CONV_V27;
-    phy->mcs_fec_scheme[3] = LIQUID_FEC_CONV_V27;
-    phy->mcs_fec_scheme[4] = LIQUID_FEC_CONV_V27P34;
+    phy->mcs_fec_scheme[3] = LIQUID_FEC_CONV_V27P34;
+    phy->mcs_fec_scheme[4] = LIQUID_FEC_CONV_V27;
+    phy->mcs_fec_scheme[5] = LIQUID_FEC_CONV_V27P34;
+    phy->mcs_fec_scheme[6] = LIQUID_FEC_CONV_V27;
 
 
     // init subframe number and rx symbol nr
