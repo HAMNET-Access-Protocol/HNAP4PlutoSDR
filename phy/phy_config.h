@@ -14,6 +14,8 @@
 #ifdef SIM_LOG_BER
 #define PHY_TEST_BER
 #else
+// If this is set, a seperate thread for Viterbi Decoding and MAC RX is used. Should be activated for better performance
+// If not used, the phy RX thread has to do Decoding and MAC RX itself.
 #define USE_RX_SLOT_THREAD
 #endif
 
@@ -50,12 +52,12 @@
 // Robust pilot allocation might enable higher mcs, but takes 10% of resources
 #define USE_ROBUST_PILOT 1
 
-// UE regulary resyncs to the sync sequence to estimate timing offset
+// UE regularly re-syncs to the sync sequence to estimate timing offset
 // during this also the carrier frequency offset is estimated.
 // estimation can estimate larger offsets than the cfo estimation with
 // pilots (done during slot receive) but is inaccurate
 // We filter the new estimate with the old (pilot based) cfo estimation
-// Set this filter to [0 1] to tune estimation (1= completely based on new cfo)
+// Set this filter to [0 1] to tune estimation (1= solely based on new cfo)
 #define SYNC_CFO_FILT_PARAM 0.1f
 
 // FIR filters, buffers etc introduce a delay that causes
@@ -66,6 +68,7 @@
 #define DL_UL_SHIFT_COMP_BS 9
 #define DL_UL_SHIFT_COMP_UE 8
 #else
+// The simulation target needs these values to be 0
 #define DL_UL_SHIFT_COMP_BS 0
 #define DL_UL_SHIFT_COMP_UE 0
 #endif

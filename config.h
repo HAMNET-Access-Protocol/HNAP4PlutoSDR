@@ -8,6 +8,10 @@
 #ifndef CONFIG_H_
 #define CONFIG_H_
 
+// Global config file. Obsolete, this configuration is now done in the Cmake configuration file:
+// CMakeLists.txt
+
+
 // If enabled, a TAP device will be created where data is read from/ sent to
 //#define MAC_ENABLE_TAP_DEV
 // Enable when using simulation environment
