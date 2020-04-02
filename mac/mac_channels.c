@@ -26,7 +26,16 @@ LogicalChannel lchan_create(uint size, uint crc_len)
 	}
 
 	LogicalChannel chan = malloc(sizeof(LogicalChannel_s));
+	if (chan==NULL) {
+	    LOG(ERR,"[MAC CHAN] cannot allocate memory for chan object!\n");
+        return chan;
+    }
 	chan->data = calloc(size,1);
+    if (chan->data==NULL) {
+        LOG(ERR,"[MAC CHAN] cannot allocate memory for chan data!\n");
+        free(chan);
+        return NULL;
+    }
 	chan->writepos = 0;
 	chan->payload_len = size;
 	chan->crc_type = crc;
