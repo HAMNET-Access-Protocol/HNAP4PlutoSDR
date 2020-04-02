@@ -53,24 +53,26 @@ void log_matlab_fc(float complex* cpx, int num_samps, char* filename);
 void log_matlab_f(float* floats, int num_samps, char* filename);
 void log_matlab_i(int* buf, int num_samps, char* filename);
 void log_bin(uint8_t* buf, uint buf_len, char* filename, char* mode);
-void timecheck_stop(struct timecheck_s* time);
+void timecheck_stop(struct timecheck_s* time, int crit_delay_us);
 void timecheck_info(struct timecheck_s* time);
 
 #ifdef TIMING_ENABLE
-#define TIMECHECK_CREATE(obj); struct timecheck_s* obj;
-#define TIMECHECK_INIT(obj,objname,avglen) do { obj = calloc(sizeof(struct timecheck_s),1); \
+#define TIMECHECK_CREATE(obj) struct timecheck_s* obj = NULL
+#define TIMECHECK_INIT(obj,objname,avglen) if (obj==NULL) { obj = calloc(sizeof(struct timecheck_s),1); \
                                         memcpy(obj->name,objname,strlen(objname)); \
-                                        obj->avg_len=avglen; } while (0)
+                                        obj->avg_len=avglen; }
 #define TIMECHECK_START(obj) do { clock_gettime(CLOCK_MONOTONIC,&obj->start); \
                                     } while(0)
-#define TIMECHECK_STOP(obj) timecheck_stop(obj)
+#define TIMECHECK_STOP(obj) timecheck_stop(obj,0)
 #define TIMECHECK_INFO(obj) timecheck_info(obj)
+#define TIMECHECK_STOP_CHECK(obj,max_delay) timecheck_stop(obj,max_delay)
 #else
 #define TIMECHECK_CREATE(name)
 #define TIMECHECK_INIT(obj,name)
 #define TIMECHECK_START(name)
 #define TIMECHECK_STOP(name)
 #define TIMECHECK_INFO(name)
+#define TIMECHECK_STOP_CHECK(obj,max_delay)
 #endif
 
 #endif /* UTIL_LOG_H_ */

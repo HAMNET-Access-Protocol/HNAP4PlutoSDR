@@ -93,8 +93,8 @@ void* thread_phy_bs_rx(struct rx_th_data_s* arg)
 {
 	platform hw = arg->hw;
 	PhyBS phy = arg->phy;
-	struct timespec start, end;
-	double elapsed;
+    TIMECHECK_CREATE(timecheck_bs_rx);
+    TIMECHECK_INIT(timecheck_bs_rx,"bs.rx_buffer",10000);
 
 	float complex* rxbuf_time = calloc(sizeof(float complex),BUFLEN);
 
@@ -109,14 +109,11 @@ void* thread_phy_bs_rx(struct rx_th_data_s* arg)
 	while (1)
 	{
 		hw->platform_rx(hw, rxbuf_time);
-		clock_gettime(CLOCK_MONOTONIC, &start);
+		TIMECHECK_START(timecheck_bs_rx);
 		phy_bs_rx_symbol(phy, rxbuf_time);
 		phy_bs_rx_symbol(phy, rxbuf_time+(NFFT+CP_LEN));
-		clock_gettime(CLOCK_MONOTONIC, &end);
-		elapsed = (end.tv_sec-start.tv_sec)*1000000.0 +(end.tv_nsec-start.tv_nsec)/1000.0;
-
-		if (elapsed > 530)
-			LOG(WARN,"RX timing warn: Iteration took %.1fus\n",elapsed);
+		TIMECHECK_STOP_CHECK(timecheck_bs_rx,530);
+		//TIMECHECK_INFO(timecheck_bs_rx);
 	}
 }
 
@@ -125,22 +122,20 @@ void thread_phy_ue_rx_slot(struct rx_slot_th_data_s* arg)
     PhyBS phy = arg->phy;
     pthread_cond_t* cond_signal = arg->rx_slot_signal;
     pthread_mutex_t* mutex = arg->rx_slot_mutex;
-    struct timespec start, end;
-    double elapsed;
+    TIMECHECK_CREATE(timecheck_bs_rx_slot);
+    TIMECHECK_INIT(timecheck_bs_rx_slot,"bs.rx_slot",1000);
 
     while (1) {
         // Wait for signal from UE rx thread
         pthread_mutex_lock(mutex);
         pthread_cond_wait(cond_signal, mutex);
-        clock_gettime(CLOCK_MONOTONIC,&start);
+        TIMECHECK_START(timecheck_bs_rx_slot);
 
         phy_bs_proc_slot(phy,phy->rx_slot_nr);
 
         pthread_mutex_unlock(mutex);
-        clock_gettime(CLOCK_MONOTONIC,&end);
-        elapsed = (end.tv_sec-start.tv_sec)*1000000.0 +(end.tv_nsec-start.tv_nsec)/1000.0;
-        if (elapsed > 3000)
-            LOG(WARN,"[PHY BS] Timing warn: RX slot processing took %.3fus\n",elapsed);
+        TIMECHECK_STOP_CHECK(timecheck_bs_rx_slot,530);
+        TIMECHECK_INFO(timecheck_bs_rx_slot);
     }
 }
 
@@ -151,8 +146,8 @@ void* thread_phy_bs_tx(struct tx_th_data_s* arg)
 	platform bs = arg->hw;
 	pthread_cond_t* scheduler_signal = arg->scheduler_signal;
 	uint subframe_cnt = 0;
-	struct timespec start, end;
-	double elapsed;
+    TIMECHECK_CREATE(timecheck_bs_tx);
+    TIMECHECK_INIT(timecheck_bs_tx,"bs.tx_buffer",10000);
 
 	float complex* txbuf_time = calloc(sizeof(float complex),BUFLEN);
 
@@ -171,7 +166,7 @@ void* thread_phy_bs_tx(struct tx_th_data_s* arg)
 		for (int symbol=0; symbol<SUBFRAME_LEN/2; symbol++) {
 			bs->platform_tx_push(bs);
 			bs->platform_tx_prep(bs, txbuf_time+BUFLEN-INTER_SYMB_OFFSET, 0, INTER_SYMB_OFFSET);
-			clock_gettime(CLOCK_MONOTONIC, &start);
+            TIMECHECK_START(timecheck_bs_tx);
 			phy_bs_write_symbol(phy, txbuf_time);
 			phy_bs_write_symbol(phy, txbuf_time+1*(NFFT+CP_LEN));
 
@@ -180,11 +175,8 @@ void* thread_phy_bs_tx(struct tx_th_data_s* arg)
             if (symbol==23) {
 				pthread_cond_signal(scheduler_signal);
 			}
-			clock_gettime(CLOCK_MONOTONIC, &end);
-			elapsed = (end.tv_sec-start.tv_sec)*1000000.0 +(end.tv_nsec-start.tv_nsec)/1000.0;
-			if (elapsed > 530)
-				LOG(WARN,"TX timing warn: Iteration took %.1fus. %d %d\n",elapsed,
-						phy->common->tx_subframe, phy->common->tx_symbol);
+            TIMECHECK_STOP_CHECK(timecheck_bs_tx,530);
+            //TIMECHECK_INFO(timecheck_bs_tx);
 
 		} // end{for}
 		subframe_cnt++;
@@ -199,16 +191,15 @@ void* thread_mac_bs_scheduler(struct mac_th_data_s* arg)
 	MacBS mac = arg->mac;
 	pthread_cond_t* cond_signal = arg->scheduler_signal;
 	pthread_mutex_t* mutex = arg->scheduler_mutex;
-	struct timespec start, end;
-	double elapsed;
+    TIMECHECK_CREATE(timecheck_mac_bs);
+	TIMECHECK_INIT(timecheck_mac_bs,"bs.mac_scheduler",1000);
 	uint subframe_cnt = 0;
 
 	while (1) {
 		// Wait for signal from BS tx thread
 		pthread_mutex_lock(mutex);
 		pthread_cond_wait(cond_signal, mutex);
-        clock_gettime(CLOCK_MONOTONIC,&start);
-
+        TIMECHECK_START(timecheck_mac_bs);
 		// add some data to send
 #if BS_SEND_ENABLE
 		uint payload_len = 200;
@@ -220,10 +211,6 @@ void* thread_mac_bs_scheduler(struct mac_th_data_s* arg)
 			dataframe_destroy(dl_frame);
 		}
 #endif
-        /*if (subframe_cnt==200) {
-            mac_bs_set_mcs(mac,2,2,DL);
-            mac_bs_set_mcs(mac,2,2,UL);
-        }*/
 		mac_bs_run_scheduler(mac);
 		subframe_cnt++;
 
@@ -233,13 +220,8 @@ void* thread_mac_bs_scheduler(struct mac_th_data_s* arg)
 			LOG(WARN,"      bytes rx: %d bytes tx: %d\n",mac->stats.bytes_rx, mac->stats.bytes_tx);
 		}
 		pthread_mutex_unlock(mutex);
-		clock_gettime(CLOCK_MONOTONIC, &end);
-		elapsed = (end.tv_sec-start.tv_sec)*1000000.0 +(end.tv_nsec-start.tv_nsec)/1000.0;
-		LOG(DEBUG,"Prepared frame %d. Time: %.3f\n",subframe_cnt,elapsed);
-        if (elapsed > 3500)
-            LOG(WARN,"MAC timing warn: Iteration took %.1fus. %d %d\n",elapsed,
-                    mac->phy->common->tx_subframe, mac->phy->common->tx_symbol);
-
+        TIMECHECK_STOP_CHECK(timecheck_mac_bs,3500);
+        TIMECHECK_INFO(timecheck_mac_bs);
 	}
 }
 

@@ -95,8 +95,9 @@ void thread_phy_ue_rx(struct rx_th_data_s* arg)
 	platform hw = arg->hw;
 	PhyUE phy = arg->phy;
 	pthread_cond_t* scheduler_signal = arg->scheduler_signal;
-	struct timespec start, end;
-	double elapsed;
+	pthread_mutex_t* scheduler_mutex = arg->scheduler_mutex;
+	TIMECHECK_CREATE(timecheck_ue_rx);
+	TIMECHECK_INIT(timecheck_ue_rx,"ue.rx_buffer",1000);
 
 	float complex* rxbuf_time = calloc(sizeof(float complex),BUFLEN);
 
@@ -109,7 +110,7 @@ void thread_phy_ue_rx(struct rx_th_data_s* arg)
 		// fill buffer
 		hw->platform_rx(hw, rxbuf_time);
 		// process samples
-		clock_gettime(CLOCK_MONOTONIC, &start);
+		TIMECHECK_START(timecheck_ue_rx);
 		phy_ue_do_rx(phy, rxbuf_time, BUFLEN);
 		//log_bin((uint8_t*)rxbuf_time,BUFLEN*sizeof(float complex), "dl_data.bin","a");
 		// Run scheduler after DLCTRL slot was received
@@ -117,13 +118,8 @@ void thread_phy_ue_rx(struct rx_th_data_s* arg)
 				phy->common->rx_symbol == DLCTRL_LEN+1) {
 			pthread_cond_signal(scheduler_signal);
 		}
-		clock_gettime(CLOCK_MONOTONIC, &end);
-		elapsed = (end.tv_sec-start.tv_sec)*1000000.0 +(end.tv_nsec-start.tv_nsec)/1000.0;
-
-		if (elapsed > 530)
-			LOG(WARN,"RX timing warn: Iteration took %.1fus in %d %d\n",elapsed,
-					phy->common->rx_subframe, phy->common->rx_symbol);
-
+		TIMECHECK_STOP_CHECK(timecheck_ue_rx,530);
+		//TIMECHECK_INFO(timecheck_ue_rx);
 	}
 }
 
@@ -132,8 +128,8 @@ void thread_phy_ue_tx(struct tx_th_data_s* arg)
 {
 	PhyUE phy = arg->phy;
 	platform hw = arg->hw;
-	struct timespec start, end;
-	double elapsed;
+    TIMECHECK_CREATE(timecheck_ue_tx);
+    TIMECHECK_INIT(timecheck_ue_tx,"ue.tx_buffer",1000);
 
 	float complex* ul_data_tx = calloc(sizeof(float complex),BUFLEN);
 	int offset, num_samples, tx_shift=0;;
@@ -150,7 +146,7 @@ void thread_phy_ue_tx(struct tx_th_data_s* arg)
 	num_samples = BUFLEN-tx_shift;
 
 	while (1) {
-		clock_gettime(CLOCK_MONOTONIC, &start);
+		TIMECHECK_START(timecheck_ue_tx);
 		// create tx time data
 		// first add the last samples from the previous generated symbol
 		hw->platform_tx_prep(hw, ul_data_tx+num_samples, 0, tx_shift);
@@ -161,11 +157,8 @@ void thread_phy_ue_tx(struct tx_th_data_s* arg)
 		// prepare first part of the new symbol
 		hw->platform_tx_prep(hw, ul_data_tx, tx_shift, num_samples);
 
-		clock_gettime(CLOCK_MONOTONIC, &end);
-		elapsed = (end.tv_sec-start.tv_sec)*1000000.0 +(end.tv_nsec-start.tv_nsec)/1000.0;
-		if (elapsed > 530) //TODO calculate based in buf size and kernel buffer amount
-			LOG(WARN,"TX timing warn: Iteration took %.1fus. %d %d\n",elapsed,
-					phy->common->tx_subframe, phy->common->tx_symbol);
+		TIMECHECK_STOP_CHECK(timecheck_ue_tx,530);
+		//TIMECHECK_INFO(timecheck_ue_tx);
 		// push buffer
 		hw->platform_tx_push(hw);
 
@@ -200,8 +193,8 @@ void thread_mac_ue_scheduler(struct mac_th_data_s* arg)
 	MacUE mac = arg->mac;
 	pthread_cond_t* cond_signal = arg->scheduler_signal;
 	pthread_mutex_t* mutex = arg->scheduler_mutex;
-	struct timespec start, end;
-	double elapsed;
+	TIMECHECK_CREATE(timecheck_ue_sched);
+	TIMECHECK_INIT(timecheck_ue_sched,"ue.scheduler",1000);
 	uint sched_rounds=0;
 
     if (ul_mcs>0)
@@ -213,7 +206,7 @@ void thread_mac_ue_scheduler(struct mac_th_data_s* arg)
 		// Wait for signal from UE rx thread
 		pthread_mutex_lock(mutex);
 		pthread_cond_wait(cond_signal, mutex);
-        clock_gettime(CLOCK_MONOTONIC,&start);
+        TIMECHECK_START(timecheck_ue_sched);
 
 		// add some data to send for client
 #if CLIENT_SEND_ENABLE
@@ -225,7 +218,6 @@ void thread_mac_ue_scheduler(struct mac_th_data_s* arg)
 		}
 #endif
 		mac_ue_run_scheduler(mac);
-		pthread_mutex_unlock(mutex);
 		sched_rounds++;
 
 		// show some MAC stats
@@ -234,13 +226,9 @@ void thread_mac_ue_scheduler(struct mac_th_data_s* arg)
 			LOG(WARN,"      bytes rx: %d bytes tx: %d\n",mac->stats.bytes_rx, mac->stats.bytes_tx);
 		}
 
-		clock_gettime(CLOCK_MONOTONIC, &end);
-		elapsed = (end.tv_sec-start.tv_sec)*1000000.0 +(end.tv_nsec-start.tv_nsec)/1000.0;
-		LOG(DEBUG,"Prepared frame %d. Time: %.3f\n",sched_rounds,elapsed);
-        if (elapsed > 2000)
-            LOG(WARN,"MAC timing warn: Iteration took %.1fus in %d %d\n",elapsed,
-                mac->phy->common->rx_subframe, mac->phy->common->rx_symbol);
-
+		TIMECHECK_STOP_CHECK(timecheck_ue_sched,2000);
+        TIMECHECK_INFO(timecheck_ue_sched);
+        pthread_mutex_unlock(mutex);
 	}
 }
 
@@ -249,23 +237,21 @@ void thread_phy_ue_rx_slot(struct rx_slot_th_data_s* arg)
 	PhyUE phy = arg->phy;
 	pthread_cond_t* cond_signal = arg->rx_slot_signal;
 	pthread_mutex_t* mutex = arg->rx_slot_mutex;
-	struct timespec start, end;
-	double elapsed;
+    TIMECHECK_CREATE(timecheck_ue_rx);
+    TIMECHECK_INIT(timecheck_ue_rx,"ue.rx_slot",1000);
 
 	while (1) {
 		// Wait for signal from UE rx thread
 		pthread_mutex_lock(mutex);
 		pthread_cond_wait(cond_signal, mutex);
-		clock_gettime(CLOCK_MONOTONIC,&start);
+		TIMECHECK_START(timecheck_ue_rx);
 
 		phy_ue_proc_slot(phy,phy->rx_slot_nr);
 
-		pthread_mutex_unlock(mutex);
-		clock_gettime(CLOCK_MONOTONIC,&end);
-		elapsed = (end.tv_sec-start.tv_sec)*1000000.0 +(end.tv_nsec-start.tv_nsec)/1000.0;
-        if (elapsed > 3000)
-			LOG(WARN,"[PHY UE] Timing warn: RX slot processing took %.3fus\n",elapsed);
-	}
+        TIMECHECK_STOP_CHECK(timecheck_ue_rx,2000);
+        TIMECHECK_INFO(timecheck_ue_rx);
+        pthread_mutex_unlock(mutex);
+    }
 }
 
 // Get first estimates of the carrier frequency offset and tune to the

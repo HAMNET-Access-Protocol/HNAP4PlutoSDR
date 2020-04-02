@@ -61,7 +61,10 @@ void log_bin(uint8_t* buf, uint buf_len, char* filename, char* mode)
 	fclose(fd);
 }
 
-void timecheck_stop(struct timecheck_s* time)
+// stops an ongoing timing measurement. and updates data
+// if crit_delay_us is set greater than zero, it is checked if the current iteration took longer than
+// the allowed crit_delay
+void timecheck_stop(struct timecheck_s* time, int crit_delay_us)
 {
     struct timespec end;
     clock_gettime(CLOCK_MONOTONIC,&end);
@@ -70,12 +73,14 @@ void timecheck_stop(struct timecheck_s* time)
     time->count++;
     if (elapsed>time->max)
         time->max = elapsed;
+    if (crit_delay_us>0 && crit_delay_us<elapsed)
+        LOG(WARN,"[TimeMonitor] delay warning: '%s' took %4.1fus\n",time->name,elapsed);
 }
 
 void timecheck_info(struct timecheck_s* time)
 {
     if (time->count%time->avg_len==0) {
-        LOG(WARN, "TimingMon '%20s:' avg:%4.3fus max:%4.3f after %6d iter\n",time->name,time->avg/time->avg_len,
+        LOG(WARN, "[TimingMonitor] '%10s': avg:%4.1fus max:%4.1f after %5d iter\n",time->name,time->avg/time->avg_len,
                 time->max,time->count);
         time->avg = 0;
         time->max = 0;

@@ -155,7 +155,7 @@ int phy_ue_initial_sync(PhyUE phy, float complex* rxbuf_time, uint num_samples)
 // furthermore sets the phy dl/ul_assignments variable accordingly
 int phy_ue_proc_dlctrl(PhyUE phy)
 {
-	const PhyCommon common = phy->common;
+    PhyCommon common = phy->common;
 	uint dlctrl_size = (NUM_SLOT*2 + NUM_ULCTRL_SLOT)/2;
 	uint sfn = common->rx_subframe % 2; // even or uneven subframe?
 
@@ -215,10 +215,16 @@ int phy_ue_proc_dlctrl(PhyUE phy)
 	return 1;
 }
 
+TIMECHECK_CREATE(check_demod);
+TIMECHECK_CREATE(check_fec);
+TIMECHECK_CREATE(check_interl);
 // Decode a PHY dl slot and call the MAC callback function
 void phy_ue_proc_slot(PhyUE phy, uint slotnr)
 {
-	uint mcs = phy->mcs_dl;
+    TIMECHECK_INIT(check_demod,"ue.rx_slot.demod",10000);
+    TIMECHECK_INIT(check_fec,"ue.rx_slot.fec",10000);
+    TIMECHECK_INIT(check_interl,"ue.rx_slot.interleaver",10000);
+
 	PhyCommon common = phy->common;
 	assignment_t slot_type = phy->dlslot_assignments[common->rx_subframe%2][slotnr];
 	if (slot_type != NOT_ASSIGNED) {
@@ -233,17 +239,20 @@ void phy_ue_proc_slot(PhyUE phy, uint slotnr)
 		uint written_samps = 0;
 		uint first_symb = DLCTRL_LEN+2+(SLOT_LEN+1)*slotnr;
 		uint last_symb = DLCTRL_LEN+2+(SLOT_LEN+1)*(slotnr+1)-2;
+		TIMECHECK_START(check_demod);
 		phy_demod_soft(common, 0, NFFT-1, first_symb, last_symb, mcs,
 					   demod_buf, buf_len, &written_samps);
-
+        TIMECHECK_STOP(check_demod);
+        TIMECHECK_START(check_interl);
 		//deinterleaving
 		uint8_t* deinterleaved_b = malloc(buf_len);
 		interleaver_decode_soft(common->mcs_interlvr[mcs],demod_buf,deinterleaved_b);
-
+        TIMECHECK_STOP(check_interl);
+        TIMECHECK_START(check_fec);
 		// decoding
 		LogicalChannel chan = lchan_create(blocksize/8,CRC16);
 		fec_decode_soft(common->mcs_fec[mcs], blocksize/8, deinterleaved_b, chan->data);
-
+        TIMECHECK_STOP(check_fec);
 
 #ifdef PHY_TEST_BER
 	uint32_t num_biterr = 0;
@@ -262,6 +271,9 @@ void phy_ue_proc_slot(PhyUE phy, uint slotnr)
 		free(deinterleaved_b);
 		free(demod_buf);
 
+        TIMECHECK_INFO(check_demod);
+        TIMECHECK_INFO(check_fec);
+        TIMECHECK_INFO(check_interl);
 	}
 }
 
