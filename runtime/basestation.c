@@ -396,6 +396,26 @@ int main(int argc,char *argv[])
         printf("%d ",CPU_ISSET(i, &cpu_set));
 	printf("\n");
 
+    // main thread: regulary show statistics:
+    char stats_buf[512];
+    while (1) {
+        sleep(60);
+        int num_user = 0;
+        for (int userid=0; userid<MAX_USER;userid++) {
+            if (mac->UE[userid] != NULL) {
+                num_user++;
+                LOG(INFO, "User %2d stats:\n", userid);
+                SYSLOG(LOG_INFO, "User %2d stats:\n", userid);
+                mac_stats_print(stats_buf, 512, &mac->UE[userid]->stats);
+                LOG(INFO, "%s", stats_buf);
+                SYSLOG(LOG_INFO, "%s", stats_buf);
+                LOG(INFO, "UL mcs %d DL mcs %d\n", mac->UE[userid]->ul_mcs, mac->UE[userid]->dl_mcs);
+                SYSLOG(LOG_INFO, "UL mcs %d DL mcs %d\n", mac->UE[userid]->ul_mcs, mac->UE[userid]->dl_mcs);
+            }
+        }
+        LOG(INFO,"Num connected users: %d\n",num_user);
+        SYSLOG(LOG_INFO,"Num connected users: %d\n",num_user);
+    }
 
 	static void* ret[4];
 	pthread_join(bs_phy_rx_th, (void*)&ret[0]);

@@ -518,7 +518,21 @@ int main(int argc,char *argv[])
 		printf("%d ",CPU_ISSET(i, &cpu_set));
 	printf("\n");
 
-	static int ret[4];
+	// main thread: regulary show statistics:
+	char stats_buf[512];
+	while (1) {
+        sleep(60);
+        LOG(INFO,"MAC UE status: is associated: %d\n",mac->is_associated);
+        SYSLOG(LOG_INFO,"MAC UE status: is associated: %d\n",mac->is_associated);
+        if (mac->is_associated) {
+            mac_stats_print(stats_buf, 512, &mac->stats);
+            LOG(INFO, "%s",stats_buf);
+            SYSLOG(LOG_INFO,"%s",stats_buf);
+            LOG(INFO,"UL mcs %d DL mcs %d\n",mac->ul_mcs, mac->dl_mcs);
+            SYSLOG(LOG_INFO,"UL mcs %d DL mcs %d\n",mac->ul_mcs, mac->dl_mcs);
+        }
+	}
+	static void* ret[4];
 	pthread_join(ue_phy_rx_th, &ret[0]);
 	pthread_join(ue_phy_tx_th, &ret[1]);
 	pthread_join(ue_mac_th, &ret[2]);

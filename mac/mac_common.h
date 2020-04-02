@@ -9,6 +9,7 @@
 #define MAC_MAC_COMMON_H_
 
 #include <stddef.h>
+#include <time.h>
 #include "../util/ringbuf.h"
 
 #include "mac_channels.h"
@@ -33,6 +34,7 @@ typedef struct {
 	uint chan_rx_fail;
 	uint bytes_rx;
 	uint bytes_tx;
+	time_t association_time;
 } MACstat_s;
 
 typedef MacDataFrame_s* MacDataFrame;
@@ -44,5 +46,8 @@ void dataframe_destroy(MacDataFrame frame);
 /*************** Various utility methods ****************/
 int num_slot_assigned(uint8_t* assignments, uint num_slots, uint8_t userid);
 void lchan_add_all_msgs(LogicalChannel lchan, ringbuf ctrl_msg_buf);
+
+void mac_stats_init(MACstat_s* stats);
+int mac_stats_print(char* buf, int buflen, MACstat_s* stats);
 
 #endif /* MAC_MAC_COMMON_H_ */

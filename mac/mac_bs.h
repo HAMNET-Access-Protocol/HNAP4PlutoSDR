@@ -38,7 +38,9 @@ typedef struct {
 	long int dl_mcs_pending_time;
 	long int ul_mcs_pending_time;
 
-	long unsigned int last_seen; // subframe No in which user has sent sth the last time
+    MACstat_s stats;            // struct to collect statistics per user
+
+    long unsigned int last_seen; // subframe No in which user has sent sth the last time
 	uint8_t will_end;			 // flag is set to indicate that the connection will be ended
 }user_s;
 
@@ -65,8 +67,6 @@ struct MacBS_s {
 	uint8_t dl_data_assignments[FRAME_LEN][MAC_ULDATA_SLOTS];
 
 	struct PhyBS_s* phy;
-
-	MACstat_s stats;
 
     // Store mapping of EtherAddr to userid
     struct slisthead etheraddr_map;

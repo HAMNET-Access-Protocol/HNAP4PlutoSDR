@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <complex.h>
 #include <stdlib.h>
+#include <syslog.h>
 
 // Log level enumeration
 enum {TRACE, DEBUG,INFO,WARN,ERR,NONE};
@@ -23,9 +24,12 @@ enum {TRACE, DEBUG,INFO,WARN,ERR,NONE};
 // Enable/Disable timing performance evaluation
 #define TIMING_ENABLE
 
+// Enable/Disable syslog messages.
+#define SYSLOG_ENABLE
+
 // log macros with specified log level
 #define LOG(level,...) do { if (level>=LOG_LEVEL) \
-		{ printf(__VA_ARGS__); } } while(0);
+		{ printf(__VA_ARGS__); } } while(0)
 
 #define PRINT_BIN(level,data,len) do { if (level>=LOG_LEVEL) \
 						{ for(int i=0; i<len; i++) {printf("%02x",data[i]);}}} while(0)
@@ -40,6 +44,15 @@ enum {TRACE, DEBUG,INFO,WARN,ERR,NONE};
 #define LOG_BIN(level,x,y,z) do { if (level>=LOG_LEVEL) \
 										{ log_bin(x,y,z); } } while(0);
 
+
+// Log makros for syslog
+#ifdef SYSLOG_ENABLE
+#define SYSLOG(level,...) syslog(level,__VA_ARGS__)
+#else
+#define SYSLOG(level,...)
+#endif
+
+// structure for simple timing measurements. To be used with the makros defined below
 struct timecheck_s {
     char name[80];
     float avg;
@@ -67,6 +80,7 @@ void timecheck_info(struct timecheck_s* time);
 #define TIMECHECK_INFO(obj) timecheck_info(obj)
 #define TIMECHECK_STOP_CHECK(obj,max_delay) timecheck_stop(obj,max_delay)
 #else
+// set timing makros to empty statements, so we do not waste resources if we do not want to time the application
 #define TIMECHECK_CREATE(name)
 #define TIMECHECK_INIT(obj,name)
 #define TIMECHECK_START(name)

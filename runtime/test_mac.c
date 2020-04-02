@@ -209,8 +209,6 @@ int run_simulation(uint num_subframes, uint mcs)
 			printf("PHY BS: %d bit rx, %d biterrors\n",phy_ul_tot_bits,phy_ul_biterr);
 			printf("PHY UE: %d bit rx, %d biterrors\n",phy_dl_tot_bits,phy_dl_biterr);
 			// MAC
-			printf("MAC BS channels received:fail %d:%d\n",mac_bs->stats.chan_rx_succ,mac_bs->stats.chan_rx_fail);
-			printf("       bytes rx: %d bytes tx: %d\n",mac_bs->stats.bytes_rx, mac_bs->stats.bytes_tx);
 			printf("MAC UE channels received:fail %d:%d\n",mac_ue->stats.chan_rx_succ,mac_ue->stats.chan_rx_fail);
 			printf("       bytes rx: %d bytes tx: %d\n",mac_ue->stats.bytes_rx, mac_ue->stats.bytes_tx);
 		}
@@ -219,8 +217,6 @@ int run_simulation(uint num_subframes, uint mcs)
 	printf("PHY BS: %d bit rx, %d biterrors\n",phy_ul_tot_bits,phy_ul_biterr);
 	printf("PHY UE: %d bit rx, %d biterrors\n",phy_dl_tot_bits,phy_dl_biterr);
 	// MAC
-	printf("MAC BS channels received:fail %d:%d\n",mac_bs->stats.chan_rx_succ,mac_bs->stats.chan_rx_fail);
-	printf("       bytes rx: %d bytes tx: %d\n",mac_bs->stats.bytes_rx, mac_bs->stats.bytes_tx);
 	printf("MAC UE channels received:fail %d:%d\n",mac_ue->stats.chan_rx_succ,mac_ue->stats.chan_rx_fail);
 	printf("       bytes rx: %d bytes tx: %d\n",mac_ue->stats.bytes_rx, mac_ue->stats.bytes_tx);
 

@@ -51,3 +51,29 @@ void lchan_add_all_msgs(LogicalChannel lchan, ringbuf ctrl_msg_buf)
 		mac_msg_destroy(msg);
 	}
 }
+
+// initialize the mac statistics struct
+void mac_stats_init(MACstat_s* stats)
+{
+    stats->association_time = time(NULL);
+    stats->bytes_tx = 0;
+    stats->bytes_rx = 0;
+    stats->chan_rx_fail = 0;
+    stats->chan_rx_succ = 0;
+}
+
+// Print current mac statistics to the given buffer
+int mac_stats_print(char* buf, int buflen, MACstat_s* stats)
+{
+    time_t uptime = difftime(time(NULL),stats->association_time);
+    uint up_days = uptime/(3600*24);
+    uint up_hours = (uptime%(3600*24))/3600;
+    uint up_min = (uptime%(3600))/60;
+    uint up_secs = (uptime%60);
+    return snprintf(buf,buflen,"Uptime: %3d days %02d:%02d:%02d hours\n"\
+                               "RX frame succ/fail: %5d/%d\n"\
+                               "RX bytes: %6d   TX bytes: %6d\n",
+                               up_days,up_hours,up_min,up_secs,stats->chan_rx_succ,stats->chan_rx_fail,
+                               stats->bytes_rx,stats->bytes_tx);
+
+}

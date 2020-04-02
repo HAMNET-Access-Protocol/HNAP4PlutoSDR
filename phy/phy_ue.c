@@ -146,6 +146,7 @@ int phy_ue_initial_sync(PhyUE phy, float complex* rxbuf_time, uint num_samples)
 			phy->has_synced_once = 1;
 			phy->prev_cfo = ofdmframesync_get_cfo(phy->fs);
 			LOG(INFO,"[PHY UE] Got sync! cfo: %.3fHz offset: %d samps\n",phy->prev_cfo*SAMPLERATE/6.28,offset);
+			SYSLOG(LOG_INFO,"[PHY UE] Got sync! cfo: %.3fHz offset: %d samps\n",phy->prev_cfo*SAMPLERATE/6.28,offset);
 		} else {
 			float new_cfo = ofdmframesync_get_cfo(phy->fs);
 			float cfo_filt = (1-SYNC_CFO_FILT_PARAM)*phy->prev_cfo + SYNC_CFO_FILT_PARAM*new_cfo;

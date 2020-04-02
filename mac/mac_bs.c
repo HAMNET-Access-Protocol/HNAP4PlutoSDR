@@ -25,6 +25,9 @@ user_s* ue_create(uint userid)
 	new_ue->ul_mcs = 0;
 	new_ue->fs = NULL;
 
+	// init stats struct
+    mac_stats_init(&new_ue->stats);
+
 	return new_ue;
 }
 
@@ -113,7 +116,8 @@ void mac_bs_add_new_ue(MacBS mac, uint8_t rachuserid, uint8_t rach_try_cnt, ofdm
 		}
 		if (userid==MAX_USER) {
 			// no free userid. generate NAK
-			LOG(INFO,"[MAC BS] add_new_ue: no free userID\n");
+			LOG(INFO,"[MAC BS] add_new_ue: no free userID, cannot add user\n");
+			SYSLOG(LOG_INFO,"[MAC BS] add_new_ue: no free userID, cannot add user\n");
             response = mac_msg_create_associate_response(0,rachuserid, assoc_resp_full, 0);
 			// Response will be sent via broadcast channel
 			ringbuf_put(mac->broadcast_ctrl_queue, response);
@@ -125,6 +129,7 @@ void mac_bs_add_new_ue(MacBS mac, uint8_t rachuserid, uint8_t rach_try_cnt, ofdm
             mac->UE[userid]->timingadvance = timing_diff;
             response = mac_msg_create_associate_response(userid,rachuserid, assoc_resp_success, timing_diff);
 			LOG(INFO,"[MAC BS] add new user! rachuserid %d, new ID %d\n",rachuserid,userid);
+			SYSLOG(LOG_INFO,"[MAC BS] add new user! rachuserid %d, new ID %d\n",rachuserid,userid);
 			// Response will be sent via broadcast channel
 			ringbuf_put(mac->broadcast_ctrl_queue, response);
 			mac->last_added_userid = userid;
@@ -255,13 +260,13 @@ int mac_bs_handle_message(MacBS mac, MacMessage msg, uint8_t userID)
 		break;
     case mcs_chance_req:
         mac_bs_set_mcs(mac,userID,msg->hdr.MCSChangeReq.mcs,msg->hdr.MCSChangeReq.ul_flag);
-        LOG_SFN_MAC(DEBUG,"[MAC BS] mcs_change_request from user %. mcs: % is_ul %d\n",userID,
+        LOG_SFN_MAC(DEBUG,"[MAC BS] mcs_change_request from user %d mcs: %d is_ul %d\n",userID,
                             msg->hdr.MCSChangeReq.mcs,msg->hdr.MCSChangeReq.ul_flag)
         break;
 	case ul_data:
 		frame = mac_assmbl_reassemble(user->reassembler,msg);
 		if (frame != NULL) {
-			mac->stats.bytes_rx+=frame->size;
+			user->stats.bytes_rx+=frame->size;
 			LOG_SFN_MAC(INFO,"[MAC BS] received frame with %d bytes!\n",frame->size);
 			//PRINT_BIN(INFO,frame->data,frame->size); LOG(INFO,"\n");
 #ifdef MAC_ENABLE_TAP_DEV
@@ -312,7 +317,7 @@ int mac_bs_rx_channel(MacBS mac, LogicalChannel chan, uint userid)
 	if(!lchan_verify_crc(chan)) {
 		LOG_SFN_MAC(WARN, "[MAC BS] lchan CRC%d invalid. Dropping %d bytes from user %d\n",
 						8*chan->crc_type, chan->payload_len, userid);
-		mac->stats.chan_rx_fail++;
+		mac->UE[userid]->stats.chan_rx_fail++;
 		lchan_destroy(chan);
 		return 0;
 	}
@@ -327,7 +332,7 @@ int mac_bs_rx_channel(MacBS mac, LogicalChannel chan, uint userid)
 	} while (msg != NULL);
 
 	lchan_destroy(chan);
-	mac->stats.chan_rx_succ++;
+	mac->UE[userid]->stats.chan_rx_succ++;
 	mac->UE[userid]->last_seen = mac->subframe_cnt;
 	return 1;
 }
@@ -358,7 +363,7 @@ void mac_bs_map_slot(MacBS mac, uint subframe, uint slot, user_s* ue)
 		uint payload_size = lchan_unused_bytes(chan);
 		MacMessage msg = mac_frag_get_fragment(ue->fragmenter, payload_size, 0);
 		lchan_add_message(chan,msg);
-		mac->stats.bytes_tx+=msg->payload_len;
+		ue->stats.bytes_tx+=msg->payload_len;
 		mac_msg_destroy(msg);
 	}
 	lchan_calc_crc(chan);
@@ -532,7 +537,6 @@ void mac_bs_run_scheduler(MacBS mac)
             uint payload_size = lchan_unused_bytes(chan);
             MacMessage msg = mac_frag_get_fragment(mac->broadcast_data_fragmenter, payload_size, 0);
             lchan_add_message(chan,msg);
-            mac->stats.bytes_tx+=msg->payload_len;
             mac_msg_destroy(msg);
         }
         lchan_calc_crc(chan);
