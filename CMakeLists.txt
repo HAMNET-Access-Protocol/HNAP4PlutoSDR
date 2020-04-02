@@ -31,17 +31,17 @@ target_link_libraries(test_mac liquid m)
 target_compile_definitions(test_mac PUBLIC USE_SIM SIM_LOG_BER SIM_LOG_DELAY)
 # Basestation
 add_executable(basestation runtime/basestation.c platform/platform.h platform/pluto.h platform/pluto.c
-                            ${PHY_BS} ${MAC_COMMON} ${MAC_BS} ${UTIL})
-target_link_libraries(basestation liquid m iio pthread)
+                            ${PHY_BS} ${MAC_COMMON} ${MAC_BS} ${UTIL} platform/pluto_gpio.c platform/pluto_gpio.h)
+target_link_libraries(basestation liquid m iio pthread rt)
 target_compile_definitions(basestation PUBLIC MAC_ENABLE_TAP_DEV)
 
 #Client
 add_executable(client runtime/client.c platform/platform.h platform/pluto.h platform/pluto.c
-        ${PHY_UE} ${MAC_COMMON} ${MAC_UE} ${UTIL})
-target_link_libraries(client liquid m iio pthread)
+        ${PHY_UE} ${MAC_COMMON} ${MAC_UE} ${UTIL} platform/pluto_gpio.c platform/pluto_gpio.h)
+target_link_libraries(client liquid m iio pthread rt)
 target_compile_definitions(client PUBLIC MAC_ENABLE_TAP_DEV)
 
 #Client XO calibration tool
 add_executable(client-calib runtime/client-calib.c platform/platform.h platform/pluto.h platform/pluto.c
-        ${PHY_UE} ${MAC_COMMON} ${MAC_UE} ${UTIL})
-target_link_libraries(client-calib liquid m iio pthread)
+        ${PHY_UE} ${MAC_COMMON} ${MAC_UE} ${UTIL} platform/pluto_gpio.c platform/pluto_gpio.h)
+target_link_libraries(client-calib liquid m iio pthread rt)

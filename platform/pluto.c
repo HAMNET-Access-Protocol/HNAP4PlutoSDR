@@ -14,6 +14,7 @@
 #include <string.h>
 #include <iio.h>
 #include <unistd.h>
+#include "pluto_gpio.h"
 
 /* helper macros */
 #define MHZ(x) ((long long)(x*1000000.0 + .5))
@@ -62,9 +63,12 @@ struct pluto_data_s {
     struct stream_cfg rxcfg;
     struct stream_cfg txcfg;
 
+    // length of one TX/RX buffer
+    int buflen;
+
     // TDD or FDD mode
-    enum duplex_type duplex_mode;
-    uint ptt_assertion_delay;
+    uint ptt_delay;
+    gpio_pin gpio_MIO0;
 };
 typedef struct  pluto_data_s* pluto_data;
 
@@ -85,6 +89,8 @@ void shutdown(platform hw)
 
 	printf("* Destroying context\n");
 	if (pluto->ctx) { iio_context_destroy(pluto->ctx); }
+
+    if (pluto->gpio_MIO0) { pluto_gpio_destroy(pluto->gpio_MIO0); }
 }
 
 
@@ -246,7 +252,7 @@ int pluto_receive(platform hw, float complex* buf_rx)
 	return i;
 }
 
-platform init_generic(platform hw, uint buf_len)
+void init_generic(platform hw, uint buf_len)
 {
     pluto_data pluto = (pluto_data)hw->data;
 
@@ -263,6 +269,8 @@ platform init_generic(platform hw, uint buf_len)
     pluto->txcfg.rfport = "A"; // port A (select for rf freq.)
 
     pluto->ad9361_phy = get_ad9361_phy(pluto->ctx);
+
+    pluto->buflen = buf_len;
 
 	printf("* Acquiring AD9361 streaming devices\n");
 	ASSERT(get_ad9361_stream_dev(pluto->ctx, TX, &pluto->tx) && "No tx dev found");
@@ -333,6 +341,8 @@ platform init_generic(platform hw, uint buf_len)
 	hw->platform_tx_prep = pluto_prep_tx;
 	hw->platform_tx_push = pluto_transmit;
 	hw->end = shutdown;
+	hw->ptt_set_rx = pluto_ptt_set_rx;
+	hw->ptt_set_tx = pluto_ptt_set_tx;
 }
 
 long long pluto_get_rxgain(platform hw)
@@ -386,44 +396,33 @@ int pluto_set_rx_freq(platform hw, long long rxfreq)
 	return true;
 }
 
-// Set the AD9361 to TDD or FDD mode
-int pluto_set_duplex_mode(platform hw, enum duplex_type mode)
+int pluto_enable_ptt(platform hw)
 {
     pluto_data pluto = (pluto_data)hw->data;
-    struct iio_device* dev = get_ad9361_phy(pluto->ctx);
-    if (dev==NULL)
-        return -1;
-
-    if (mode==FDD) {
-        iio_device_debug_attr_write_bool(dev, "adi,frequency-division-duplex-mode-enable", 1);
-        iio_device_debug_attr_write_bool(dev, "initialize", 1);
-    } else {
-        iio_device_debug_attr_write_bool(dev, "adi,frequency-division-duplex-mode-enable", 0);
-        iio_device_debug_attr_write_bool(dev, "adi,gpo0-slave-rx-enable", 1);
-        iio_device_debug_attr_write_bool(dev, "adi,gpo1-slave-tx-enable", 1);
-        iio_device_debug_attr_write_bool(dev, "initialize", 1);
-    }
+    pluto->gpio_MIO0 = pluto_gpio_init(PIN_MIO0,OUT);
     return 0;
 }
 
-void pluto_tdd_set_tx(platform hw)
+void pluto_ptt_set_tx(platform hw)
 {
+#ifdef GENERATE_PTT_SIGNAL
     pluto_data pluto = (pluto_data)hw->data;
-    iio_device_attr_write(pluto->ad9361_phy, "ensm_mode", "tx");
+    pluto_gpio_pin_write_delayed(pluto->gpio_MIO0,HIGH,pluto->ptt_delay);
+#endif
 }
 
-void pluto_tdd_set_rx(platform hw)
+void pluto_ptt_set_rx(platform hw)
 {
+#ifdef GENERATE_PTT_SIGNAL
     pluto_data pluto = (pluto_data)hw->data;
-    iio_device_attr_write(pluto->ad9361_phy, "ensm_mode", "rx");
+    pluto_gpio_pin_write_delayed(pluto->gpio_MIO0,LOW,pluto->ptt_delay);
+#endif
 }
 
-void pluto_tdd_set_switch_delay(platform hw, int delay_us)
+void pluto_ptt_set_switch_delay(platform hw, int delay_us)
 {
     pluto_data pluto = (pluto_data)hw->data;
-    iio_device_attr_write_longlong(pluto->ad9361_phy, "gpo0-rx-delay-us", delay_us);
-    iio_device_attr_write_longlong(pluto->ad9361_phy, "gpo0-tx-delay-us", delay_us);
-    pluto_set_duplex_mode(hw,TDD);
+    pluto->ptt_delay = delay_us+PTT_DELAY_ADJUST_US-PTT_DELAY_COMP;
 }
 
 // Initialize a pluto network context
@@ -441,7 +440,7 @@ platform init_pluto_network_platform(uint buf_len)
 	return pluto;
 }
 
-// Initialize a local context. Used for buidling directly
+// Initialize a local context. Used for building directly
 // on the pluto
 platform init_pluto_platform(uint buf_len)
 {

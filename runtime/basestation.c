@@ -55,7 +55,7 @@ Options:\n \
    --frequency -f: tune to a specific (DL) frequency\n";
 
 extern char *optarg;
-int rxgain = 40;
+int rxgain = 70;
 int txgain = 0;
 int frequency = LO_FREQ_DL;
 

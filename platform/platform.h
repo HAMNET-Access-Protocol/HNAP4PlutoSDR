@@ -31,25 +31,17 @@
 
 #include <complex.h>
 
-// Define the Platform that shall be used
-#define PLATFORM_INIT(...) init_pluto_platform(__VA_ARGS__)
-
 struct platform_s {
 	int (*platform_tx_push)(struct platform_s*);
 	int (*platform_tx_prep)(struct platform_s*, float complex*, unsigned int offset, unsigned int num_samples);
 	int (*platform_rx)(struct platform_s*, float complex*);
 	void (*end)(struct platform_s*);
+	void (*ptt_set_tx)(struct platform_s*);
+	void (*ptt_set_rx)(struct platform_s*);
 	void* data;	// Pointer to store some data if necessary for some platform
 };
 
 typedef struct platform_s* platform;
-
-// Dummy platform init
-// Implementations of this method have to initialize and return
-// a platform struct with the implementation of the interface functions
-#define PLATFORM_INIT_DEFAULT(...) do { \
-		printf("PLATFORM_INIT has not been defined correctly!\n"); \
-		return NULL; } while(0)
 
 
 #endif /* PLATFORM_PLATFORM_H_ */

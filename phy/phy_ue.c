@@ -10,13 +10,13 @@
 #include "../util/log.h"
 #include "../mac/mac_config.h"
 #include <pthread.h>
+#include "../platform/pluto.h"
 
 #ifdef PHY_TEST_BER
 #include "../runtime/test.h"
 #endif
 
 // Declarations of local functions
-void phy_ue_proc_slot(PhyUE phy, uint slotnr);
 int _ue_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd);
 
 // Init the PhyUE struct
@@ -100,6 +100,13 @@ void phy_ue_set_mac_interface(PhyUE phy, void (*mac_rx_cb)(struct MacUE_s*, Logi
 {
 	phy->mac_rx_cb = mac_rx_cb;
 	phy->mac = mac;
+}
+
+// Set the pointer to the platform struct.
+// Phy will use this to indicate PTT
+void phy_ue_set_platform_interface(PhyUE phy, struct platform_s* platform)
+{
+    phy->platform = platform;
 }
 
 // Setter function for Downlink MCS
@@ -345,6 +352,7 @@ int _ue_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd)
 		// store old cfo estimation
 		phy->prev_cfo = ofdmframesync_get_cfo(phy->fs);
 		ofdmframesync_reset(phy->fs);
+        ofdmframesync_set_cfo(phy->fs,phy->prev_cfo);
 	}
 
 	// Debug log
@@ -433,16 +441,22 @@ void phy_ue_write_symbol(PhyUE phy, float complex* txbuf_time)
 		// check for MAC layer sync state
 		if(!mac_ue_is_associated(phy->mac)) {
 			// Not associated yet. Use Random Access slot to get association
-			if (common->tx_subframe == 0 && tx_symb == SUBFRAME_LEN-SLOT_LEN) {
+            if (common->tx_subframe == 0 && tx_symb == SUBFRAME_LEN-SLOT_LEN-1) {
+                // set ptt signal one symbol before tx starts
+                phy->platform->ptt_set_tx(phy->platform);
+            } else if (common->tx_subframe == 0 && tx_symb == SUBFRAME_LEN-SLOT_LEN) {
 				ofdmframegen_reset(phy->fg);
 				ofdmframegen_write_S0a(phy->fg, txbuf_time);
+
 			} else if (common->tx_subframe == 0 && tx_symb == SUBFRAME_LEN-SLOT_LEN+1) {
 				ofdmframegen_write_S0b(phy->fg, txbuf_time);
 			} else if (common->tx_subframe == 0 && tx_symb == SUBFRAME_LEN-SLOT_LEN+2) {
 				ofdmframegen_write_S1(phy->fg, txbuf_time);
 			} else if (common->tx_subframe == 0 && tx_symb == SUBFRAME_LEN-SLOT_LEN+3) {
 				phy_ue_create_assoc_request(phy, txbuf_time);
-			} else {
+            } else if (common->tx_subframe == 0 && tx_symb == SUBFRAME_LEN-SLOT_LEN+4) {
+                phy->platform->ptt_set_rx(phy->platform);
+            } else {
 				// send zeros
 				memset(txbuf_time, 0, sizeof(float complex)*(NFFT+CP_LEN));
 			}
@@ -454,6 +468,12 @@ void phy_ue_write_symbol(PhyUE phy, float complex* txbuf_time)
 			} else {
 				ofdmframegen_writesymbol_nopilot(phy->fg, common->txdata_f[sfn][tx_symb],txbuf_time);
 			}
+		} else if (phy->ul_symbol_alloc[sfn][tx_symb] == PTT_UP) {
+            memset(txbuf_time,0,sizeof(float complex)*(NFFT+CP_LEN));
+            phy->platform->ptt_set_tx(phy->platform);
+        } else if (phy->ul_symbol_alloc[sfn][tx_symb] == PTT_DOWN) {
+            memset(txbuf_time,0,sizeof(float complex)*(NFFT+CP_LEN));
+            phy->platform->ptt_set_rx(phy->platform);
 		} else {
 			// associated but no data to send. Set zero
 			memset(txbuf_time,0,sizeof(float complex)*(NFFT+CP_LEN));
@@ -536,7 +556,14 @@ int phy_map_ulctrl(PhyUE phy, LogicalChannel chan, uint subframe, uint8_t slot_n
 	phy_mod(phy->common,sfn,0,NFFT-1,first_symb,first_symb, mcs, repacked_b, num_repacked, &total_samps);
 
 	// activate used OFDM symbols in resource allocation
+	// there are two ulctrl slots which have a length of one symbol each. We view them as one and
+	// do not switch in between, because the GPIO pin cannot be toggled that fast
+	// (due to how we implement the ptt signal delay)
+	if (phy->ul_symbol_alloc[sfn][2*(SLOT_LEN+1)-2]==NOT_USED)
+	    phy->ul_symbol_alloc[sfn][2*(SLOT_LEN+1)-1] = PTT_UP; // indicate PTT, slot before isnt used
 	phy->ul_symbol_alloc[sfn][first_symb] = DATA;
+	if (phy->ul_symbol_alloc[sfn][2*(SLOT_LEN+1)+2+2]==NOT_USED)
+	    phy->ul_symbol_alloc[sfn][2*(SLOT_LEN+1)+2+1] = PTT_DOWN; // next slot is not used, end PTT here
 
 	free(enc_b);
 	free(repacked_b);
@@ -590,8 +617,24 @@ int phy_map_ulslot(PhyUE phy, LogicalChannel chan, uint subframe, uint8_t slot_n
 
 	// activate used OFDM symbols in resource allocation
 	memset(&phy->ul_symbol_alloc[sfn][first_symb],DATA,last_symb-first_symb+1);
-
-	free(interleaved_b);
+    // if the previous slot is not used, we have to set the PTT signal before this data slot
+	if (slot_nr==0) {
+	    if (phy->ul_symbol_alloc[(sfn-1)%2][SUBFRAME_LEN-2]==NOT_USED)
+            phy->ul_symbol_alloc[(sfn-1)%2][SUBFRAME_LEN-1] = PTT_UP; // indicate PTT, slot before isnt used
+    } else {
+        if (phy->ul_symbol_alloc[sfn][first_symb-2]==NOT_USED)
+            phy->ul_symbol_alloc[sfn][first_symb-1] = PTT_UP; // indicate PTT, slot before isnt used
+	}
+    // if the next slot is not used we have to turn off PTT signal after this slot
+    if (slot_nr==NUM_SLOT-1) {
+        // for the last slot within a subframe we simply assume that the next slot is unused.
+        // if it is used, the property can be overwritten in the next subframe assignment
+        phy->ul_symbol_alloc[sfn][first_symb + 1] = PTT_DOWN; // next slot is not used, end PTT here
+    } else {
+        if (phy->ul_symbol_alloc[sfn][first_symb + 2] == NOT_USED)
+            phy->ul_symbol_alloc[sfn][first_symb + 1] = PTT_DOWN; // next slot is not used, end PTT here
+    }
+    free(interleaved_b);
 	free(enc_b);
 	free(repacked_b);
 	return 0;

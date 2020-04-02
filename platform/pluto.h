@@ -15,7 +15,14 @@
 #define KERNEL_BUF_TX 4
 #define KERNEL_BUF_RX 6
 
-enum duplex_type {TDD, FDD};
+// Set this makro to generate a PTT signal at GPIO pin MIO0.
+#define GENERATE_PTT_SIGNAL
+// adjust the delay between generation of the signal in software and
+// the hardware toggle. A default delay is calculated from the kernel buffer
+// length, this variable can be used for fine tuning
+#define PTT_DELAY_ADJUST_US 0 // [usec]
+// compensate for delay introduced by this software for pin control. (thread wakeup etc.)
+#define PTT_DELAY_COMP 100 // [usec]
 
 // Pluto Platform hardware abstraction
 // use init pluto platform, to generate a platform
@@ -32,10 +39,10 @@ int pluto_set_rx_freq(platform hw, long long rxfreq);
 int pluto_set_tx_freq(platform hw, long long txfreq);
 
 // Duplex mode config
-int pluto_set_duplex_mode(platform hw, enum duplex_type mode);
-void pluto_tdd_set_tx(platform hw);
-void pluto_tdd_set_rx(platform hw);
-void pluto_tdd_set_switch_delay(platform hw, int delay_us);
+int pluto_enable_ptt(platform hw);
+void pluto_ptt_set_tx(platform hw);
+void pluto_ptt_set_rx(platform hw);
+void pluto_ptt_set_switch_delay(platform hw, int delay_us);
 
 // --------------- Read device config ----------------- //
 long long pluto_get_rxgain(platform hw);

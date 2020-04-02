@@ -60,6 +60,16 @@ int simulation_tx(platform p)
 	return 1;
 }
 
+void sim_ptt_tx_dummy(platform p)
+{
+
+}
+
+void sim_ptt_rx_dummy(platform p)
+{
+
+}
+
 void sim_end(platform p)
 {
 	free(((simu_data)p->data)->rxbuf);
@@ -93,6 +103,8 @@ platform platform_init_simulation(uint buflen, float snr)
 	sim->platform_tx_prep = simulation_prep_tx;
 	sim->platform_tx_push = simulation_tx;
 	sim->end = sim_end;
+	sim->ptt_set_tx = sim_ptt_tx_dummy;
+	sim->ptt_set_rx = sim_ptt_rx_dummy;
 	sim->data = sim_data;
 
 	// Generate buffers

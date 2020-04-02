@@ -55,8 +55,8 @@ Options:\n \
    --dl-mcs -d:    use given mcs in DL. Default: 0.\n";
 
 extern char *optarg;
-int rxgain = 40;
-int txgain = 0;
+int rxgain = -100;
+int txgain = -100;
 int dl_frequency = LO_FREQ_DL;
 int ul_frequency = LO_FREQ_UL;
 int ul_mcs = 0;
@@ -67,6 +67,7 @@ struct rx_th_data_s {
 	PhyUE phy;
 	platform hw;
 	pthread_cond_t* scheduler_signal;
+	pthread_mutex_t* scheduler_mutex;
 };
 
 // struct holds arguments for TX thread
@@ -116,7 +117,9 @@ void thread_phy_ue_rx(struct rx_th_data_s* arg)
 		// Run scheduler after DLCTRL slot was received
 		if (phy->common->rx_symbol == DLCTRL_LEN ||
 				phy->common->rx_symbol == DLCTRL_LEN+1) {
+		    pthread_mutex_lock(scheduler_mutex);
 			pthread_cond_signal(scheduler_signal);
+			pthread_mutex_unlock(scheduler_mutex);
 		}
 		TIMECHECK_STOP_CHECK(timecheck_ue_rx,530);
 		//TIMECHECK_INFO(timecheck_ue_rx);
@@ -182,6 +185,10 @@ void thread_phy_ue_tx(struct tx_th_data_s* arg)
 				tx_shift = tx_shift - diff;
 				offset = new_offset;
 				num_samples = BUFLEN - tx_shift;
+
+                // set PTT signal delay
+                pluto_ptt_set_switch_delay(hw,
+                        (int) ((BUFLEN * (KERNEL_BUF_TX - 1) + tx_shift) * 1000000.0 / SAMPLERATE));
 			}
 		}
 	}
@@ -281,14 +288,6 @@ void  phy_carrier_sync(PhyUE phy, platform hw)
     LOG(INFO,"[CLIENT] RX LO freq: %dHz\n",LO_FREQ_DL+cfo_hz);
     free(rxbuf_time);
 
-    // fix gain. AGC was used during sync phase but we have to switch
-    // to manual mode because of OFDM modulation
-    /*int gain = pluto_get_rxgain()-10;
-    LOG(INFO,"[CLIENT] fix RX gain to %d\n",gain);
-    LOG(INFO,"[CLIENT] fix TX gain to %d\n",-73+gain);
-    pluto_set_rxgain(gain);
-    pluto_set_txgain(-70+gain);*/
-
 }
 
 int main(int argc,char *argv[])
@@ -346,13 +345,33 @@ int main(int argc,char *argv[])
 #else
     platform pluto = init_pluto_platform(BUFLEN);
     //platform pluto = init_pluto_network_platform(BUFLEN);
+#ifdef GENERATE_PTT_SIGNAL
+    pluto_enable_ptt(pluto);
+    pluto_ptt_set_switch_delay(pluto, (int) (BUFLEN * (KERNEL_BUF_TX - 1) * 1000000.0 / SAMPLERATE));
+    pluto_ptt_set_rx(pluto);
+#endif
 
     pluto_set_tx_freq(pluto, ul_frequency);
     pluto_set_rx_freq(pluto, dl_frequency);
 
+    // Is the gain is not fixed, we will listen for a moment and use the given value from AGC.
+    // We have to use manual mode because this AGC does not work with our OFDM modulation
+    LOG(INFO,"[Pluto] configuring gain...\n");
+    sleep(1);
+    int gain = pluto_get_rxgain(pluto)-10; // AGC sets gain too high for ofdm, use 10dB less gain
+
+    // If fixed TX/RX gain values were given, set them, otherwise use the AGC values
+    if (rxgain==-100)
+        rxgain=gain;
+
+    if (txgain==-100)
+        txgain=-70+gain;
+
     pluto_set_rxgain(pluto, rxgain);
     pluto_set_txgain(pluto, txgain);
-    pluto_start_monitor(pluto);
+
+    LOG(INFO,"[CLIENT] fix RX gain to %d\n",rxgain);
+    LOG(INFO,"[CLIENT] fix TX gain to %d\n",txgain);
 #endif
 
     // seed random
@@ -364,6 +383,7 @@ int main(int argc,char *argv[])
 
 	phy_ue_set_mac_interface(phy, mac_ue_rx_channel, mac);
 	mac_ue_set_phy_interface(mac, phy);
+    phy_ue_set_platform_interface(phy, pluto);
 
     // Tune to the correct frequency and set gain
     phy_carrier_sync(phy, pluto);
@@ -375,6 +395,11 @@ int main(int argc,char *argv[])
 
     phy_ue_set_mac_interface(phy, mac_ue_rx_channel, mac);
     mac_ue_set_phy_interface(mac, phy);
+    phy_ue_set_platform_interface(phy, pluto);
+
+#if !CLIENT_USE_PLATFORM_SIM
+    pluto_start_monitor(pluto);
+#endif
 
     // create arguments for MAC scheduler thread
 	pthread_mutex_t mac_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -389,6 +414,7 @@ int main(int argc,char *argv[])
 	rx_th_data.hw = pluto;
 	rx_th_data.phy = phy;
 	rx_th_data.scheduler_signal = &mac_cond;
+	rx_th_data.scheduler_mutex = &mac_mutex;
 
 	// create arguments for TX thread
 	struct tx_th_data_s tx_th_data;

@@ -14,7 +14,7 @@
 
 typedef enum {NO_SYNC, HAS_SYNC} phy_states;
 
-enum {NOT_USED, DATA, RAMP_UP, RAMP_DOWN}; // definition for tx_symbol allocation variable
+enum {NOT_USED, DATA, PTT_UP, PTT_DOWN}; // definition for tx_symbol allocation variable
 // definition of slot assignments types
 typedef enum {NOT_ASSIGNED, UE_ASSIGNED, BRCST_ASSIGNED} assignment_t;
 
@@ -47,6 +47,9 @@ struct PhyUE_s {
     void (*mac_rx_cb)(struct MacUE_s*, LogicalChannel, uint is_broadcast);
 	struct MacUE_s* mac;	// Pointer to MAC layer. Needed to call mac interface function
 
+	// Pointer to platform object
+	struct platform_s* platform;
+
 	// old cfo estimate for filtering
 	float prev_cfo;
 	// Flag stores whether prev_cfo already holds an estimate, i.e. if we were synced before
@@ -74,6 +77,7 @@ PhyUE phy_ue_init();
 void phy_ue_destroy(PhyUE phy);
 void phy_ue_set_rx_slot_th_signal(PhyUE phy, pthread_cond_t* cond);
 void phy_ue_set_mac_interface(PhyUE phy, void (*mac_rx_cb)(struct MacUE_s*, LogicalChannel, uint), struct MacUE_s* mac);
+void phy_ue_set_platform_interface(PhyUE phy, struct platform_s* platform);
 
 
 /************* MAC INTERFACE FUNCTIONS *************************/
