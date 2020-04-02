@@ -97,6 +97,6 @@ void mac_bs_set_mcs(MacBS mac, uint userid, uint mcs, uint dl_ul);
 int mac_bs_add_txdata(MacBS mac, uint8_t destUserID, MacDataFrame frame);
 void mac_bs_run_scheduler(MacBS mac);
 
-void mac_bs_tap_rx_th(MacBS mac);
+void* mac_bs_tap_rx_th(void* mac);
 
 #endif /* MAC_MAC_BS_H_ */

@@ -7,6 +7,7 @@
 
 #include "mac_ue.h"
 #include <unistd.h>
+#include "../phy/phy_ue.h"
 
 #ifdef MAC_TEST_DELAY
 #include "../runtime/test.h"
@@ -316,9 +317,15 @@ void mac_ue_req_mcs_change(MacUE mac, uint mcs, uint is_ul)
     }
 }
 
-// Thread listens to a tap device and adds data received from tap to mac txqueue
-void mac_ue_tap_rx_th(MacUE mac)
+int mac_ue_get_timing_advance(MacUE mac)
 {
+    return mac->timing_advance;
+}
+
+// Thread listens to a tap device and adds data received from tap to mac txqueue
+void* mac_ue_tap_rx_th(void* arg)
+{
+    MacUE mac = (MacUE)arg;
 	// wait until tap device is created
 	while (mac->tapdevice == NULL) {
 		usleep(10000);
@@ -343,4 +350,5 @@ void mac_ue_tap_rx_th(MacUE mac)
 			}
 		}
 	}
+	return NULL;
 }

@@ -630,8 +630,9 @@ void mac_bs_run_scheduler(MacBS mac)
 	mac->subframe_cnt++;
 }
 
-void mac_bs_tap_rx_th(MacBS mac)
+void* mac_bs_tap_rx_th(void* arg)
 {
+    MacBS mac = (MacBS)arg;
 	tap_dev dev = mac->tapdevice;
 
 	// wait until tap device is created
@@ -663,4 +664,5 @@ void mac_bs_tap_rx_th(MacBS mac)
             }
 		}
 	}
+	return NULL;
 }

@@ -91,12 +91,12 @@ struct rx_slot_th_data_s {
 };
 
 // Main Thread for UE receive
-void thread_phy_ue_rx(struct rx_th_data_s* arg)
+void* thread_phy_ue_rx(void* arg)
 {
-	platform hw = arg->hw;
-	PhyUE phy = arg->phy;
-	pthread_cond_t* scheduler_signal = arg->scheduler_signal;
-	pthread_mutex_t* scheduler_mutex = arg->scheduler_mutex;
+	platform hw = ((struct rx_th_data_s*)arg)->hw;
+	PhyUE phy = ((struct rx_th_data_s*)arg)->phy;
+	pthread_cond_t* scheduler_signal = ((struct rx_th_data_s*)arg)->scheduler_signal;
+	pthread_mutex_t* scheduler_mutex = ((struct rx_th_data_s*)arg)->scheduler_mutex;
 	TIMECHECK_CREATE(timecheck_ue_rx);
 	TIMECHECK_INIT(timecheck_ue_rx,"ue.rx_buffer",1000);
 
@@ -124,13 +124,14 @@ void thread_phy_ue_rx(struct rx_th_data_s* arg)
 		TIMECHECK_STOP_CHECK(timecheck_ue_rx,530);
 		//TIMECHECK_INFO(timecheck_ue_rx);
 	}
+	return NULL;
 }
 
 // Main Thread for UE transmit
-void thread_phy_ue_tx(struct tx_th_data_s* arg)
+void* thread_phy_ue_tx(void* arg)
 {
-	PhyUE phy = arg->phy;
-	platform hw = arg->hw;
+	PhyUE phy = ((struct tx_th_data_s*)arg)->phy;
+	platform hw = ((struct tx_th_data_s*)arg)->hw;
     TIMECHECK_CREATE(timecheck_ue_tx);
     TIMECHECK_INIT(timecheck_ue_tx,"ue.tx_buffer",1000);
 
@@ -192,14 +193,14 @@ void thread_phy_ue_tx(struct tx_th_data_s* arg)
 			}
 		}
 	}
-	hw->end(hw);
+	return NULL;
 }
 
-void thread_mac_ue_scheduler(struct mac_th_data_s* arg)
+void* thread_mac_ue_scheduler(void* arg)
 {
-	MacUE mac = arg->mac;
-	pthread_cond_t* cond_signal = arg->scheduler_signal;
-	pthread_mutex_t* mutex = arg->scheduler_mutex;
+	MacUE mac = ((struct mac_th_data_s*)arg)->mac;
+	pthread_cond_t* cond_signal = ((struct mac_th_data_s*)arg)->scheduler_signal;
+	pthread_mutex_t* mutex = ((struct mac_th_data_s*)arg)->scheduler_mutex;
 	TIMECHECK_CREATE(timecheck_ue_sched);
 	TIMECHECK_INIT(timecheck_ue_sched,"ue.scheduler",1000);
 	uint sched_rounds=0;
@@ -237,13 +238,14 @@ void thread_mac_ue_scheduler(struct mac_th_data_s* arg)
         TIMECHECK_INFO(timecheck_ue_sched);
         pthread_mutex_unlock(mutex);
 	}
+	return NULL;
 }
 
-void thread_phy_ue_rx_slot(struct rx_slot_th_data_s* arg)
+void* thread_phy_ue_rx_slot(void* arg)
 {
-	PhyUE phy = arg->phy;
-	pthread_cond_t* cond_signal = arg->rx_slot_signal;
-	pthread_mutex_t* mutex = arg->rx_slot_mutex;
+	PhyUE phy = ((struct rx_slot_th_data_s*)arg)->phy;
+	pthread_cond_t* cond_signal =  ((struct rx_slot_th_data_s*)arg)->rx_slot_signal;
+	pthread_mutex_t* mutex =  ((struct rx_slot_th_data_s*)arg)->rx_slot_mutex;
     TIMECHECK_CREATE(timecheck_ue_rx);
     TIMECHECK_INIT(timecheck_ue_rx,"ue.rx_slot",1000);
 
@@ -259,6 +261,7 @@ void thread_phy_ue_rx_slot(struct rx_slot_th_data_s* arg)
         TIMECHECK_INFO(timecheck_ue_rx);
         pthread_mutex_unlock(mutex);
     }
+	return NULL;
 }
 
 // Get first estimates of the carrier frequency offset and tune to the
@@ -520,5 +523,4 @@ int main(int argc,char *argv[])
 	pthread_join(ue_phy_tx_th, &ret[1]);
 	pthread_join(ue_mac_th, &ret[2]);
 	pthread_join(ue_phy_rx_slot_th, &ret[3]);
-	LOG(INFO,"Thread exit codes: RX: %d, TX: %d, MAC: %d\n",ret[0],ret[1],ret[2]);
 }

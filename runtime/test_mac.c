@@ -242,7 +242,8 @@ void setup_simulation(float snr)
 
 	phy_ue_set_mac_interface(phy_ue, mac_ue_rx_channel, mac_ue);
 	mac_ue_set_phy_interface(mac_ue, phy_ue);
-	phy_bs_set_mac_interface(phy_bs, mac_bs);
+	phy_ue_set_platform_interface(phy_ue, client);
+    phy_bs_set_mac_interface(phy_bs, mac_bs);
 	mac_bs_set_phy_interface(mac_bs, phy_bs);
 
 

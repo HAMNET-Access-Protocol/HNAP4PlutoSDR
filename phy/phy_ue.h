@@ -80,7 +80,7 @@ void phy_ue_set_mac_interface(PhyUE phy, void (*mac_rx_cb)(struct MacUE_s*, Logi
 void phy_ue_set_platform_interface(PhyUE phy, struct platform_s* platform);
 
 
-/************* MAC INTERFACE FUNCTIONS *************************/
+/********** INTERFACE FUNCTIONS TO MAC LAYER **********************/
 // Configuration
 int phy_ue_set_mcs_dl(PhyUE phy, uint mcs);
 void phy_ue_reset_symbol_allocation(PhyUE phy, uint subframe);

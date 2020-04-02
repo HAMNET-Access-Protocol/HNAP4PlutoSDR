@@ -13,7 +13,9 @@
 #include "mac_config.h"
 #include "mac_fragmentation.h"
 #include "tap_dev.h"
-#include "../phy/phy_ue.h"
+
+struct PhyUE_s;
+typedef struct PhyUE_s* PhyUE;
 
 struct MacUE_s {
 	uint8_t userid;
@@ -55,9 +57,12 @@ void mac_ue_set_assignments(MacUE mac, uint8_t* dlslot, uint8_t* ulslot, uint8_t
 void mac_ue_run_scheduler(MacUE mac);
 void mac_ue_rx_channel(MacUE mac, LogicalChannel chan, uint is_broadcast);
 int  mac_ue_add_txdata(MacUE mac, MacDataFrame frame);
-int  mac_ue_is_associated(MacUE mac);
 void mac_ue_req_mcs_change(MacUE mac, uint mcs, uint is_ul);
 
-void mac_ue_tap_rx_th(MacUE mac);
+/*** Getter functions ***/
+int mac_ue_is_associated(MacUE mac);
+int mac_ue_get_timing_advance(MacUE mac);
+
+void* mac_ue_tap_rx_th(void* mac);
 
 #endif /* MAC_MAC_UE_H_ */

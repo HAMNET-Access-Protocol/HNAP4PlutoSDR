@@ -89,22 +89,23 @@ struct rx_slot_th_data_s {
 };
 
 // Main Thread for BS receive
-void* thread_phy_bs_rx(struct rx_th_data_s* arg)
+void* thread_phy_bs_rx(void* arg)
 {
-	platform hw = arg->hw;
-	PhyBS phy = arg->phy;
+	platform hw = ((struct rx_th_data_s*)arg)->hw;
+	PhyBS phy = ((struct rx_th_data_s*)arg)->phy;
+	pthread_barrier_t* rx_tx_sync = ((struct rx_th_data_s*)arg)->thread_sync;
     TIMECHECK_CREATE(timecheck_bs_rx);
     TIMECHECK_INIT(timecheck_bs_rx,"bs.rx_buffer",10000);
 
 	float complex* rxbuf_time = calloc(sizeof(float complex),BUFLEN);
 
 	// read some rxbuffer objects in order to empty rxbuffer queue
-	pthread_barrier_wait(arg->thread_sync);
+	pthread_barrier_wait(rx_tx_sync);
 	sleep(1); // wait until buffer filled
 	for (int i=0; i<KERNEL_BUF_RX+1; i++)
 		hw->platform_rx(hw, rxbuf_time);
 
-	pthread_barrier_wait(arg->thread_sync);
+	pthread_barrier_wait(rx_tx_sync);
 	LOG(INFO,"RX thread started: RX symbol %d. TX symbol %d\n",phy->common->rx_symbol,phy->common->tx_symbol);
 	while (1)
 	{
@@ -115,13 +116,14 @@ void* thread_phy_bs_rx(struct rx_th_data_s* arg)
 		TIMECHECK_STOP_CHECK(timecheck_bs_rx,530);
 		//TIMECHECK_INFO(timecheck_bs_rx);
 	}
+	return NULL;
 }
 
-void thread_phy_ue_rx_slot(struct rx_slot_th_data_s* arg)
+void* thread_phy_bs_rx_slot(void* arg)
 {
-    PhyBS phy = arg->phy;
-    pthread_cond_t* cond_signal = arg->rx_slot_signal;
-    pthread_mutex_t* mutex = arg->rx_slot_mutex;
+    PhyBS phy = ((struct rx_slot_th_data_s*)arg)->phy;
+    pthread_cond_t* cond_signal = ((struct rx_slot_th_data_s*)arg)->rx_slot_signal;
+    pthread_mutex_t* mutex = ((struct rx_slot_th_data_s*)arg)->rx_slot_mutex;
     TIMECHECK_CREATE(timecheck_bs_rx_slot);
     TIMECHECK_INIT(timecheck_bs_rx_slot,"bs.rx_slot",1000);
 
@@ -137,14 +139,16 @@ void thread_phy_ue_rx_slot(struct rx_slot_th_data_s* arg)
         TIMECHECK_STOP_CHECK(timecheck_bs_rx_slot,530);
         TIMECHECK_INFO(timecheck_bs_rx_slot);
     }
+    return NULL;
 }
 
 // Main Thread for BS transmit
-void* thread_phy_bs_tx(struct tx_th_data_s* arg)
+void* thread_phy_bs_tx(void* arg)
 {
-	PhyBS phy = arg->phy;
-	platform bs = arg->hw;
-	pthread_cond_t* scheduler_signal = arg->scheduler_signal;
+	PhyBS phy = ((struct tx_th_data_s*)arg)->phy;
+	platform bs = ((struct tx_th_data_s*)arg)->hw;
+	pthread_cond_t* scheduler_signal = ((struct tx_th_data_s*)arg)->scheduler_signal;
+	pthread_barrier_t* tx_rx_sync = ((struct tx_th_data_s*)arg)->thread_sync;
 	uint subframe_cnt = 0;
     TIMECHECK_CREATE(timecheck_bs_tx);
     TIMECHECK_INIT(timecheck_bs_tx,"bs.tx_buffer",10000);
@@ -153,12 +157,12 @@ void* thread_phy_bs_tx(struct tx_th_data_s* arg)
 
 	// generate some txbuffers in order to keep the txbuffer queue full
 	bs->platform_tx_prep(bs, txbuf_time, 0, BUFLEN);
-	pthread_barrier_wait(arg->thread_sync);
+	pthread_barrier_wait(tx_rx_sync);
 	sleep(1); // wait until buffer emptied
 	for (int i=0; i<KERNEL_BUF_TX+1; i++)
 		bs->platform_tx_push(bs);
 
-	pthread_barrier_wait(arg->thread_sync);
+	pthread_barrier_wait(tx_rx_sync);
 	LOG(INFO,"TX thread started: RX symbol %d. TX symbol %d\n",phy->common->rx_symbol,phy->common->tx_symbol);
 	while (1)
 	{
@@ -181,16 +185,14 @@ void* thread_phy_bs_tx(struct tx_th_data_s* arg)
 		} // end{for}
 		subframe_cnt++;
 	}
-
-	bs->end(bs);
-
+	return NULL;
 }
 
-void* thread_mac_bs_scheduler(struct mac_th_data_s* arg)
+void* thread_mac_bs_scheduler(void* arg)
 {
-	MacBS mac = arg->mac;
-	pthread_cond_t* cond_signal = arg->scheduler_signal;
-	pthread_mutex_t* mutex = arg->scheduler_mutex;
+	MacBS mac = ((struct mac_th_data_s*)arg)->mac;
+	pthread_cond_t* cond_signal = ((struct mac_th_data_s*)arg)->scheduler_signal;
+	pthread_mutex_t* mutex = ((struct mac_th_data_s*)arg)->scheduler_mutex;
     TIMECHECK_CREATE(timecheck_mac_bs);
 	TIMECHECK_INIT(timecheck_mac_bs,"bs.mac_scheduler",1000);
 	uint subframe_cnt = 0;
@@ -213,16 +215,11 @@ void* thread_mac_bs_scheduler(struct mac_th_data_s* arg)
 #endif
 		mac_bs_run_scheduler(mac);
 		subframe_cnt++;
-
-		// show some MAC stats
-		if (subframe_cnt%1000==0) {
-			LOG(WARN,"[MAC] channels received:fail %d:%d\n",mac->stats.chan_rx_succ,mac->stats.chan_rx_fail);
-			LOG(WARN,"      bytes rx: %d bytes tx: %d\n",mac->stats.bytes_rx, mac->stats.bytes_tx);
-		}
-		pthread_mutex_unlock(mutex);
         TIMECHECK_STOP_CHECK(timecheck_mac_bs,3500);
         TIMECHECK_INFO(timecheck_mac_bs);
-	}
+        pthread_mutex_unlock(mutex);
+    }
+	return NULL;
 }
 
 int main(int argc,char *argv[])
@@ -314,7 +311,7 @@ int main(int argc,char *argv[])
     phy_bs_set_rx_slot_th_signal(phy,&rx_slot_cond);
 
     // start RX slot thread
-    if (pthread_create(&bs_phy_rx_slot_th, NULL, thread_phy_ue_rx_slot, &rx_slot_th_data) !=0) {
+    if (pthread_create(&bs_phy_rx_slot_th, NULL, thread_phy_bs_rx_slot, &rx_slot_th_data) != 0) {
         LOG(ERR,"could not create RX slot processing thread. Abort!\n");
         exit(EXIT_FAILURE);
     } else {
@@ -400,10 +397,10 @@ int main(int argc,char *argv[])
 	printf("\n");
 
 
-	static int ret[3];
+	static void* ret[4];
 	pthread_join(bs_phy_rx_th, (void*)&ret[0]);
-	pthread_join(bs_phy_tx_th, (void*)&ret[1]);
-	pthread_join(bs_mac_th, &ret[2]);
-	LOG(INFO,"Thread exit codes: RX: %d, TX: %d, MAC: %d\n",ret[0],ret[1],ret[2]);
+    pthread_join(bs_phy_tx_th, (void*)&ret[1]);
+    pthread_join(bs_phy_rx_slot_th, (void*)&ret[2]);
+	pthread_join(bs_mac_th, &ret[3]);
 
 }

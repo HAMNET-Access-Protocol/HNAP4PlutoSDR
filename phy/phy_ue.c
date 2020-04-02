@@ -8,7 +8,7 @@
 #include "phy_ue.h"
 
 #include "../util/log.h"
-#include "../mac/mac_config.h"
+#include "../mac/mac_ue.h"
 #include <pthread.h>
 #include "../platform/pluto.h"
 
