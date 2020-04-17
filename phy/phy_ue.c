@@ -353,7 +353,7 @@ int _ue_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd)
 		// store old cfo estimation
 		phy->prev_cfo = ofdmframesync_get_cfo(phy->fs);
 		ofdmframesync_reset(phy->fs);
-        ofdmframesync_set_cfo(phy->fs,phy->prev_cfo);
+        ofdmframesync_set_cfo(phy->fs,0);
 	}
 
 	// Debug log
