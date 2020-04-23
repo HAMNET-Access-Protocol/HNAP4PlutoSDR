@@ -58,7 +58,7 @@
 // pilots (done during slot receive) but is inaccurate
 // We filter the new estimate with the old (pilot based) cfo estimation
 // Set this filter to [0 1] to tune estimation (1= solely based on new cfo)
-#define SYNC_CFO_FILT_PARAM 0.1f
+#define SYNC_CFO_FILT_PARAM 0.8f
 
 // FIR filters, buffers etc introduce a delay that causes
 // uplink data to be received later than expected. Use this
