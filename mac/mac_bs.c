@@ -465,12 +465,13 @@ int dl_ul_overlap_check(MacBS mac, uint userid, int subframe, int slotnr, int is
 {
     if (is_dl) {
         // ensure that the user is not already mapped to a UL slot at the same time from previous scheduler iteration
-        if (slotnr<2 && userid == mac->ul_data_assignments[(subframe-1)%FRAME_LEN][slotnr+2]){
+        if (slotnr<2 && userid == mac->ul_data_assignments[(uint)(subframe-1)%FRAME_LEN][slotnr+2]){
             return 1; // there is an overlap
         }
     } else { // is uplink
         // ensure that the user is not already mapped to a DL slot at the same time from current scheduler iteration
-        if (slotnr<2 && (userid == mac->dl_data_assignments[subframe][slotnr+2] || userid==USER_BROADCAST)){
+        if (slotnr<2 && (userid == mac->dl_data_assignments[subframe][slotnr+2] ||
+                            USER_BROADCAST==mac->dl_data_assignments[subframe][slotnr+2])){
             return 1; // there is an overlap
         }
         // ensure that UL slot does not overlap with Sync slot
@@ -479,8 +480,8 @@ int dl_ul_overlap_check(MacBS mac, uint userid, int subframe, int slotnr, int is
     }
     // ensure that the user was not mapped to a ULCTRL slot in previous subframe
     // user wont be able to decode DLCTRL slot in this case, to he cannot be assigned at all
-    if (userid == mac->ul_ctrl_assignments[(subframe-1)%FRAME_LEN][0] ||
-            userid == mac->ul_ctrl_assignments[(subframe-1)%FRAME_LEN][1]){
+    if (userid == mac->ul_ctrl_assignments[(uint)(subframe-1)%FRAME_LEN][0] ||
+            userid == mac->ul_ctrl_assignments[(uint)(subframe-1)%FRAME_LEN][1]){
         return 1; // there is an overlap
     }
     return 0; // no overlap
