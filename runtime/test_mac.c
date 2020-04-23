@@ -223,11 +223,11 @@ int run_simulation(uint num_subframes, uint mcs)
 	return 0;
 }
 
-void setup_simulation(float snr)
+void setup_simulation(float snr, float cfo)
 {
 	// Setup the hardware
-	bs = platform_init_simulation(buflen, snr);
-	client = platform_init_simulation(buflen, snr);
+	bs = platform_init_simulation(buflen, snr, cfo);
+	client = platform_init_simulation(buflen, snr, cfo);
 	simulation_connect(bs, client);
 
 	// Create PHY and MAC instances
@@ -269,9 +269,10 @@ void clean_simulation()
 int main(int argc, char* argv[])
 {
 	// Arrays to store biterror rates. First index: MCS, second index: SNR
-	double biterr_ul_array[5][40]= {0};
-	double biterr_dl_array[5][40]= {0};
+	double biterr_ul_array[8][50]= {0};
+	double biterr_dl_array[8][50]= {0};
 	int mcs=0;
+	float cfo = 100;
 
 	if (argc==2) {
 		char * ptr;
@@ -281,7 +282,7 @@ int main(int argc, char* argv[])
 	for (int snr= 5; snr<40; snr+=1) {
 		printf("Starting simulation with SNR %ddB mcs%d\n",snr,mcs);
 
-		setup_simulation(snr);
+		setup_simulation(snr, cfo);
 		run_simulation(num_simulated_subframes, mcs);
 		clean_simulation();
 
@@ -306,13 +307,13 @@ int main(int argc, char* argv[])
 	}
 
 	printf("biterr_ul(%d,:) = [",mcs+1);
-	for (int snr=0; snr<40; snr++) {
+	for (int snr=0; snr<50; snr++) {
 		printf("%.12f ",biterr_ul_array[mcs][snr]);
 	}
 	printf("];\n");
 
 	printf("biterr_dl(%d,:) = [",mcs+1);
-	for (int snr=0; snr<40; snr++) {
+	for (int snr=0; snr<50; snr++) {
 		printf("%.12f ",biterr_dl_array[mcs][snr]);
 	}
 	printf("];");

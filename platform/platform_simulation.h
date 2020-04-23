@@ -11,7 +11,7 @@
 #include "platform.h"
 #include <stdio.h>
 
-platform platform_init_simulation(unsigned int buflen, float snr);
+platform platform_init_simulation(unsigned int buflen, float snr, float cfo);
 void simulation_connect(platform p, platform remote);
 
 #endif /* PLATFORM_PLATFORM_SIMULATION_H_ */

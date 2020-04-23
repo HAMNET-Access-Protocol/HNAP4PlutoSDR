@@ -45,3 +45,9 @@ target_compile_definitions(client PUBLIC MAC_ENABLE_TAP_DEV)
 add_executable(client-calib runtime/client-calib.c platform/platform.h platform/pluto.h platform/pluto.c
         ${PHY_UE} ${MAC_COMMON} ${MAC_UE} ${UTIL} platform/pluto_gpio.c platform/pluto_gpio.h)
 target_link_libraries(client-calib liquid m iio pthread rt)
+
+# CFO estimation accuracy test
+add_executable(test_cfo_estimation runtime/test_cfo_estimation.c platform/platform.h platform/platform_simulation.h platform/platform_simulation.c
+        ${PHY_BS} ${PHY_UE} ${MAC_COMMON} ${MAC_UE} ${MAC_BS} ${UTIL})
+target_link_libraries(test_cfo_estimation liquid m)
+target_compile_definitions(test_cfo_estimation PUBLIC USE_SIM)

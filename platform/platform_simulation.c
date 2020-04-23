@@ -16,6 +16,8 @@
 
 #define USE_GSM_MULTIPATH 1
 
+#define ENABLE_RAYLEIGH 0
+
 // Struct which stores data necessary for simulation
 // i.e. two buffers and a channel object
 struct simu_data_s {
@@ -92,7 +94,7 @@ void simulation_connect(platform p, platform remote)
 	remote_data->tx_dest = p_data->rxbuf;
 }
 
-platform platform_init_simulation(uint buflen, float snr)
+platform platform_init_simulation(uint buflen, float snr, float cfo)
 {
 	// Generate platform interface
 	platform sim = malloc(sizeof(struct platform_s));
@@ -150,15 +152,19 @@ platform platform_init_simulation(uint buflen, float snr)
     channel_cccf_add_multipath(channel, hc, hc_len);
 	#endif
     // frequency offset
-    float cfo = 100;	// frequency offset in Hertz
     float dphi = (2*3.1415*cfo)/256000.0;	//frequency offset in radians/sample
     float phi = 0.5;		// phase offset in radians
     channel_cccf_add_carrier_offset(channel, dphi, phi);
 
-    // slow-flat fading
-    //float sigma = 1;	// standard deviation for log-normal shadowing
-    //float fd = 20.0/256000.0;		// relative Doppler frequency
-    //channel_cccf_add_shadowing(channel, sigma, fd);
+    // shadowing
+    float sigma = 1;	// standard deviation for log-normal shadowing
+    float fd = 20.0/256000.0;		// relative Doppler frequency
+    // channel_cccf_add_shadowing(channel, sigma, fd);
+
+#if ENABLE_RAYLEIGH
+    // rayleigh flat fading
+    channel_cccf_add_rayleigh_flat(channel,20,SAMPLERATE,8);
+#endif
 
 	sim_data->tx_channel = channel;
 
