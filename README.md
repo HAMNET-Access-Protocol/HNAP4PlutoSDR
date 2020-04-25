@@ -53,24 +53,23 @@ The following MCS have been defined
 #### Gain
 
 By default the gain is automatically set during startup-phase and fixed  
-during runtime of the client. However, the AGC might might set the gain  
+during runtime of the client. However, the AGC might set the gain  
 too high so that clipping occurs. If so, the gain can be manually set with  
 the parameters `-g` and `-t`.
 
-The application `client-calib` can be used to read the current gain values  
-of the application. They should not exceed 2000 to prevent clipping. The procedure
+The application `client-calib` can be used to read the current signal level  
+of the application. It should not exceed 2000 to prevent clipping. The procedure
 to use the manual gain mode looks as follows: first start the calib tool
 with some rxgain value
 
 `./client-calib -g <rxgain>`
 
-Tweak the rxgain until the gain values look good.
+Tweak the rxgain until the signal level looks good.
 
->adapt xo by corr_factor=0  
 >Real gain avg: 115, max: 2122  
 >Imag gain avg: 115, max: 2146
 
-The max value should be less than 2000.
+The max value should be ~2000.
 
 Then, start the client. You also have to specify the txgain value. Since
 the basestation operates at a txgain of 0 and rxgain of 70, you can calculate
@@ -100,5 +99,9 @@ The default frequency is 40Mhz, so try 39999800 39999900 etc.
 
 ### Tests
 
-The plutos run a iperf3 server by default, in order to test the connection,
+The plutos run a iperf3 server by default. In order to test the connection,
 you can run `iperf3 -c 192.168.123.X` on another pluto.
+
+Note that networking currently only works between the Plutos TAP devices, i.e.
+within Network 192.168.123.0/24.
+No routes have been configured.
