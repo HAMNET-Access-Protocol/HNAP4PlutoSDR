@@ -557,14 +557,11 @@ int phy_map_ulctrl(PhyUE phy, LogicalChannel chan, uint subframe, uint8_t slot_n
 	phy_mod(phy->common,sfn,0,NFFT-1,first_symb,first_symb, mcs, repacked_b, num_repacked, &total_samps);
 
 	// activate used OFDM symbols in resource allocation
-	// there are two ulctrl slots which have a length of one symbol each. We view them as one and
-	// do not switch in between, because the GPIO pin cannot be toggled that fast
-	// (due to how we implement the ptt signal delay)
-	if (phy->ul_symbol_alloc[sfn][2*(SLOT_LEN+1)-2]==NOT_USED)
-	    phy->ul_symbol_alloc[sfn][2*(SLOT_LEN+1)-1] = PTT_UP; // indicate PTT, slot before isnt used
+	if (phy->ul_symbol_alloc[sfn][first_symb-2]==NOT_USED)
+	    phy->ul_symbol_alloc[sfn][first_symb-1] = PTT_UP; // indicate PTT, slot before isnt used
 	phy->ul_symbol_alloc[sfn][first_symb] = DATA;
-	if (phy->ul_symbol_alloc[sfn][2*(SLOT_LEN+1)+2+2]==NOT_USED)
-	    phy->ul_symbol_alloc[sfn][2*(SLOT_LEN+1)+2+1] = PTT_DOWN; // next slot is not used, end PTT here
+	if (phy->ul_symbol_alloc[sfn][first_symb+2]==NOT_USED)
+	    phy->ul_symbol_alloc[sfn][first_symb+1] = PTT_DOWN; // next slot is not used, end PTT here
 
 	free(enc_b);
 	free(repacked_b);
@@ -622,18 +619,22 @@ int phy_map_ulslot(PhyUE phy, LogicalChannel chan, uint subframe, uint8_t slot_n
 	if (slot_nr==0) {
 	    if (phy->ul_symbol_alloc[(sfn-1)%2][SUBFRAME_LEN-2]==NOT_USED)
             phy->ul_symbol_alloc[(sfn-1)%2][SUBFRAME_LEN-1] = PTT_UP; // indicate PTT, slot before isnt used
-    } else {
+        else
+            phy->ul_symbol_alloc[(sfn-1)%2][SUBFRAME_LEN-1] = DATA; //previous slot already in use. concat them
+	} else {
         if (phy->ul_symbol_alloc[sfn][first_symb-2]==NOT_USED)
             phy->ul_symbol_alloc[sfn][first_symb-1] = PTT_UP; // indicate PTT, slot before isnt used
+	    else
+            phy->ul_symbol_alloc[sfn][first_symb-1] = DATA; //previous slot already in use. concat them
 	}
     // if the next slot is not used we have to turn off PTT signal after this slot
     if (slot_nr==NUM_SLOT-1) {
         // for the last slot within a subframe we simply assume that the next slot is unused.
         // if it is used, the property can be overwritten in the next subframe assignment
-        phy->ul_symbol_alloc[sfn][first_symb + 1] = PTT_DOWN; // next slot is not used, end PTT here
+        phy->ul_symbol_alloc[sfn][last_symb + 1] = PTT_DOWN; // next slot is not used, end PTT here
     } else {
-        if (phy->ul_symbol_alloc[sfn][first_symb + 2] == NOT_USED)
-            phy->ul_symbol_alloc[sfn][first_symb + 1] = PTT_DOWN; // next slot is not used, end PTT here
+        if (phy->ul_symbol_alloc[sfn][last_symb + 2] == NOT_USED)
+            phy->ul_symbol_alloc[sfn][last_symb + 1] = PTT_DOWN; // next slot is not used, end PTT here
     }
     free(interleaved_b);
 	free(enc_b);

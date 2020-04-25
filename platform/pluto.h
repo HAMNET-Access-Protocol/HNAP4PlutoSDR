@@ -22,7 +22,7 @@
 // length, this variable can be used for fine tuning
 #define PTT_DELAY_ADJUST_US 0 // [usec]
 // compensate for delay introduced by this software for pin control. (thread wakeup etc.)
-#define PTT_DELAY_COMP 100 // [usec]
+#define PTT_DELAY_COMP 200 // [usec]
 
 // Pluto Platform hardware abstraction
 // use init pluto platform, to generate a platform
