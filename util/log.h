@@ -41,8 +41,8 @@ enum {TRACE, DEBUG,INFO,WARN,ERR,NONE};
 										{ log_matlab_f(x,y,z); } } while(0);
 #define LOG_MATLAB_I(level,x,y,z) do { if (level>=LOG_LEVEL) \
 										{ log_matlab_i(x,y,z); } } while(0);
-#define LOG_BIN(level,x,y,z) do { if (level>=LOG_LEVEL) \
-										{ log_bin(x,y,z); } } while(0);
+#define LOG_BIN(level,buf,len,filen,mode) do { if (level>=LOG_LEVEL) \
+										{ log_bin(buf,len,filen,mode); } } while(0);
 
 
 // Log makros for syslog
