@@ -173,7 +173,7 @@ void* thread_phy_ue_tx(void* arg)
 			int diff = new_offset - offset;
 			if (abs(diff)>0) {
 				LOG(INFO,"[Runtime] adapt tx offset. diff: %d old txshift: %d\n",diff, tx_shift);
-
+                LOG(INFO,"[Runtime] Timingadvance: %d rx_offset: %d\n",phy->mac->timing_advance, phy->rx_offset);
 				// if offset shift-diff is <0, we have to skip ofdm symbols
 				while (tx_shift - diff < 0) {
 					phy->common->tx_symbol+=SYMBOLS_PER_BUF;
@@ -234,7 +234,7 @@ void* thread_mac_ue_scheduler(void* arg)
 			LOG(WARN,"      bytes rx: %d bytes tx: %d\n",mac->stats.bytes_rx, mac->stats.bytes_tx);
 		}
 
-		TIMECHECK_STOP_CHECK(timecheck_ue_sched,2000);
+		TIMECHECK_STOP_CHECK(timecheck_ue_sched,3500);
         TIMECHECK_INFO(timecheck_ue_sched);
         pthread_mutex_unlock(mutex);
 	}
@@ -257,7 +257,7 @@ void* thread_phy_ue_rx_slot(void* arg)
 
 		phy_ue_proc_slot(phy,phy->rx_slot_nr);
 
-        TIMECHECK_STOP_CHECK(timecheck_ue_rx,2000);
+        TIMECHECK_STOP_CHECK(timecheck_ue_rx,3500);
         TIMECHECK_INFO(timecheck_ue_rx);
         pthread_mutex_unlock(mutex);
     }

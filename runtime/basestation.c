@@ -136,7 +136,7 @@ void* thread_phy_bs_rx_slot(void* arg)
         phy_bs_proc_slot(phy,phy->rx_slot_nr);
 
         pthread_mutex_unlock(mutex);
-        TIMECHECK_STOP_CHECK(timecheck_bs_rx_slot,530);
+        TIMECHECK_STOP_CHECK(timecheck_bs_rx_slot,3500);
         TIMECHECK_INFO(timecheck_bs_rx_slot);
     }
     return NULL;
