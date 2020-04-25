@@ -16,6 +16,9 @@
 #include "../runtime/test.h"
 #endif
 
+// phy configuration
+extern struct phy_config_s PHY_CONFIG;
+
 // Declarations of local functions
 int _ue_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd);
 
@@ -149,6 +152,9 @@ int phy_ue_initial_sync(PhyUE phy, float complex* rxbuf_time, uint num_samples)
 			SYSLOG(LOG_INFO,"[PHY UE] Got sync! cfo: %.3fHz offset: %d samps\n",phy->prev_cfo*SAMPLERATE/6.28,offset);
 		} else {
 			float new_cfo = ofdmframesync_get_cfo(phy->fs);
+            if (PHY_CONFIG.log_coarse_cfo_flag)
+                log_bin((uint8_t*)&new_cfo,sizeof(float),PHY_CONFIG.coarse_cfo_logfile,"a");
+
 			float cfo_filt = (1-SYNC_CFO_FILT_PARAM)*phy->prev_cfo + SYNC_CFO_FILT_PARAM*new_cfo;
 			ofdmframesync_set_cfo(phy->fs,cfo_filt);
 			LOG_SFN_PHY(DEBUG,"[PHY UE] sync seq. cfo: %.3fHz offset: %d samps\n",new_cfo*SAMPLERATE/6.28,offset);
@@ -347,6 +353,11 @@ int _ue_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd)
 		break;
 	}
 
+	// log cfo estimate
+	if (PHY_CONFIG.log_cfo_flag) {
+        float cfo = ofdmframesync_get_cfo(phy->fs);
+	    log_bin((uint8_t*)&cfo, sizeof(float),PHY_CONFIG.cfo_logfile,"a");
+    }
 	// sync sequence will follow. Reset framesync
 	if ((common->rx_subframe == 0) &&
 			(common->rx_symbol == DLCTRL_LEN+1+(SLOT_LEN+1)*3)) {

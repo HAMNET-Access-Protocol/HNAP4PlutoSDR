@@ -73,4 +73,20 @@
 #define DL_UL_SHIFT_COMP_BS 0
 #define DL_UL_SHIFT_COMP_UE 0
 #endif
+
+
+struct phy_config_s {
+    float coarse_cfo_filt_param;
+    int use_robust_pilot;
+
+    int log_coarse_cfo_flag;
+    char coarse_cfo_logfile[80];
+
+    int log_cfo_flag;
+    char cfo_logfile[80];
+};
+
+// global phy configuration struct
+struct phy_config_s PHY_CONFIG;
+
 #endif /* PHY_CONFIG_H_ */
