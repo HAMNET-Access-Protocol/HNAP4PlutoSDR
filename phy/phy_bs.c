@@ -330,7 +330,7 @@ int phy_bs_proc_rach(PhyBS phy, int timing_diff)
 	// demodulate signal
 	uint written_samps = 0, symbol = 0;
 	for (int i=0; i<NFFT; i++) {
-		if (common->pilot_sc[i] == OFDMFRAME_SCTYPE_DATA) {
+		if (common->pilot_sc[i] == OFDMFRAME_SCTYPE_DATA && written_samps<buf_len) {
 			modem_demodulate_soft(common->mcs_modem[mcs], phy->rach_buffer[i], &symbol, &demod_buf[written_samps]);
 			written_samps += modem_get_bps(common->mcs_modem[mcs]);
 		}
@@ -349,6 +349,8 @@ int phy_bs_proc_rach(PhyBS phy, int timing_diff)
 		// change callback from RACH cb to normal cb
 		ofdmframesync_set_cb(phy->fs_rach,_bs_rx_symbol_cb,phy);
 		mac_bs_add_new_ue(phy->mac,rach_userid, rach_try_cnt, phy->fs_rach, timing_diff);
+	} else {
+	    LOG(INFO,"[PHY BS] assoc request could not be decoded. invalid CRC!\n");
 	}
 	lchan_destroy(chan);
 

@@ -410,7 +410,7 @@ void phy_ue_create_assoc_request(PhyUE phy, float complex* txbuf_time)
 	uint written_samps = 0;
 	float complex subcarriers[NFFT];
 	for (int i=0; i<NFFT; i++) {
-		if (common->pilot_sc[i] == OFDMFRAME_SCTYPE_DATA) {
+		if (common->pilot_sc[i] == OFDMFRAME_SCTYPE_DATA && written_samps<num_repacked) {
 			modem_modulate(common->mcs_modem[mcs],(uint)repacked_b[written_samps++], &subcarriers[i]);
 		}
 	}
