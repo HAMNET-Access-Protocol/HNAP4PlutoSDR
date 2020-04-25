@@ -287,8 +287,8 @@ void  phy_carrier_sync(PhyUE phy, platform hw)
     pluto_set_tx_freq(hw, ul_frequency+cfo_hz);
     pluto_set_rx_freq(hw, dl_frequency+cfo_hz);
     LOG(INFO,"[CLIENT] retune transceiver with cfo %dHz:\n",cfo_hz);
-    LOG(INFO,"[CLIENT] TX LO freq: %dHz\n",LO_FREQ_UL+cfo_hz);
-    LOG(INFO,"[CLIENT] RX LO freq: %dHz\n",LO_FREQ_DL+cfo_hz);
+    LOG(INFO,"[CLIENT] TX LO freq: %dHz\n",ul_frequency+cfo_hz);
+    LOG(INFO,"[CLIENT] RX LO freq: %dHz\n",dl_frequency+cfo_hz);
     free(rxbuf_time);
 
 }
