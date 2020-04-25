@@ -98,5 +98,6 @@ void phy_demod_soft(PhyCommon common, uint first_sc, uint last_sc, uint first_sy
 // Define which OFDM symbols whithin a subframe contain pilots
 void gen_pilot_symbols(PhyCommon phy, uint is_bs);
 void gen_pilot_symbols_robust(PhyCommon phy, uint is_bs);
+void gen_pilot_symbols_robust2(PhyCommon phy, uint is_bs);
 
 #endif /* PHY_COMMON_H_ */

@@ -28,6 +28,7 @@
 #define CP_LEN 4			// Cyclic Prefix Size
 #define NUM_DATA_SC 32
 #define NUM_PILOT 8
+#define PILOT_SYM_PER_SLOT 7
 #define NUM_GUARD 24
 #define SAMPLERATE 256000	// sample rate in Hz
 
