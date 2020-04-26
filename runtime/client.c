@@ -57,8 +57,8 @@ Options:\n \
 extern char *optarg;
 int rxgain = -100;
 int txgain = -100;
-int dl_frequency = LO_FREQ_DL;
-int ul_frequency = LO_FREQ_UL;
+long int dl_frequency = LO_FREQ_DL;
+long int ul_frequency = LO_FREQ_UL;
 int ul_mcs = 0;
 int dl_mcs = 0;
 
@@ -317,7 +317,7 @@ int main(int argc,char *argv[])
             break;
         case 'f':
             dl_frequency = atoi(optarg);
-            ul_frequency = ul_frequency + (dl_frequency-LO_FREQ_DL);
+            ul_frequency = ul_frequency + dl_frequency-LO_FREQ_DL;
             break;
         case 'd':
             dl_mcs = atoi(optarg);
