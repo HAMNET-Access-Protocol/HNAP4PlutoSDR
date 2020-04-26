@@ -136,7 +136,7 @@ void* thread_phy_ue_tx(void* arg)
     TIMECHECK_INIT(timecheck_ue_tx,"ue.tx_buffer",1000);
 
 	float complex* ul_data_tx = calloc(sizeof(float complex),BUFLEN);
-	int offset, num_samples, tx_shift=0;;
+	int timing_advance=0, rx_offset, num_samples, tx_shift=0;;
 
 	// wait until rx thread has achieved sync
 	while (!phy->has_synced_once) {
@@ -145,7 +145,7 @@ void* thread_phy_ue_tx(void* arg)
 	}
 
 	LOG(INFO,"[PHY UE] main tx thread started!\n");
-	offset = -phy->rx_offset;	// TODO use rx offset to align tx
+	rx_offset = -phy->rx_offset;	// TODO use rx offset to align tx
 	tx_shift = phy->rx_offset;
 	num_samples = BUFLEN-tx_shift;
 
@@ -169,10 +169,17 @@ void* thread_phy_ue_tx(void* arg)
 		// update timing offset for tx. TODO explain chosen tx_Symbol idx
 		if (phy->common->tx_symbol >= 29 && phy->common->tx_subframe == 0) {
 			// check if offset has changed
-			int new_offset = phy->mac->timing_advance - phy->rx_offset;
-			int diff = new_offset - offset;
-			if (abs(diff)>0) {
-				LOG(INFO,"[Runtime] adapt tx offset. diff: %d old txshift: %d\n",diff, tx_shift);
+			int rx_offset_delta = (phy->rx_offset - rx_offset);
+			if (rx_offset_delta > BUFLEN / 2)
+                rx_offset_delta-=BUFLEN;
+			else if (rx_offset_delta < -BUFLEN / 2)
+                rx_offset_delta+=BUFLEN;
+
+			int ta_delta = phy->mac->timing_advance - timing_advance;
+			int diff = ta_delta - rx_offset_delta;
+			if (abs(diff) > 0) {
+				LOG(INFO,"[Runtime] adapt tx offset. TA diff: %d; RX offset diff: %d old txshift: %d\n",
+				        ta_delta, rx_offset_delta, tx_shift);
                 LOG(INFO,"[Runtime] Timingadvance: %d rx_offset: %d\n",phy->mac->timing_advance, phy->rx_offset);
 				// if offset shift-diff is <0, we have to skip ofdm symbols
 				while (tx_shift - diff < 0) {
@@ -184,7 +191,8 @@ void* thread_phy_ue_tx(void* arg)
 					diff+=BUFLEN;
 				}
 				tx_shift = tx_shift - diff;
-				offset = new_offset;
+				rx_offset = phy->rx_offset;
+				timing_advance = phy->mac->timing_advance;
 				num_samples = BUFLEN - tx_shift;
 
                 // set PTT signal delay
