@@ -28,8 +28,9 @@
 #define UE_RX_SLOT_CPUID 0
 #define UE_TAP_CPUID 0
 
+// FPGA buffers contain a multiple of ofdm symbols per buffer. We fix this to 2 symbols for low latency
 #define SYMBOLS_PER_BUF 2
-#define BUFLEN ((NFFT+CP_LEN)*SYMBOLS_PER_BUF)
+int buflen=-1;          // size per buffer object in samples
 
 // Set to 1 in order to use the simulated platform
 #define CLIENT_USE_PLATFORM_SIM 0
@@ -43,6 +44,7 @@ struct option Options[] = {
   {"frequency",required_argument,NULL,'f'},
   {"dl-mcs",required_argument,NULL,'d'},
   {"ul-mcs",required_argument,NULL,'u'},
+  {"config",required_argument,NULL,'c'},
   {"help",no_argument,NULL,'h'},
   {NULL},
 };
@@ -52,17 +54,18 @@ Options:\n \
    --txgain -t:    fix the txgain to a value [-89 0]\n \
    --frequency -f: tune to a specific (DL) frequency\n \
    --ul-mcs -u:    use given mcs in UL. Default: 0.\n \
-   --dl-mcs -d:    use given mcs in DL. Default: 0.\n";
+   --dl-mcs -d:    use given mcs in DL. Default: 0.\n \
+   --config -c     specify a configuration file\n";
 
 extern char *optarg;
 int rxgain = -100;
 int txgain = -100;
 int enable_agc = 0;
-long int dl_frequency = LO_FREQ_DL;
-long int ul_frequency = LO_FREQ_UL;
+long int dl_frequency = -1;
+long int ul_frequency = -1;
 int ul_mcs = 0;
 int dl_mcs = 0;
-
+char* config_file=NULL;      // configuration file string
 // struct holds arguments for RX thread
 struct rx_th_data_s {
 	PhyUE phy;
@@ -101,7 +104,7 @@ void* thread_phy_ue_rx(void* arg)
 	TIMECHECK_CREATE(timecheck_ue_rx);
 	TIMECHECK_INIT(timecheck_ue_rx,"ue.rx_buffer",10000);
 
-	float complex* rxbuf_time = calloc(sizeof(float complex),BUFLEN);
+	float complex* rxbuf_time = calloc(sizeof(float complex),buflen);
     int last_rssi = AGC_DESIRED_RSSI;
 	// read some rxbuffer objects in order to empty rxbuffer queue
 	for (int i=0; i<KERNEL_BUF_RX; i++)
@@ -113,7 +116,7 @@ void* thread_phy_ue_rx(void* arg)
 		hw->platform_rx(hw, rxbuf_time);
 		// process samples
 		TIMECHECK_START(timecheck_ue_rx);
-		phy_ue_do_rx(phy, rxbuf_time, BUFLEN);
+		phy_ue_do_rx(phy, rxbuf_time, buflen);
 		//log_bin((uint8_t*)rxbuf_time,BUFLEN*sizeof(float complex), "dl_data.bin","a");
 		// Run scheduler after DLCTRL slot was received
 		if (phy->common->rx_symbol == DLCTRL_LEN ||
@@ -144,19 +147,19 @@ void* thread_phy_ue_tx(void* arg)
     TIMECHECK_CREATE(timecheck_ue_tx);
     TIMECHECK_INIT(timecheck_ue_tx,"ue.tx_buffer",10000);
 
-	float complex* ul_data_tx = calloc(sizeof(float complex),BUFLEN);
+	float complex* ul_data_tx = calloc(sizeof(float complex),buflen);
 	int timing_advance=0, rx_offset, num_samples, tx_shift=0;;
 
 	// wait until rx thread has achieved sync
 	while (!phy->has_synced_once) {
 		hw->platform_tx_push(hw);
-		hw->platform_tx_prep(hw, ul_data_tx, 0, BUFLEN);
+		hw->platform_tx_prep(hw, ul_data_tx, 0, buflen);
 	}
 
 	LOG(INFO,"[PHY UE] main tx thread started!\n");
 	rx_offset = -phy->rx_offset;	// TODO use rx offset to align tx
 	tx_shift = phy->rx_offset;
-	num_samples = BUFLEN-tx_shift;
+	num_samples = buflen-tx_shift;
 
 	while (1) {
 		TIMECHECK_START(timecheck_ue_tx);
@@ -165,7 +168,7 @@ void* thread_phy_ue_tx(void* arg)
 		hw->platform_tx_prep(hw, ul_data_tx+num_samples, 0, tx_shift);
 		// create new symbol
 		phy_ue_write_symbol(phy, ul_data_tx);
-		phy_ue_write_symbol(phy, ul_data_tx+(NFFT+CP_LEN));
+		phy_ue_write_symbol(phy, ul_data_tx+(nfft+cp_len));
 
 		// prepare first part of the new symbol
 		hw->platform_tx_prep(hw, ul_data_tx, tx_shift, num_samples);
@@ -179,10 +182,10 @@ void* thread_phy_ue_tx(void* arg)
 		if (phy->common->tx_symbol >= 29 && phy->common->tx_subframe == 0) {
 			// check if offset has changed
 			int rx_offset_delta = (phy->rx_offset - rx_offset);
-			if (rx_offset_delta > BUFLEN / 2)
-                rx_offset_delta-=BUFLEN;
-			else if (rx_offset_delta < -BUFLEN / 2)
-                rx_offset_delta+=BUFLEN;
+			if (rx_offset_delta > buflen / 2)
+                rx_offset_delta-=buflen;
+			else if (rx_offset_delta < -buflen / 2)
+                rx_offset_delta+=buflen;
 
 			int ta_delta = phy->mac->timing_advance - timing_advance;
 			int diff = ta_delta - rx_offset_delta;
@@ -193,20 +196,20 @@ void* thread_phy_ue_tx(void* arg)
 				// if offset shift-diff is <0, we have to skip ofdm symbols
 				while (tx_shift - diff < 0) {
 					phy->common->tx_symbol+=SYMBOLS_PER_BUF;
-					diff-=BUFLEN;
+					diff-=buflen;
 				}
-				while (tx_shift - diff >=BUFLEN) {
+				while (tx_shift - diff >=buflen) {
 					phy->common->tx_symbol-=SYMBOLS_PER_BUF;
-					diff+=BUFLEN;
+					diff+=buflen;
 				}
 				tx_shift = tx_shift - diff;
 				rx_offset = phy->rx_offset;
 				timing_advance = phy->mac->timing_advance;
-				num_samples = BUFLEN - tx_shift;
+				num_samples = buflen - tx_shift;
 
                 // set PTT signal delay
                 pluto_ptt_set_switch_delay(hw,
-                        (int) ((BUFLEN * KERNEL_BUF_TX + tx_shift) * 1000000.0 / SAMPLERATE));
+                        (int) ((buflen * KERNEL_BUF_TX + tx_shift) * 1000000.0 / samplerate));
 			}
 		}
 	}
@@ -280,12 +283,12 @@ void* thread_phy_ue_rx_slot(void* arg)
 // correct frequency
 void  phy_carrier_sync(PhyUE phy, platform hw)
 {
-    float complex* rxbuf_time = calloc(sizeof(float complex),BUFLEN);
+    float complex* rxbuf_time = calloc(sizeof(float complex),buflen);
     int gain_diff=0;
     // Find synchronization sequence for the first time.
     while(!phy->has_synced_once) {
         hw->platform_rx(hw, rxbuf_time);
-        phy_ue_do_rx(phy, rxbuf_time, BUFLEN);
+        phy_ue_do_rx(phy, rxbuf_time, buflen);
     }
 
     // receive some subframes to get a better cfo estimation
@@ -294,8 +297,8 @@ void  phy_carrier_sync(PhyUE phy, platform hw)
     for (int i=0; i<iterations; i++) {
         for (int sym = 0; sym < SUBFRAME_LEN / SYMBOLS_PER_BUF; sym++) {
             hw->platform_rx(hw, rxbuf_time);
-            phy_ue_do_rx(phy, rxbuf_time, BUFLEN);
-            cfo_hz += ofdmframesync_get_cfo(phy->fs) * SAMPLERATE / (2 * M_PI);
+            phy_ue_do_rx(phy, rxbuf_time, buflen);
+            cfo_hz += ofdmframesync_get_cfo(phy->fs) * samplerate / (2 * M_PI);
         }
         gain_diff += AGC_DESIRED_RSSI - (int)ofdmframesync_get_rssi(phy->fs);
     }
@@ -330,9 +333,12 @@ int main(int argc,char *argv[])
 
     pthread_t ue_phy_rx_th, ue_phy_tx_th, ue_mac_th, ue_phy_rx_slot_th, ue_tap_th;
 
+	// start by loading default config.
+	phy_config_default_64();
+
     // parse program args
     int d;
-    while((d = getopt_long(argc,argv,"g:t:f:d:u:h",Options,NULL)) != EOF){
+    while((d = getopt_long(argc,argv,"g:t:f:d:u:c:h",Options,NULL)) != EOF){
         switch(d){
         case 'g':
             rxgain = atoi(optarg);
@@ -350,7 +356,7 @@ int main(int argc,char *argv[])
             break;
         case 'f':
             dl_frequency = atoi(optarg);
-            ul_frequency = ul_frequency + dl_frequency-LO_FREQ_DL;
+            ul_frequency = ul_frequency + dl_frequency-dl_lo;
             break;
         case 'd':
             dl_mcs = atoi(optarg);
@@ -366,6 +372,13 @@ int main(int argc,char *argv[])
                 exit(0);
             }
             break;
+        case 'c':
+            printf("Using config file %s\n",optarg);
+            config_file = calloc(strlen(optarg),1);
+            strncpy(config_file,optarg,strlen(optarg));
+            phy_config_load_file(optarg);
+            break;
+
         case 'h':
             printf("%s",helpstring);
             exit(0);
@@ -375,22 +388,26 @@ int main(int argc,char *argv[])
             exit(0);
         }
     }
+    phy_config_print();
+    // init buffer size
+    buflen = SYMBOLS_PER_BUF*(nfft+cp_len);
+    
+    // if --frequency parameter was specified, use it instead of default/file config
+    if (dl_frequency>0)
+        dl_lo = dl_frequency;
+    if (ul_frequency>0)
+        ul_lo = ul_frequency;
+
 	// Init platform
 #if CLIENT_USE_PLATFORM_SIM
-	platform pluto = platform_init_simulation(NFFT+CP_LEN);
+	platform pluto = platform_init_simulation(nfft+cp_len);
 #else
-    platform pluto = init_pluto_platform(BUFLEN);
+    platform pluto = init_pluto_platform(buflen,config_file);
     //platform pluto = init_pluto_network_platform(BUFLEN);
-#ifdef GENERATE_PTT_SIGNAL
-    pluto_enable_ptt(pluto);
-    pluto_ptt_set_switch_delay(pluto, (int) (BUFLEN * (KERNEL_BUF_TX - 1) * 1000000.0 / SAMPLERATE));
-    pluto_ptt_set_rx(pluto);
-#endif
 
-    pluto_set_tx_freq(pluto, ul_frequency);
-    pluto_set_rx_freq(pluto, dl_frequency);
+    pluto_set_tx_freq(pluto, ul_lo);
+    pluto_set_rx_freq(pluto, dl_lo);
     usleep(100000);
-
     // If the gain is not fixed, we will listen for a moment and use the given value from AGC.
     // We have to use manual mode because this AGC does not work with our OFDM modulation
     LOG(INFO,"[Pluto] configuring gain...\n");

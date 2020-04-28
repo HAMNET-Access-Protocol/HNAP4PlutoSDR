@@ -15,19 +15,15 @@
 #define KERNEL_BUF_TX 4
 #define KERNEL_BUF_RX 6
 
-// Set this makro to generate a PTT signal at GPIO pin MIO0.
-#define GENERATE_PTT_SIGNAL
 // adjust the delay between generation of the signal in software and
 // the hardware toggle. A default delay is calculated from the kernel buffer
 // length, this variable can be used for fine tuning
-#define PTT_DELAY_ADJUST_US 0 // [usec]
-// compensate for delay introduced by this software for pin control. (thread wakeup etc.)
-#define PTT_DELAY_COMP 200 // [usec]
+#define DEFAULT_PTT_DELAY_COMP 200 // [usec]
 
 // Pluto Platform hardware abstraction
 // use init pluto platform, to generate a platform
 // abstraction. See platform.h on how to use it
-platform init_pluto_platform(unsigned int buf_len);
+platform init_pluto_platform(unsigned int buf_len, char* config_file);
 
 platform init_pluto_network_platform(unsigned int buf_len);
 

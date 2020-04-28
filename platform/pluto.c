@@ -14,6 +14,7 @@
 #include <string.h>
 #include <iio.h>
 #include <unistd.h>
+#include <libconfig.h>
 #include "pluto_gpio.h"
 
 /* helper macros */
@@ -66,9 +67,11 @@ struct pluto_data_s {
     // length of one TX/RX buffer
     int buflen;
 
-    // TDD or FDD mode
-    uint ptt_delay;
-    gpio_pin gpio_MIO0;
+    // Variables to generate a ptt signal
+    int enable_ptt;         // set to 1 if ptt is enabled
+    uint ptt_delay;         // total delay until the pin is written [usec]
+    int ptt_delay_comp;    // additional user specified delay adjustment [usec]
+    gpio_pin gpio_MIO0;     // GPIO pin structure
 };
 typedef struct  pluto_data_s* pluto_data;
 
@@ -176,7 +179,7 @@ bool cfg_ad9361_streaming_ch(struct iio_context *ctx, struct stream_cfg *cfg, en
 	if (!get_phy_chan(ctx, type, chid, &chn)) {	return false; }
 	wr_ch_str(chn, "rf_port_select",     cfg->rfport);
 	wr_ch_lli(chn, "rf_bandwidth",       cfg->bw_hz);
-	wr_ch_lli(chn, "sampling_frequency", cfg->fs_hz);
+	wr_ch_lli(chn, "sampling_frequency", cfg->fs_hz*8);
 
 	// Configure LO channel
 	printf("* Acquiring AD9361 %s lo channel\n", type == TX ? "TX" : "RX");
@@ -252,21 +255,50 @@ int pluto_receive(platform hw, float complex* buf_rx)
 	return i;
 }
 
-void init_generic(platform hw, uint buf_len)
+void init_generic(platform hw, uint buf_len, char* config_file)
 {
     pluto_data pluto = (pluto_data)hw->data;
 
-    // RX stream config
+    // default RX stream config
     pluto->rxcfg.bw_hz = 1703632;   // Analog filter corner freq. Calculated by matlab filter tool
-    pluto->rxcfg.fs_hz = KHZ(256*8);   // 8*256khz, decimation is done after this stage
+    pluto->rxcfg.fs_hz = KHZ(256);
     pluto->rxcfg.lo_hz = KHZ(430000); // 430Mhz rf frequency
     pluto->rxcfg.rfport = "A_BALANCED"; // port A (select for rf freq.)
 
-	// TX stream config
-    pluto->txcfg.bw_hz = 1701126; // Analog filter corner freq: 1.6*fs
-    pluto->txcfg.fs_hz = KHZ(256*8);   // 2.5 MS/s tx sample rate
+    // TX stream config
+    pluto->txcfg.bw_hz = 1701126; // Analog filter corner freq: calculated with matlab tool for 256KHz sampling rate
+    pluto->txcfg.fs_hz = KHZ(256);   // 256Khz sampling rate
     pluto->txcfg.lo_hz = MHZ(430); // 430Mhz rf frequency
     pluto->txcfg.rfport = "A"; // port A (select for rf freq.)
+
+    pluto->ptt_delay_comp = DEFAULT_PTT_DELAY_COMP;
+    pluto->enable_ptt = 1;
+
+    if (config_file!=NULL) {
+        config_t cfg;
+        config_setting_t* phy_settings, *platform_settings;
+        config_init(&cfg);
+        /* Read the file. If there is an error, report it and exit. */
+        if(! config_read_file(&cfg, config_file))
+        {
+            LOG(ERR, "[PLATFORM] Cannot read config: %s:%d - %s\n", config_error_file(&cfg),
+                config_error_line(&cfg), config_error_text(&cfg));
+            config_destroy(&cfg);
+            exit(EXIT_FAILURE);
+        }
+        phy_settings = config_lookup(&cfg,"phy");
+        if (phy_settings!=NULL) {
+            config_setting_lookup_int64(phy_settings, "samplerate", &pluto->txcfg.fs_hz);
+            config_setting_lookup_int64(phy_settings, "samplerate", &pluto->rxcfg.fs_hz);
+        }
+        platform_settings = config_lookup(&cfg,"platform");
+        if (platform_settings!=NULL) {
+            config_setting_lookup_int64(platform_settings, "tx_bandwdith",&pluto->txcfg.bw_hz);
+            config_setting_lookup_int64(platform_settings, "rx_bandwdith",&pluto->rxcfg.bw_hz);
+            config_setting_lookup_int(platform_settings,"enable_ptt",&pluto->enable_ptt);
+            config_setting_lookup_int(platform_settings,"ptt_delay_comp",&pluto->ptt_delay_comp);
+        }
+    }
 
     pluto->ad9361_phy = get_ad9361_phy(pluto->ctx);
 
@@ -305,8 +337,8 @@ void init_generic(platform hw, uint buf_len)
 	ASSERT(get_ad9361_stream_ch(pluto->ctx, TX, pluto->tx, 1, &pluto->tx0_q) && "TX chan q not found");
 
 	// Enable dec/int stage of cf-ad9361-lpc / cf-ad9361-dds-core-lpc
-	wr_ch_lli(pluto->rx0_i,"sampling_frequency",pluto->rxcfg.fs_hz/8);
-	wr_ch_lli(pluto->tx0_i,"sampling_frequency",pluto->txcfg.fs_hz/8);
+	wr_ch_lli(pluto->rx0_i,"sampling_frequency",pluto->rxcfg.fs_hz);
+	wr_ch_lli(pluto->tx0_i,"sampling_frequency",pluto->txcfg.fs_hz);
 
 	printf("* Set TX gain\n");
     // Set TX gain
@@ -336,6 +368,12 @@ void init_generic(platform hw, uint buf_len)
 		perror("Could not create TX buffer");
 		shutdown(hw);
 	}
+
+    if (pluto->enable_ptt) {
+        pluto_enable_ptt(hw);
+        pluto->ptt_delay= (int) (buf_len * (KERNEL_BUF_TX - 1) * 1000000.0 / samplerate);
+        pluto_ptt_set_rx(hw);
+    }
 
 	// Generate platform interface
 	hw->platform_rx = pluto_receive;
@@ -406,24 +444,22 @@ int pluto_enable_ptt(platform hw)
 
 void pluto_ptt_set_tx(platform hw)
 {
-#ifdef GENERATE_PTT_SIGNAL
     pluto_data pluto = (pluto_data)hw->data;
-    pluto_gpio_pin_write_delayed(pluto->gpio_MIO0,HIGH,pluto->ptt_delay);
-#endif
+    if (pluto->enable_ptt)
+        pluto_gpio_pin_write_delayed(pluto->gpio_MIO0,HIGH,pluto->ptt_delay);
 }
 
 void pluto_ptt_set_rx(platform hw)
 {
-#ifdef GENERATE_PTT_SIGNAL
     pluto_data pluto = (pluto_data)hw->data;
-    pluto_gpio_pin_write_delayed(pluto->gpio_MIO0,LOW,pluto->ptt_delay);
-#endif
+    if (pluto->enable_ptt)
+        pluto_gpio_pin_write_delayed(pluto->gpio_MIO0,LOW,pluto->ptt_delay);
 }
 
 void pluto_ptt_set_switch_delay(platform hw, int delay_us)
 {
     pluto_data pluto = (pluto_data)hw->data;
-    pluto->ptt_delay = delay_us+PTT_DELAY_ADJUST_US-PTT_DELAY_COMP;
+    pluto->ptt_delay = delay_us-pluto->ptt_delay_comp;
 }
 
 // Initialize a pluto network context
@@ -437,13 +473,16 @@ platform init_pluto_network_platform(uint buf_len)
 	ASSERT((data->ctx = iio_create_network_context(ipaddr)) && "No context");
 	ASSERT(iio_context_get_devices_count(data->ctx) > 0 && "No devices");
 
-	init_generic(pluto, buf_len);
+	init_generic(pluto, buf_len, NULL);
 	return pluto;
 }
 
 // Initialize a local context. Used for building directly
 // on the pluto
-platform init_pluto_platform(uint buf_len)
+// Params:
+//      buflen:         size of the tx/rx sample buffers
+//      config_file:    optional path to a config file. Set to NULL to use default config
+platform init_pluto_platform(uint buf_len, char* config_file)
 {
     platform pluto = malloc(sizeof(struct platform_s));
     pluto_data data = calloc(sizeof(struct pluto_data_s),1);
@@ -452,7 +491,8 @@ platform init_pluto_platform(uint buf_len)
 	ASSERT((data->ctx = iio_create_local_context()) && "No context");
 	ASSERT(iio_context_get_devices_count(data->ctx) > 0 && "No devices");
 
-	init_generic(pluto, buf_len);
+	init_generic(pluto, buf_len, config_file);
+
 	return pluto;
 }
 

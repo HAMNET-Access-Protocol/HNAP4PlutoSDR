@@ -8,8 +8,6 @@
 #ifndef MAC_MAC_CONFIG_H_
 #define MAC_MAC_CONFIG_H_
 
-#include "../config.h"
-
 // Number of control messages that can be enqueued
 #define MAC_CTRL_MSG_BUF_SIZE 32
 // Number of data frames that can be enqueued

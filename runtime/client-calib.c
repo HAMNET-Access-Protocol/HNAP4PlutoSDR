@@ -22,7 +22,7 @@
 #include <sched.h>
 
 #define SYMBOLS_PER_BUF 2
-#define BUFLEN ((NFFT+CP_LEN)*SYMBOLS_PER_BUF)
+int buflen = 0;
 
 // Set to 1 in order to use the simulated platform
 #define CLIENT_USE_PLATFORM_SIM 0
@@ -40,7 +40,8 @@ struct option Options[] = {
 };
 char* helpstring = "Estimate clock drift of the client.\n\n \
 Options:\n \
-  --rxgain -g: fix the rxgain to a value [-1 73]\n \
+  --rxgain -g:  fix the rxgain to a value [-1 73]\n \
+  --config -c:  use a given configuration file\n\
   --log-file -f <filename> log all cfo estimates to a file\n";
 
 extern char *optarg;
@@ -49,6 +50,7 @@ int enable_agc = 0;
 char filename[80];
 FILE* fd = NULL;
 int do_log=0;
+char* config_file=NULL;
 
 void signalhandler()
 {
@@ -71,12 +73,12 @@ void signalhandler()
 // correct frequency
 void  phy_carrier_sync(PhyUE phy, platform hw)
 {
-    float complex* rxbuf_time = calloc(sizeof(float complex),BUFLEN);
+    float complex* rxbuf_time = calloc(sizeof(float complex),buflen);
     int gain_diff=0;
     // Find synchronization sequence for the first time
     while(!phy->has_synced_once) {
         hw->platform_rx(hw, rxbuf_time);
-        phy_ue_do_rx(phy, rxbuf_time, BUFLEN);
+        phy_ue_do_rx(phy, rxbuf_time, buflen);
     }
 
     // receive some subframes to get a better cfo estimation
@@ -85,8 +87,8 @@ void  phy_carrier_sync(PhyUE phy, platform hw)
     for (int i=0; i<iterations; i++) {
         for (int sym = 0; sym < SUBFRAME_LEN / SYMBOLS_PER_BUF; sym++) {
             hw->platform_rx(hw, rxbuf_time);
-            phy_ue_do_rx(phy, rxbuf_time, BUFLEN);
-            cfo_hz += ofdmframesync_get_cfo(phy->fs) * SAMPLERATE / (2 * M_PI);
+            phy_ue_do_rx(phy, rxbuf_time, buflen);
+            cfo_hz += ofdmframesync_get_cfo(phy->fs) * samplerate / (2 * M_PI);
         }
         gain_diff += AGC_DESIRED_RSSI - (int)ofdmframesync_get_rssi(phy->fs);
     }
@@ -96,11 +98,11 @@ void  phy_carrier_sync(PhyUE phy, platform hw)
     pluto_set_rxgain(hw, rxgain);
 
     // tune to the correct frequency
-    pluto_set_tx_freq(hw, LO_FREQ_UL+cfo_hz);
-    pluto_set_rx_freq(hw, LO_FREQ_DL+cfo_hz);
+    pluto_set_tx_freq(hw, ul_lo+(long)cfo_hz);
+    pluto_set_rx_freq(hw, dl_lo+(long)cfo_hz);
     LOG(INFO,"[CLIENT] retune transceiver with cfo %.3fHz:\n",cfo_hz);
-    LOG(INFO,"[CLIENT] TX LO freq: %dHz\n",LO_FREQ_UL+(int)cfo_hz);
-    LOG(INFO,"[CLIENT] RX LO freq: %dHz\n",LO_FREQ_DL+(int)cfo_hz);
+    LOG(INFO,"[CLIENT] TX LO freq: %lldHz\n",ul_lo+(long)cfo_hz);
+    LOG(INFO,"[CLIENT] RX LO freq: %lldHz\n",dl_lo+(long)cfo_hz);
     LOG(INFO,"[CLIENT] rxgain adjusted: %d\n",rxgain);
     free(rxbuf_time);
 }
@@ -112,9 +114,12 @@ int main(int argc,char *argv[])
     prio.sched_priority = 3;
     sched_setscheduler(0,SCHED_FIFO, &prio);
 
+    phy_config_default_64();
+    buflen = (nfft+cp_len)*SYMBOLS_PER_BUF;
+
     // parse program args
     int d;
-    while((d = getopt_long(argc,argv,"g:f:h",Options,NULL)) != EOF){
+    while((d = getopt_long(argc,argv,"g:f:c:h",Options,NULL)) != EOF){
         switch(d){
         case 'g':
             rxgain = atoi(optarg);
@@ -129,7 +134,12 @@ int main(int argc,char *argv[])
                 strncpy(filename,optarg, 80);
             }
             break;
-        case 'h':
+        case 'c':
+            config_file = calloc(strlen(optarg),1);
+            strcpy(config_file,optarg);
+            phy_config_load_file(optarg);
+            buflen = (nfft+cp_len)*SYMBOLS_PER_BUF;
+            case 'h':
             printf("%s",helpstring);
             exit(0);
             break;
@@ -146,9 +156,9 @@ int main(int argc,char *argv[])
 #if CLIENT_USE_PLATFORM_SIM
 	platform pluto = platform_init_simulation(NFFT+CP_LEN);
 #else
-    pluto = init_pluto_platform(BUFLEN);
-    pluto_set_tx_freq(pluto, LO_FREQ_UL);
-	pluto_set_rx_freq(pluto, LO_FREQ_DL);
+    pluto = init_pluto_platform(buflen,config_file);
+    pluto_set_tx_freq(pluto, ul_lo);
+	pluto_set_rx_freq(pluto, dl_lo);
     usleep(100000);
 
     if (rxgain==-100) {
@@ -187,7 +197,7 @@ int main(int argc,char *argv[])
     }
 
 
-    float complex* rxbuf_time = calloc(sizeof(float complex),BUFLEN);
+    float complex* rxbuf_time = calloc(sizeof(float complex),buflen);
 
     // read some rxbuffer objects in order to empty rxbuffer queue
     for (int i=0; i<KERNEL_BUF_RX; i++)
@@ -202,7 +212,7 @@ int main(int argc,char *argv[])
 
     while (1) {
         pluto->platform_rx(pluto, rxbuf_time);
-        phy_ue_do_rx(phy, rxbuf_time, BUFLEN);
+        phy_ue_do_rx(phy, rxbuf_time, buflen);
         cfo = ofdmframesync_get_cfo(phy->fs)*256000/6.28;
         if (cfo!=0.0) {
             cfo_avg+=cfo;
@@ -213,7 +223,7 @@ int main(int argc,char *argv[])
             if(do_log)
                 fprintf(fd,"%.3f\n",cfo);
 
-            for (int i=0; i<BUFLEN; i++) {
+            for (int i=0; i<buflen; i++) {
                 int real = abs(creal(rxbuf_time[i])*2048.0);
                 int imag = abs(cimag(rxbuf_time[i])*2048.0);
                 gain_real_avg += real;
@@ -235,9 +245,9 @@ int main(int argc,char *argv[])
 
             if (iteration%1000==0) {
                 printf("cfo avg: %.3f, max: %.3f min: %.3f\n",cfo_avg/1000,cfo_max,cfo_min);
-                printf("adapt xo by corr_factor=%d\n",(int)round(cfo_avg/1000*(float)TCXO_HZ/LO_FREQ_DL));
-                printf("Real gain avg: %d, max: %d\n",gain_real_avg/1000/BUFLEN,gain_real_max);
-                printf("Imag gain avg: %d, max: %d\n",gain_imag_avg/1000/BUFLEN,gain_imag_max);
+                printf("adapt xo by corr_factor=%d\n",(int)round(cfo_avg/1000*(float)TCXO_HZ/dl_lo));
+                printf("Real gain avg: %d, max: %d\n",gain_real_avg/1000/buflen,gain_real_max);
+                printf("Imag gain avg: %d, max: %d\n",gain_imag_avg/1000/buflen,gain_imag_max);
                 printf("RSSI: %.2f\n",ofdmframesync_get_rssi(phy->fs));
                 cfo_avg=0;
                 cfo_min=1000000;

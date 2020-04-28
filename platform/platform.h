@@ -24,6 +24,13 @@
  *
  *	end(platform):
  *			do necessary operations for shutdown
+ *
+ *	Optional a manual PTT signal can be generated, e.g. at a GPIO pin
+ *	to use this feature, implement handlers for
+ *	ptt_set_tx(platform)
+ *	ptt_set_rx(platform)
+ *
+ *	If you do not want to use this, implement dummy functions for these handlers.
  */
 
 #ifndef PLATFORM_PLATFORM_H_

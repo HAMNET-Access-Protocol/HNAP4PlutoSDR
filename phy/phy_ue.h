@@ -14,7 +14,6 @@
 
 typedef enum {NO_SYNC, HAS_SYNC} phy_states;
 
-enum {NOT_USED, DATA, PTT_UP, PTT_DOWN}; // definition for tx_symbol allocation variable
 // definition of slot assignments types
 typedef enum {NOT_ASSIGNED, UE_ASSIGNED, BRCST_ASSIGNED} assignment_t;
 

@@ -36,7 +36,7 @@ struct PhyBS_s {
 	dlctrl_alloc_t* dlctrl_buf;	// holds DL ctrl slot data
 
 	// buffer stores data which is sent by users during RACH procedure
-	float complex rach_buffer[NFFT];
+	float complex* rach_buffer;
 
 	// stores timing offset of a received RA message
 	int rach_timing;

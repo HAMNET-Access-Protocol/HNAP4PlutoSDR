@@ -27,7 +27,9 @@
 // set to one if the BS shall send random MAC data frames
 #define BS_SEND_ENABLE 0
 
-#define BUFLEN ((NFFT+CP_LEN)*2)
+// FPGA sample buffers will contain multiple ofdm symbols. We use 2 symbols per buffer
+#define SYMBOLS_PER_BUF 2
+int buflen;             // size of the fpga transfer buffers
 
 // compensate for offset within a symbol in samples
 // is used to properly align UL and DL over the air and compensate for FIR delays
@@ -45,6 +47,7 @@ struct option Options[] = {
   {"rxgain",required_argument,NULL,'g'},
   {"txgain",required_argument,NULL,'t'},
   {"frequency",required_argument,NULL,'f'},
+  {"config",required_argument,NULL,'c'},
   {"help",no_argument,NULL,'h'},
   {NULL},
 };
@@ -52,12 +55,14 @@ char* helpstring = "Basestation for 70cm Waveform.\n\n \
 Options:\n \
    --rxgain -g:    fix the rxgain to a value [-1 73]\n \
    --txgain -t:    fix the txgain to a value [-89 0]\n \
-   --frequency -f: tune to a specific (DL) frequency\n";
+   --frequency -f: tune to a specific (DL) frequency\n \
+   --config -c:    specify a configuration file";
 
 extern char *optarg;
 int rxgain = 70;
 int txgain = 0;
-int frequency = LO_FREQ_DL;
+int frequency = -1;
+char* config_file=NULL;
 
 // struct holds arguments for RX thread
 struct rx_th_data_s {
@@ -97,7 +102,7 @@ void* thread_phy_bs_rx(void* arg)
     TIMECHECK_CREATE(timecheck_bs_rx);
     TIMECHECK_INIT(timecheck_bs_rx,"bs.rx_buffer",10000);
 
-	float complex* rxbuf_time = calloc(sizeof(float complex),BUFLEN);
+	float complex* rxbuf_time = calloc(sizeof(float complex),buflen);
 
 	// read some rxbuffer objects in order to empty rxbuffer queue
 	pthread_barrier_wait(rx_tx_sync);
@@ -112,7 +117,7 @@ void* thread_phy_bs_rx(void* arg)
 		hw->platform_rx(hw, rxbuf_time);
 		TIMECHECK_START(timecheck_bs_rx);
 		phy_bs_rx_symbol(phy, rxbuf_time);
-		phy_bs_rx_symbol(phy, rxbuf_time+(NFFT+CP_LEN));
+		phy_bs_rx_symbol(phy, rxbuf_time+(nfft+cp_len));
 		TIMECHECK_STOP_CHECK(timecheck_bs_rx,530);
 		//TIMECHECK_INFO(timecheck_bs_rx);
 	}
@@ -153,10 +158,10 @@ void* thread_phy_bs_tx(void* arg)
     TIMECHECK_CREATE(timecheck_bs_tx);
     TIMECHECK_INIT(timecheck_bs_tx,"bs.tx_buffer",10000);
 
-	float complex* txbuf_time = calloc(sizeof(float complex),BUFLEN);
+	float complex* txbuf_time = calloc(sizeof(float complex),buflen);
 
 	// generate some txbuffers in order to keep the txbuffer queue full
-	bs->platform_tx_prep(bs, txbuf_time, 0, BUFLEN);
+	bs->platform_tx_prep(bs, txbuf_time, 0, buflen);
 	pthread_barrier_wait(tx_rx_sync);
 	sleep(1); // wait until buffer emptied
 	for (int i=0; i<KERNEL_BUF_TX+1; i++)
@@ -169,12 +174,12 @@ void* thread_phy_bs_tx(void* arg)
 	    LOG(TRACE,"[TX Thread] start subframe %d\n",subframe_cnt);
 		for (int symbol=0; symbol<SUBFRAME_LEN/2; symbol++) {
 			bs->platform_tx_push(bs);
-			bs->platform_tx_prep(bs, txbuf_time+BUFLEN-INTER_SYMB_OFFSET, 0, INTER_SYMB_OFFSET);
+			bs->platform_tx_prep(bs, txbuf_time+buflen-INTER_SYMB_OFFSET, 0, INTER_SYMB_OFFSET);
             TIMECHECK_START(timecheck_bs_tx);
 			phy_bs_write_symbol(phy, txbuf_time);
-			phy_bs_write_symbol(phy, txbuf_time+1*(NFFT+CP_LEN));
+			phy_bs_write_symbol(phy, txbuf_time+1*(nfft+cp_len));
 
-			bs->platform_tx_prep(bs, txbuf_time, INTER_SYMB_OFFSET, BUFLEN-INTER_SYMB_OFFSET);
+			bs->platform_tx_prep(bs, txbuf_time, INTER_SYMB_OFFSET, buflen-INTER_SYMB_OFFSET);
             // run scheduler. TODO tweak signaling time: after ULCTRL is received, but early enough to finish
             if (symbol==23) {
 				pthread_cond_signal(scheduler_signal);
@@ -226,9 +231,12 @@ int main(int argc,char *argv[])
 {
 	pthread_t bs_phy_rx_slot_th, bs_phy_rx_th, bs_phy_tx_th, bs_mac_th, bs_tap_th;
 
+	// load default configuration
+	phy_config_default_64();
+
     // parse program args
     int d;
-    while((d = getopt_long(argc,argv,"g:t:f:h",Options,NULL)) != EOF){
+    while((d = getopt_long(argc,argv,"g:t:f:c:h",Options,NULL)) != EOF){
         switch(d){
         case 'g':
             rxgain = atoi(optarg);
@@ -247,6 +255,11 @@ int main(int argc,char *argv[])
         case 'f':
             frequency = atoi(optarg);
             break;
+        case 'c':
+            phy_config_load_file(optarg);
+            config_file = calloc(strlen(optarg),1);
+            strcpy(config_file,optarg);
+            break;
         case 'h':
             printf("%s",helpstring);
             exit(0);
@@ -256,17 +269,28 @@ int main(int argc,char *argv[])
             exit(0);
         }
     }
+    // set buffer size
+    buflen = SYMBOLS_PER_BUF*(nfft+cp_len);
+
+    // configure frequency, if user specified parameter
+    if (frequency>0) {
+        ul_lo = ul_lo + frequency - dl_lo;
+        dl_lo = frequency;
+    }
+    // print system config
+    phy_config_print();
+
 	// Init platform
 #if BS_USE_PLATFORM_SIM
 	platform pluto = platform_init_simulation(BUFLEN);
 #else
-	platform pluto = init_pluto_platform(BUFLEN);
+	platform pluto = init_pluto_platform(buflen, config_file);
     pluto_set_rxgain(pluto, rxgain);
     pluto_set_txgain(pluto, txgain);
-    pluto_set_tx_freq(pluto, frequency);
-    pluto_set_rx_freq(pluto, LO_FREQ_UL+(frequency-LO_FREQ_DL));
+    pluto_set_tx_freq(pluto, dl_lo);
+    pluto_set_rx_freq(pluto, ul_lo);
 #endif
-    printf("Pluto config: rxgain %d txgain %d DL_LO %dHz UL_LO %dHz\n",rxgain,txgain,frequency,LO_FREQ_UL+(frequency-LO_FREQ_DL));
+    printf("Pluto config: rxgain %d txgain %d DL_LO %lldHz UL_LO %lldHz\n",rxgain,txgain,dl_lo,ul_lo);
 
     // Init phy and mac layer
 	PhyBS phy = phy_bs_init();

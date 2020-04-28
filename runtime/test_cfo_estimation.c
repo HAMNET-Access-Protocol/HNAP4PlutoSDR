@@ -22,7 +22,7 @@ PhyBS phy_bs;
 MacUE mac_ue;
 MacBS mac_bs;
 
-uint buflen = NFFT+CP_LEN;
+uint buflen=0;
 
 platform bs;
 platform client;
@@ -37,7 +37,7 @@ int run_simulation(uint num_subframes)
     int offset=0, tx_shift=0, num_samples=buflen;
 
     // Buffers for simulation
-    float complex dl_data[NFFT+CP_LEN];
+    float complex dl_data[nfft+cp_len];
 
     while (global_sfn<num_subframes)
     {
@@ -49,7 +49,7 @@ int run_simulation(uint num_subframes)
         // ---------- RX ------------
         client->platform_rx(client, dl_data);
         // process samples
-        phy_ue_do_rx(phy_ue, dl_data, NFFT+CP_LEN);
+        phy_ue_do_rx(phy_ue, dl_data, nfft+cp_len);
         // show progress
         if (global_sfn%1000==0 && global_symbol==0)
             printf("Processed %d subframes...\n",global_sfn);
@@ -96,15 +96,17 @@ void clean_simulation()
 
 int main(int argc, char* argv[])
 {
+    phy_config_default_64();
+    buflen = nfft+cp_len;
 
     for (int cfo=0; cfo<1; cfo+=50) {
         for (int snr = 5; snr < 41; snr += 5) {
             printf("Starting simulation with SNR %ddB; cfo %dHz\n", snr, cfo);
 
-            PHY_CONFIG.log_coarse_cfo_flag = 0;
-            sprintf(PHY_CONFIG.coarse_cfo_logfile, "coarse_cfo_est_snr%02d_cfo%d.bin", snr, cfo);
-            PHY_CONFIG.log_cfo_flag = 1;
-            sprintf(PHY_CONFIG.cfo_logfile, "cfo_est_snr%02d.bin", snr);
+            log_coarse_cfo_flag = 0;
+            sprintf(coarse_cfo_logfile, "coarse_cfo_est_snr%02d_cfo%d.bin", snr, cfo);
+            log_cfo_flag = 1;
+            sprintf(cfo_logfile, "cfo_est_snr%02d.bin", snr);
 
             setup_simulation(snr, cfo);
             run_simulation(num_simulated_subframes);

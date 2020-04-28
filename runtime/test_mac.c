@@ -45,14 +45,14 @@ PhyBS phy_bs;
 MacUE mac_ue;
 MacBS mac_bs;
 
-uint buflen = NFFT+CP_LEN;
+uint buflen;
 
 platform bs;
 platform client;
 
 uint get_sim_time_msec()
 {
-	float time =  1000.0*(global_sfn*SUBFRAME_LEN + global_symbol)*(NFFT+CP_LEN)/SAMPLERATE;
+	float time =  1000.0*(global_sfn*SUBFRAME_LEN + global_symbol)*(nfft+cp_len)/samplerate;
 	return time;
 }
 
@@ -66,9 +66,9 @@ int run_simulation(uint num_subframes, uint mcs)
 	int offset=0, tx_shift=0, num_samples=buflen;
 
 	// Buffers for simulation
-	float complex dl_data[NFFT+CP_LEN];
-	float complex ul_data_tx[NFFT+CP_LEN];
-	float complex ul_data_rx[NFFT+CP_LEN];
+	float complex dl_data[nfft+cp_len];
+	float complex ul_data_tx[nfft+cp_len];
+	float complex ul_data_rx[nfft+cp_len];
 
 	uint last_tx = get_sim_time_msec();
 	uint packet_id = 0;
@@ -132,10 +132,10 @@ int run_simulation(uint num_subframes, uint mcs)
 			// Initial sync
 			// TODO edge case for offset=68
 			client->platform_rx(client, dl_data);
-			offset = phy_ue_initial_sync(phy_ue, dl_data, NFFT+CP_LEN);
+			offset = phy_ue_initial_sync(phy_ue, dl_data, nfft+cp_len);
 			if (offset>0) {
 				// receive remaining symbols
-				phy_ue_do_rx(phy_ue, dl_data+offset, NFFT+CP_LEN-offset);
+				phy_ue_do_rx(phy_ue, dl_data+offset, nfft+cp_len-offset);
 				phy_ue->rx_offset =  offset;
 
 				offset = -phy_ue->rx_offset;	// TODO use rx offset to align tx
@@ -146,7 +146,7 @@ int run_simulation(uint num_subframes, uint mcs)
 			// ---------- RX ------------
 			client->platform_rx(client, dl_data);
 			// process samples
-			phy_ue_do_rx(phy_ue, dl_data, NFFT+CP_LEN);
+			phy_ue_do_rx(phy_ue, dl_data, nfft+cp_len);
 			// Run scheduler after DLCTRL slot was received
 			if (phy_ue->common->rx_symbol == DLCTRL_LEN) {
 				mac_ue_run_scheduler(mac_ue);
@@ -268,6 +268,10 @@ void clean_simulation()
 
 int main(int argc, char* argv[])
 {
+    // load default configuration
+    phy_config_default_64();
+    buflen = nfft+cp_len;
+
 	// Arrays to store biterror rates. First index: MCS, second index: SNR
 	double biterr_ul_array[8][50]= {0};
 	double biterr_dl_array[8][50]= {0};
@@ -279,7 +283,7 @@ int main(int argc, char* argv[])
 		mcs = strtol(argv[1],&ptr, 10);
 	}
 
-	for (int snr= 5; snr<40; snr+=1) {
+	for (int snr= 25; snr<40; snr+=1) {
 		printf("Starting simulation with SNR %ddB mcs%d\n",snr,mcs);
 
 		setup_simulation(snr, cfo);

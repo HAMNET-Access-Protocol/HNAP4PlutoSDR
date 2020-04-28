@@ -35,10 +35,10 @@ PhyUE phy_ue_init()
 #endif
 
 	// Create OFDM frame generator: nFFt, CPlen, taperlen, subcarrier alloc
-	phy->fg = ofdmframegen_create(NFFT, CP_LEN, 0, phy->common->pilot_sc);
+	phy->fg = ofdmframegen_create(nfft, cp_len, 0, phy->common->pilot_sc);
 
 	// Create OFDM receiver
-	phy->fs = ofdmframesync_create(NFFT, CP_LEN, 0, phy->common->pilot_sc, _ue_rx_symbol_cb, phy);
+	phy->fs = ofdmframesync_create(nfft, cp_len, 0, phy->common->pilot_sc, _ue_rx_symbol_cb, phy);
 
 	// Alloc memory for slot assignments
 	phy->dlslot_assignments = malloc(2*sizeof(assignment_t*));
@@ -151,16 +151,16 @@ int phy_ue_initial_sync(PhyUE phy, float complex* rxbuf_time, uint num_samples)
 
 			phy->has_synced_once = 1;
 			phy->prev_cfo = ofdmframesync_get_cfo(phy->fs);
-			LOG(INFO,"[PHY UE] Got sync! cfo: %.3fHz offset: %d samps\n",phy->prev_cfo*SAMPLERATE/6.28,offset);
-			SYSLOG(LOG_INFO,"[PHY UE] Got sync! cfo: %.3fHz offset: %d samps\n",phy->prev_cfo*SAMPLERATE/6.28,offset);
+			LOG(INFO,"[PHY UE] Got sync! cfo: %.3fHz offset: %d samps\n",phy->prev_cfo*samplerate/6.28,offset);
+			SYSLOG(LOG_INFO,"[PHY UE] Got sync! cfo: %.3fHz offset: %d samps\n",phy->prev_cfo*samplerate/6.28,offset);
 		} else {
 			float new_cfo = ofdmframesync_get_cfo(phy->fs);
-            if (PHY_CONFIG.log_coarse_cfo_flag)
-                log_bin((uint8_t*)&new_cfo,sizeof(float),PHY_CONFIG.coarse_cfo_logfile,"a");
+            if (log_coarse_cfo_flag)
+                log_bin((uint8_t*)&new_cfo,sizeof(float),coarse_cfo_logfile,"a");
 
-			float cfo_filt = (1-SYNC_CFO_FILT_PARAM)*phy->prev_cfo + SYNC_CFO_FILT_PARAM*new_cfo;
+			float cfo_filt = (1-coarse_cfo_filt_param)*phy->prev_cfo + coarse_cfo_filt_param*new_cfo;
 			ofdmframesync_set_cfo(phy->fs,cfo_filt);
-			LOG_SFN_PHY(DEBUG,"[PHY UE] sync seq. cfo: %.3fHz offset: %d samps\n",new_cfo*SAMPLERATE/6.28,offset);
+			LOG_SFN_PHY(DEBUG,"[PHY UE] sync seq. cfo: %.3fHz offset: %d samps\n",new_cfo*samplerate/6.28,offset);
 
 		}
 	}
@@ -177,10 +177,10 @@ int phy_ue_proc_dlctrl(PhyUE phy)
 	uint sfn = common->rx_subframe % 2; // even or uneven subframe?
 
 	// demodulate signal.
-	uint llr_len = 2*DLCTRL_LEN*(NFFT-NUM_GUARD);
+	uint llr_len = 2*DLCTRL_LEN*(num_data_sc+num_pilot_sc);
 	uint8_t* llr_buf = malloc(llr_len);
 	uint total_samps = 0;
-	phy_demod_soft(common, 0, NFFT-1, 0, DLCTRL_LEN-1, 0, llr_buf, llr_len, &total_samps);
+	phy_demod_soft(common, 0, nfft-1, 0, DLCTRL_LEN-1, 0, llr_buf, llr_len, &total_samps);
 
 	// soft decoding
 	dlctrl_alloc_t* dlctrl_buf = malloc(dlctrl_size+1);
@@ -261,7 +261,7 @@ void phy_ue_proc_slot(PhyUE phy, uint slotnr)
 		uint first_symb = DLCTRL_LEN+2+(SLOT_LEN+1)*slotnr;
 		uint last_symb = DLCTRL_LEN+2+(SLOT_LEN+1)*(slotnr+1)-2;
 		TIMECHECK_START(check_demod);
-		phy_demod_soft(common, 0, NFFT-1, first_symb, last_symb, mcs,
+		phy_demod_soft(common, 0, nfft-1, first_symb, last_symb, mcs,
 					   demod_buf, buf_len, &written_samps);
         TIMECHECK_STOP(check_demod);
 		//deinterleaving
@@ -314,7 +314,7 @@ int phy_ue_proc_sync_info(PhyUE phy)
     // demodulate signal
     const int symb_idx = SUBFRAME_LEN -2;
     uint written_samps = 0, symbol = 0;
-    for (int i=0; i<NFFT; i++) {
+    for (int i=0; i<nfft; i++) {
         if (common->pilot_sc[i] == OFDMFRAME_SCTYPE_DATA && written_samps<buf_len) {
             modem_demodulate_soft(common->mcs_modem[mcs], common->rxdata_f[symb_idx][i], &symbol, &demod_buf[written_samps]);
             written_samps += modem_get_bps(common->mcs_modem[mcs]);
@@ -347,7 +347,7 @@ int _ue_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd)
 	PhyUE phy = (PhyUE)userd;
 	PhyCommon common = phy->common;
 
-	memcpy(common->rxdata_f[common->rx_symbol++],X,sizeof(float complex)*NFFT);
+	memcpy(common->rxdata_f[common->rx_symbol++],X,sizeof(float complex)*nfft);
 
 	switch (common->rx_symbol) {
 	case DLCTRL_LEN:
@@ -404,9 +404,9 @@ int _ue_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd)
 	}
 
 	// log cfo estimate
-	if (PHY_CONFIG.log_cfo_flag) {
+	if (log_cfo_flag) {
         float cfo = ofdmframesync_get_cfo(phy->fs);
-	    log_bin((uint8_t*)&cfo, sizeof(float),PHY_CONFIG.cfo_logfile,"a");
+	    log_bin((uint8_t*)&cfo, sizeof(float),cfo_logfile,"a");
     }
 	// sync sequence will follow. Reset framesync and adjust gain
 	if ((common->rx_subframe == 0) &&
@@ -471,8 +471,8 @@ void phy_ue_create_assoc_request(PhyUE phy, float complex* txbuf_time)
 
 	// modulate signal
 	uint written_samps = 0;
-	float complex subcarriers[NFFT];
-	for (int i=0; i<NFFT; i++) {
+	float complex subcarriers[nfft];
+	for (int i=0; i<nfft; i++) {
 		if (common->pilot_sc[i] == OFDMFRAME_SCTYPE_DATA && written_samps<num_repacked) {
 			modem_modulate(common->mcs_modem[mcs],(uint)repacked_b[written_samps++], &subcarriers[i]);
 		}
@@ -522,7 +522,7 @@ void phy_ue_write_symbol(PhyUE phy, float complex* txbuf_time)
                 phy->platform->ptt_set_rx(phy->platform);
             } else {
 				// send zeros
-				memset(txbuf_time, 0, sizeof(float complex)*(NFFT+CP_LEN));
+				memset(txbuf_time, 0, sizeof(float complex)*(nfft+cp_len));
 			}
 		} else if (phy->ul_symbol_alloc[sfn][tx_symb]==DATA){
 			// MAC is associated and have data to send.
@@ -533,14 +533,14 @@ void phy_ue_write_symbol(PhyUE phy, float complex* txbuf_time)
 				ofdmframegen_writesymbol_nopilot(phy->fg, common->txdata_f[sfn][tx_symb],txbuf_time);
 			}
 		} else if (phy->ul_symbol_alloc[sfn][tx_symb] == PTT_UP) {
-            memset(txbuf_time,0,sizeof(float complex)*(NFFT+CP_LEN));
+            memset(txbuf_time,0,sizeof(float complex)*(nfft+cp_len));
             phy->platform->ptt_set_tx(phy->platform);
         } else if (phy->ul_symbol_alloc[sfn][tx_symb] == PTT_DOWN) {
-            memset(txbuf_time,0,sizeof(float complex)*(NFFT+CP_LEN));
+            memset(txbuf_time,0,sizeof(float complex)*(nfft+cp_len));
             phy->platform->ptt_set_rx(phy->platform);
 		} else {
 			// associated but no data to send. Set zero
-			memset(txbuf_time,0,sizeof(float complex)*(NFFT+CP_LEN));
+			memset(txbuf_time,0,sizeof(float complex)*(nfft+cp_len));
 		}
 	}
 
@@ -572,11 +572,11 @@ void phy_ue_do_rx(PhyUE phy, float complex* rxbuf_time, uint num_samples)
 			}
 		} else {
 			// receive symbols
-			uint rx_sym = fmin(NFFT+CP_LEN,remaining_samps);
+			uint rx_sym = fmin(nfft+cp_len,remaining_samps);
 			if (common->pilot_symbols_rx[common->rx_symbol] == PILOT ||
                     (common->rx_subframe==0 && common->rx_symbol==SUBFRAME_LEN-2)) {
 				ofdmframesync_execute(phy->fs,rxbuf_time,rx_sym);
-				LOG(TRACE,"[PHY UE] cfo updated: %.3f Hz\n",ofdmframesync_get_cfo(phy->fs)*SAMPLERATE/6.28);
+				LOG(TRACE,"[PHY UE] cfo updated: %.3f Hz\n",ofdmframesync_get_cfo(phy->fs)*samplerate/6.28);
 			} else {
 				ofdmframesync_execute_nopilot(phy->fs,rxbuf_time,rx_sym);
 			}
@@ -618,7 +618,7 @@ int phy_map_ulctrl(PhyUE phy, LogicalChannel chan, uint subframe, uint8_t slot_n
 
 	// modulate signal
 	uint sfn = subframe % 2;
-	phy_mod(phy->common,sfn,0,NFFT-1,first_symb,first_symb, mcs, repacked_b, num_repacked, &total_samps);
+	phy_mod(phy->common,sfn,0,nfft-1,first_symb,first_symb, mcs, repacked_b, num_repacked, &total_samps);
 
 	// activate used OFDM symbols in resource allocation
 	if (phy->ul_symbol_alloc[sfn][first_symb-2]==NOT_USED)
@@ -675,7 +675,7 @@ int phy_map_ulslot(PhyUE phy, LogicalChannel chan, uint subframe, uint8_t slot_n
 
 	// modulate signal
 	uint sfn = subframe % 2;
-	phy_mod(phy->common,sfn, 0,NFFT-1,first_symb,last_symb, mcs, repacked_b, num_repacked, &total_samps);
+	phy_mod(phy->common,sfn, 0,nfft-1,first_symb,last_symb, mcs, repacked_b, num_repacked, &total_samps);
 
 	// activate used OFDM symbols in resource allocation
 	memset(&phy->ul_symbol_alloc[sfn][first_symb],DATA,last_symb-first_symb+1);

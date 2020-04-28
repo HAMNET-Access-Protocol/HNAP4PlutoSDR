@@ -12,8 +12,8 @@ include_directories(util)
 
 
 # Group source files to PHY and MAC layer for UE/BS respectively
-set(PHY_BS phy/phy_common.h phy/phy_bs.h phy/phy_bs.c phy/phy_common.c phy/phy_config.h)
-set(PHY_UE phy/phy_common.h phy/phy_ue.h phy/phy_ue.c phy/phy_common.c phy/phy_config.h)
+set(PHY_BS phy/phy_common.h phy/phy_bs.h phy/phy_bs.c phy/phy_common.c phy/phy_config.h phy/phy_config.c)
+set(PHY_UE phy/phy_common.h phy/phy_ue.h phy/phy_ue.c phy/phy_common.c phy/phy_config.h phy/phy_config.c)
 
 set(MAC_COMMON mac/mac_config.h mac/mac_channels.h mac/mac_common.h mac/mac_fragmentation.h mac/mac_messages.h
                mac/mac_channels.c mac/mac_messages.c mac/mac_common.c mac/mac_fragmentation.c mac/tap_dev.c)
@@ -27,27 +27,27 @@ set(UTIL util/log.h util/log.c util/ringbuf.h util/ringbuf.c)
 # Simulation target
 add_executable(test_mac runtime/test.h runtime/test_mac.c platform/platform.h platform/platform_simulation.h platform/platform_simulation.c
                         ${PHY_BS} ${PHY_UE} ${MAC_COMMON} ${MAC_UE} ${MAC_BS} ${UTIL})
-target_link_libraries(test_mac liquid m)
+target_link_libraries(test_mac liquid m config)
 target_compile_definitions(test_mac PUBLIC USE_SIM SIM_LOG_BER SIM_LOG_DELAY)
 # Basestation
 add_executable(basestation runtime/basestation.c platform/platform.h platform/pluto.h platform/pluto.c
                             ${PHY_BS} ${MAC_COMMON} ${MAC_BS} ${UTIL} platform/pluto_gpio.c platform/pluto_gpio.h)
-target_link_libraries(basestation liquid m iio pthread rt)
+target_link_libraries(basestation liquid m iio pthread rt config)
 target_compile_definitions(basestation PUBLIC MAC_ENABLE_TAP_DEV)
 
 #Client
 add_executable(client runtime/client.c platform/platform.h platform/pluto.h platform/pluto.c
         ${PHY_UE} ${MAC_COMMON} ${MAC_UE} ${UTIL} platform/pluto_gpio.c platform/pluto_gpio.h)
-target_link_libraries(client liquid m iio pthread rt)
+target_link_libraries(client liquid m iio pthread rt config)
 target_compile_definitions(client PUBLIC MAC_ENABLE_TAP_DEV)
 
 #Client XO calibration tool
 add_executable(client-calib runtime/client-calib.c platform/platform.h platform/pluto.h platform/pluto.c
         ${PHY_UE} ${MAC_COMMON} ${MAC_UE} ${UTIL} platform/pluto_gpio.c platform/pluto_gpio.h)
-target_link_libraries(client-calib liquid m iio pthread rt)
+target_link_libraries(client-calib liquid m iio pthread rt config)
 
 # CFO estimation accuracy test
 add_executable(test_cfo_estimation runtime/test_cfo_estimation.c platform/platform.h platform/platform_simulation.h platform/platform_simulation.c
         ${PHY_BS} ${PHY_UE} ${MAC_COMMON} ${MAC_UE} ${MAC_BS} ${UTIL})
-target_link_libraries(test_cfo_estimation liquid m)
+target_link_libraries(test_cfo_estimation liquid m config)
 target_compile_definitions(test_cfo_estimation PUBLIC USE_SIM)

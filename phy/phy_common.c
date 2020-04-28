@@ -6,26 +6,7 @@
  */
 
 #include "phy_common.h"
-
-// define dummy data which is sent when no other data is available
-// these are frequency domain samples for one OFDM symbol
-/*float complex dummy_data_f[NFFT] = { 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
-		 	 	 	 	 	 	 	 1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,
-									 0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,
-									 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1};
-*/
-float complex dummy_data_f[NFFT] = { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-		 	 	 	 	 	 	 	 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-									 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-									 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
-
-// Use a custom pilot allocation in frequency domain.
-// In order to use it, set USE_CUSTOM_PILOT to 1.
-#define USE_CUSTOM_PILOT 0
-uint8_t custom_pilot[NFFT] = { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-							   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-							   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-							   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+#include "phy_config.h"
 
 
 // Init the PHY instance
@@ -41,13 +22,13 @@ PhyCommon phy_common_init()
 	phy->txdata_f[1] = malloc(sizeof(float complex*)*SUBFRAME_LEN);
 	phy->rxdata_f    = malloc(sizeof(float complex*)*SUBFRAME_LEN);
     for (int i=0; i<SUBFRAME_LEN; i++) {
-    	phy->txdata_f[0][i] = calloc(sizeof(float complex)*(NFFT),1);
-    	phy->txdata_f[1][i] = calloc(sizeof(float complex)*(NFFT),1);
-    	phy->rxdata_f[i]    = calloc(sizeof(float complex)*(NFFT),1);
+    	phy->txdata_f[0][i] = calloc(sizeof(float complex)*(nfft),1);
+    	phy->txdata_f[1][i] = calloc(sizeof(float complex)*(nfft),1);
+    	phy->rxdata_f[i]    = calloc(sizeof(float complex)*(nfft),1);
     }
 
     // alloc buffer for subcarrier definitions
-    phy->pilot_sc = calloc(NFFT,1);
+    phy->pilot_sc = calloc(nfft,1);
     phy->pilot_symbols_rx = calloc(SUBFRAME_LEN,1);
     phy->pilot_symbols_tx = calloc(SUBFRAME_LEN,1);
 
@@ -127,20 +108,15 @@ void phy_common_destroy(PhyCommon phy)
 // returns the Transport Block size of a UL/DL data slot in bits
 int get_tbs_size(PhyCommon phy, uint mcs)
 {
-	if (NFFT==64) {
-		uint symbols = (SLOT_LEN-PILOT_SYM_PER_SLOT)*(NUM_DATA_SC+NUM_PILOT)+PILOT_SYM_PER_SLOT*NUM_DATA_SC;
-		uint enc_bits = symbols*modem_get_bps(phy->mcs_modem[mcs]); //number of encoded bits
-		return (enc_bits-16)*fec_get_rate(phy->mcs_fec_scheme[mcs]); // real tbs size. Subtract 16bit for conv encoding
-	} else {
-		printf("[PHY common] fft size not yet implemented\n");
-		return -1;
-	}
+    uint symbols = (SLOT_LEN-pilot_symbols_per_slot)*(num_data_sc+num_pilot_sc)+pilot_symbols_per_slot*num_data_sc;
+    uint enc_bits = symbols*modem_get_bps(phy->mcs_modem[mcs]); //number of encoded bits
+    return (enc_bits-16)*fec_get_rate(phy->mcs_fec_scheme[mcs]); // real tbs size. Subtract 16bit for conv encoding
 }
 
 // returns the size of the ULCTRL slots in bits
 int get_ulctrl_slot_size(PhyCommon phy)
 {
-	uint symbols = NUM_DATA_SC;
+	uint symbols = num_data_sc;
 	uint enc_bits = symbols*modem_get_bps(phy->mcs_modem[0]); //number of encoded bits
 	return (enc_bits-16)*fec_get_rate(phy->mcs_fec_scheme[0]); // real tbs size. Subtract 16bit for conv encoding
 
@@ -205,33 +181,10 @@ void phy_demod_soft(PhyCommon common, uint first_sc, uint last_sc, uint first_sy
 
 void gen_pilot_symbols(PhyCommon phy, uint is_bs)
 {
-    // first generate frequency domain allocation of pilot symbols
-    // initialize as NULL
-    for (int i=0; i<NFFT; i++)
-        phy->pilot_sc[i] = OFDMFRAME_SCTYPE_NULL;
+    // load subcarrier allocation from phy config
+    memcpy(phy->pilot_sc,subcarrier_alloc,nfft);
 
-    // upper band
-    for (int i=0; i<(NUM_DATA_SC+NUM_PILOT)/2; i++) {
-        phy->pilot_sc[i] = OFDMFRAME_SCTYPE_DATA;
-    }
-
-    // lower band
-    for (int i=0; i<(NUM_DATA_SC+NUM_PILOT)/2; i++) {
-        phy->pilot_sc[NFFT-1-i] = OFDMFRAME_SCTYPE_DATA;
-    }
-
-    // set pilots
-    phy->pilot_sc[2] = OFDMFRAME_SCTYPE_PILOT;
-    phy->pilot_sc[7] = OFDMFRAME_SCTYPE_PILOT;
-    phy->pilot_sc[12] = OFDMFRAME_SCTYPE_PILOT;
-    phy->pilot_sc[17] = OFDMFRAME_SCTYPE_PILOT;
-    phy->pilot_sc[NFFT-1-2] = OFDMFRAME_SCTYPE_PILOT;
-    phy->pilot_sc[NFFT-1-7] = OFDMFRAME_SCTYPE_PILOT;
-    phy->pilot_sc[NFFT-1-12] = OFDMFRAME_SCTYPE_PILOT;
-    phy->pilot_sc[NFFT-1-17] = OFDMFRAME_SCTYPE_PILOT;
-
-    // next generate time domain allocation of pilot symbols
-
+    // create time domain distribution of ofdm pilots within subcarrier
 	// UE transmits in UL and RXs in DL, BS the other way around
 	// define pilots accordingly
 	uint8_t* pilot_ul,*pilot_dl;
@@ -243,177 +196,27 @@ void gen_pilot_symbols(PhyCommon phy, uint is_bs)
 		pilot_ul = phy->pilot_symbols_tx;
 	}
 
-    // Pilot definition in time domain:
-    for (int i=0; i<SUBFRAME_LEN; i++) {
-    	pilot_dl[i] = NO_PILOT;
-    	pilot_ul[i] = NO_PILOT;
-    }
-
-    // DL: dlctrl slot uses pilots
-    pilot_dl[0] = PILOT;
-    pilot_dl[1] = PILOT;
-
-    // DL: first OFDM symbol of each data slot shall be pilot
-    for (int i=0; i<NUM_SLOT; i++) {
-    	pilot_dl[DLCTRL_LEN+2+(SLOT_LEN+1)*i] = PILOT;
-    	pilot_dl[DLCTRL_LEN+2+(SLOT_LEN+1)*i+8] = PILOT; //test w more pilots
-    }
-
-    // UL: ulctrl slots
-    pilot_ul[2*(SLOT_LEN+1)] = PILOT;
-    pilot_ul[2*(SLOT_LEN+1)+2] = PILOT;
-    // and first two symbols of uldata slots have pilots
-    pilot_ul[0] = PILOT;
-    pilot_ul[1] = PILOT;
-    pilot_ul[8] = PILOT;
-    pilot_ul[SLOT_LEN+1] = PILOT;
-    pilot_ul[SLOT_LEN+2] = PILOT;
-    pilot_ul[SLOT_LEN+9] = PILOT;
-    pilot_ul[2*(SLOT_LEN+1)+4] = PILOT;
-    pilot_ul[2*(SLOT_LEN+1)+5] = PILOT;
-    pilot_ul[2*(SLOT_LEN+1)+12] = PILOT;
-    pilot_ul[3*(SLOT_LEN+1)+4] = PILOT;
-    pilot_ul[3*(SLOT_LEN+1)+5] = PILOT;
-    pilot_ul[3*(SLOT_LEN+1)+12] = PILOT;
-}
-
-// generate a more robust pilot distribution within a subframe
-// NOTE: PILOT_SYM_PER_SLOT  has to be set to 14 to use this
-// TODO: ease switching of pilot alloc scheme
-void gen_pilot_symbols_robust(PhyCommon phy, uint is_bs)
-{
-    // first generate frequency domain allocation of pilot symbols
-    // initialize as NULL
-    for (int i=0; i<NFFT; i++)
-        phy->pilot_sc[i] = OFDMFRAME_SCTYPE_NULL;
-
-    // upper band
-    for (int i=0; i<(NUM_DATA_SC+NUM_PILOT)/2; i++) {
-        phy->pilot_sc[i] = OFDMFRAME_SCTYPE_DATA;
-    }
-
-    // lower band
-    for (int i=0; i<(NUM_DATA_SC+NUM_PILOT)/2; i++) {
-        phy->pilot_sc[NFFT-1-i] = OFDMFRAME_SCTYPE_DATA;
-    }
-
-    // set pilots
-    phy->pilot_sc[2] = OFDMFRAME_SCTYPE_PILOT;
-    phy->pilot_sc[7] = OFDMFRAME_SCTYPE_PILOT;
-    phy->pilot_sc[12] = OFDMFRAME_SCTYPE_PILOT;
-    phy->pilot_sc[17] = OFDMFRAME_SCTYPE_PILOT;
-    phy->pilot_sc[NFFT-1-2] = OFDMFRAME_SCTYPE_PILOT;
-    phy->pilot_sc[NFFT-1-7] = OFDMFRAME_SCTYPE_PILOT;
-    phy->pilot_sc[NFFT-1-12] = OFDMFRAME_SCTYPE_PILOT;
-    phy->pilot_sc[NFFT-1-17] = OFDMFRAME_SCTYPE_PILOT;
-
-    // now generate time domain distribution of pilot symbols
-
-	// UE transmits in UL and RXs in DL, BS the other way around
-	// define pilots accordingly
-	uint8_t* pilot_ul,*pilot_dl;
-	if (is_bs) {
-		pilot_dl = phy->pilot_symbols_tx;
-		pilot_ul = phy->pilot_symbols_rx;
-	} else {
-		pilot_dl = phy->pilot_symbols_rx;
-		pilot_ul = phy->pilot_symbols_tx;
-	}
-
-	memset(pilot_dl,NO_PILOT,SUBFRAME_LEN);
-	memset(pilot_ul,NO_PILOT,SUBFRAME_LEN);
-
-	// Pilot symbols within subframe in UL
-	// dldata slots
-    for (int i=0; i<SLOT_LEN; i+=2) {
-    	pilot_dl[4+i] = PILOT;
-    	pilot_dl[4+(SLOT_LEN+1)*1+i] = PILOT;
-    	pilot_dl[4+(SLOT_LEN+1)*2+i] = PILOT;
-    	pilot_dl[4+(SLOT_LEN+1)*3+i] = PILOT;
-    }
-    // dlctrl slot
-    pilot_dl[0] = PILOT;
-    pilot_dl[1] = PILOT;
-
-
-    // Pilot symbols within subframe in UL
-    //uldata slots
-    for (int i=0; i<SLOT_LEN; i+=2) {
-    	pilot_ul[i] = PILOT;
-    	pilot_ul[(SLOT_LEN+1)*1+i] = PILOT;
-    	pilot_ul[4+(SLOT_LEN+1)*2+i] = PILOT;
-    	pilot_ul[4+(SLOT_LEN+1)*3+i] = PILOT;
-    }
-    //ulctrl slots
-    pilot_ul[2*(SLOT_LEN+1)] = PILOT;
-    pilot_ul[2*(SLOT_LEN+1)+2] = PILOT;
-}
-
-// generate a more robust pilot distribution within a subframe
-// use more symbols in time domain and less in frequency
-void gen_pilot_symbols_robust2(PhyCommon phy, uint is_bs)
-{
-    // initialize as NULL
-    for (int i=0; i<NFFT; i++)
-        phy->pilot_sc[i] = OFDMFRAME_SCTYPE_NULL;
-
-    // upper band
-    for (int i=0; i<(NUM_DATA_SC+NUM_PILOT)/2; i++) {
-        phy->pilot_sc[i] = OFDMFRAME_SCTYPE_DATA;
-    }
-
-    // lower band
-    for (int i=0; i<(NUM_DATA_SC+NUM_PILOT)/2; i++) {
-        phy->pilot_sc[NFFT-1-i] = OFDMFRAME_SCTYPE_DATA;
-    }
-
-    // set pilots
-    phy->pilot_sc[2] = OFDMFRAME_SCTYPE_PILOT;
-    phy->pilot_sc[7] = OFDMFRAME_SCTYPE_PILOT;
-    phy->pilot_sc[12] = OFDMFRAME_SCTYPE_PILOT;
-    phy->pilot_sc[17] = OFDMFRAME_SCTYPE_PILOT;
-    phy->pilot_sc[NFFT-1-2] = OFDMFRAME_SCTYPE_PILOT;
-    phy->pilot_sc[NFFT-1-7] = OFDMFRAME_SCTYPE_PILOT;
-    phy->pilot_sc[NFFT-1-12] = OFDMFRAME_SCTYPE_PILOT;
-    phy->pilot_sc[NFFT-1-17] = OFDMFRAME_SCTYPE_PILOT;
-
-    // UE transmits in UL and RXs in DL, BS the other way around
-    // define pilots accordingly
-    uint8_t* pilot_ul,*pilot_dl;
-    if (is_bs) {
-        pilot_dl = phy->pilot_symbols_tx;
-        pilot_ul = phy->pilot_symbols_rx;
-    } else {
-        pilot_dl = phy->pilot_symbols_rx;
-        pilot_ul = phy->pilot_symbols_tx;
-    }
-
+    // Reset pilot allocation
     memset(pilot_dl,NO_PILOT,SUBFRAME_LEN);
     memset(pilot_ul,NO_PILOT,SUBFRAME_LEN);
 
+    // DL: dlctrl slot uses pilots
+    memset(&pilot_dl[0],PILOT,DLCTRL_LEN);
 
-    // Pilot symbols within subframe in UL
-    // dldata slots
-    for (int i=0; i<SLOT_LEN; i+=1) {
-        pilot_dl[4+i] = PILOT;
-        pilot_dl[4+(SLOT_LEN+1)*1+i] = PILOT;
-        pilot_dl[4+(SLOT_LEN+1)*2+i] = PILOT;
-        pilot_dl[4+(SLOT_LEN+1)*3+i] = PILOT;
+    // replicate slot allocation for one slot over the subframe
+    for (int slot_nr=0; slot_nr<NUM_SLOT; slot_nr++) {
+        int slot_start = DLCTRL_LEN+SLOT_GUARD_INTERVAL + slot_nr*(SLOT_LEN+SLOT_GUARD_INTERVAL);
+        memcpy(&pilot_dl[slot_start], pilot_symbols, SLOT_LEN);
     }
-    // dlctrl slot
-    pilot_dl[0] = PILOT;
-    pilot_dl[1] = PILOT;
-
 
     // Pilot symbols within subframe in UL
     //uldata slots
-    for (int i=0; i<SLOT_LEN; i+=1) {
-        pilot_ul[i] = PILOT;
-        pilot_ul[(SLOT_LEN+1)*1+i] = PILOT;
-        pilot_ul[4+(SLOT_LEN+1)*2+i] = PILOT;
-        pilot_ul[4+(SLOT_LEN+1)*3+i] = PILOT;
-    }
+    memcpy(&pilot_ul[0], pilot_symbols, SLOT_LEN);
+    memcpy(&pilot_ul[SLOT_LEN+SLOT_GUARD_INTERVAL], pilot_symbols, SLOT_LEN);
+    memcpy(&pilot_ul[2*(SLOT_LEN+SLOT_GUARD_INTERVAL)+NUM_ULCTRL_SLOT*2], pilot_symbols, SLOT_LEN);
+    memcpy(&pilot_ul[3*(SLOT_LEN+SLOT_GUARD_INTERVAL)+NUM_ULCTRL_SLOT*2], pilot_symbols, SLOT_LEN);
+
     //ulctrl slots
-    pilot_ul[2*(SLOT_LEN+1)] = PILOT;
-    pilot_ul[2*(SLOT_LEN+1)+2] = PILOT;
+    pilot_ul[2*(SLOT_LEN+SLOT_GUARD_INTERVAL)] = PILOT;
+    pilot_ul[2*(SLOT_LEN+SLOT_GUARD_INTERVAL)+2] = PILOT;
 }

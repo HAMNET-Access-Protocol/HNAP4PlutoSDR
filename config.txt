@@ -1,0 +1,38 @@
+# Transceiver configuration file
+
+# Phy layer configuration
+phy:
+{
+  samplerate = 256000;  # Baseband samplerate
+  nfft = 64;            # Size of the FFT
+  cp_len = 4;           # Cyclic prefix length in samples
+
+  dl_lo = 439700000;    # Downlink carrier frequency
+  ul_lo = 434900000;    # Uplink carrier frequency
+
+  # Subcarrier allocation. 0 = guard carrier, 1= pilot carrier, 2= data carrier
+  # Length of this array must equal the specified fft size!
+  # If the length is 0, this parameter is ignored and the default config (32 data, 8 pilots) used
+  # First half of the array represent the upper half of the spectrum. Starting with DC carrier at position 0
+  # Second half of the array represents the lower half of the specrum. Starting with outer frequencies
+  # subcarrier_alloc = [];
+
+  # The default alloc for 64 subcarriers:
+  subcarrier_alloc = [ 2, 2, 1, 2, 2, 2, 2, 1, 2, 2, 2, 2, 1, 2, 2, 2,
+                       2, 1, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 1, 2,
+                       2, 2, 2, 1, 2, 2, 2, 2, 1, 2, 2, 2, 2, 1, 2, 2];
+
+  # OFDM symbol definition in time domain. 0 = symbol without pilots, 1 = symbol with pilots
+  # Length of this array must equal the slot length: 14;
+  pilot_symbols = [];
+}
+
+# Platform configuration
+platform:
+{
+  tx_bandwdith = 1701126;   # Passband of the analog TX filter.
+  rx_bandwidth = 1703632;   # Passband of the analog RX filter.
+  enable_ptt = 1;           # Set to one to create a PTT signal at gpio port MIO0
+  ptt_delay_comp_us = 200;  # Adjust the timing of the PTT signal in usec
+}

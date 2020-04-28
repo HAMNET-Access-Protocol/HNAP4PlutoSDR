@@ -14,7 +14,7 @@ int _bs_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd);
 int _ofdm_rx_rach_cb(float complex* X,unsigned char* p, uint M, void* userd)
 {
 	PhyBS phy = (PhyBS)userd;
-	memcpy(phy->rach_buffer,X,sizeof(float complex)*NFFT);
+	memcpy(phy->rach_buffer,X,sizeof(float complex)*nfft);
 	phy_bs_proc_rach(phy, phy->rach_timing);
 
 	return 0;
@@ -31,13 +31,13 @@ PhyBS phy_bs_init()
 	gen_pilot_symbols(phy->common, 1);
 #endif
 	// Create OFDM frame generator: nFFt, CPlen, taperlen, subcarrier alloc
-	phy->fg = ofdmframegen_create(NFFT, CP_LEN, 0, phy->common->pilot_sc);
+	phy->fg = ofdmframegen_create(nfft, cp_len, 0, phy->common->pilot_sc);
 
 	// Create OFDM receiver
 	phy->fs_rach = NULL;
 
     // alloc buffer for dl control slot
-    phy->dlctrl_buf = calloc((NFFT-NUM_GUARD)*DLCTRL_LEN/8, 1);
+    phy->dlctrl_buf = calloc((num_data_sc+num_pilot_sc)*DLCTRL_LEN/8, 1);
 
 	// Alloc memory for slot assignments
 	phy->ulslot_assignments = malloc(2*sizeof(uint8_t*));
@@ -52,6 +52,9 @@ PhyBS phy_bs_init()
     phy->ul_symbol_alloc = malloc(sizeof(uint8_t*)*2);
 	phy->ul_symbol_alloc[0] = calloc(sizeof(uint8_t)*SUBFRAME_LEN,1);
     phy->ul_symbol_alloc[1] = calloc(sizeof(uint8_t)*SUBFRAME_LEN,1);
+
+    // allocate memory for rach_buffer
+    phy->rach_buffer = calloc(sizeof(float complex)*nfft,1);
 
     // Set RX position
     phy->common->rx_symbol = SUBFRAME_LEN - DL_UL_SHIFT - DL_UL_SHIFT_COMP_BS;
@@ -132,8 +135,8 @@ void phy_bs_write_sync_info(PhyBS phy, float complex* txbuf_time) {
 
     // modulate signal
     uint written_samps = 0;
-    float complex subcarriers[NFFT];
-    for (int i=0; i<NFFT; i++) {
+    float complex subcarriers[nfft];
+    for (int i=0; i<nfft; i++) {
         if (common->pilot_sc[i] == OFDMFRAME_SCTYPE_DATA && written_samps<num_repacked) {
             modem_modulate(common->mcs_modem[mcs],(uint)repacked_b[written_samps++], &subcarriers[i]);
         }
@@ -192,7 +195,7 @@ int phy_map_dlslot(PhyBS phy, LogicalChannel chan, uint subframe, uint8_t slot_n
 	uint last_symb = DLCTRL_LEN+2+(SLOT_LEN+1)*(slot_nr+1)-2;
 
 	// modulate signal
-	phy_mod(phy->common,subframe,0,NFFT-1,first_symb,last_symb, mcs, repacked_b, num_repacked, &total_samps);
+	phy_mod(phy->common,subframe,0,nfft-1,first_symb,last_symb, mcs, repacked_b, num_repacked, &total_samps);
     TIMECHECK_STOP(check_mod);
     TIMECHECK_STOP(timecheck_tx);
 	free(interleaved_b);
@@ -233,7 +236,7 @@ void phy_map_dlctrl(PhyBS phy, uint subframe)
 	liquid_repack_bytes((uint8_t*)buf_enc,8,enc_len,repacked_b,modem_get_bps(common->mcs_modem[mcs]),num_repacked,&bytes_written);
 
 	uint total_samps = 0;
-	phy_mod(common, subframe, 0, NFFT-1, 0, DLCTRL_LEN-1, mcs, repacked_b, num_repacked, &total_samps);
+	phy_mod(common, subframe, 0, nfft-1, 0, DLCTRL_LEN-1, mcs, repacked_b, num_repacked, &total_samps);
 
 	free(buf_enc);
 	free(repacked_b);
@@ -314,7 +317,7 @@ void phy_bs_proc_slot(PhyBS phy, uint slotnr)
 		first_symb += 4;
 		last_symb +=4;
 	}
-	phy_demod_soft(common, 0, NFFT-1, first_symb, last_symb, mcs,
+	phy_demod_soft(common, 0, nfft-1, first_symb, last_symb, mcs,
 				   demod_buf, buf_len, &written_samps);
 
 	//deinterleaving
@@ -338,7 +341,7 @@ void phy_bs_proc_slot(PhyBS phy, uint slotnr)
 		// log when crc check failed
 		ofdmframesync fs = mac_bs_get_receiver(phy->mac,userid);
 		if (fs!=NULL)
-			LOG_SFN_PHY(DEBUG,"cfo was: %.3fHz\n",ofdmframesync_get_cfo(fs)*SAMPLERATE/6.28);
+			LOG_SFN_PHY(DEBUG,"cfo was: %.3fHz\n",ofdmframesync_get_cfo(fs)*samplerate/6.28);
 	}
 	free(deinterleaved_b);
 	free(demod_buf);
@@ -363,7 +366,7 @@ void phy_bs_proc_ulctrl(PhyBS phy, uint slotnr)
 	uint first_symb = (SLOT_LEN+1)*2 + 2*slotnr;
 	uint last_symb  = (SLOT_LEN+1)*2 + 2*slotnr; //TODO use more constants and explain how to calc this
 
-	phy_demod_soft(common, 0, NFFT-1, first_symb, last_symb, mcs,
+	phy_demod_soft(common, 0, nfft-1, first_symb, last_symb, mcs,
 				   demod_buf, buf_len, &written_samps);
 
 	// decoding
@@ -395,7 +398,7 @@ int phy_bs_proc_rach(PhyBS phy, int timing_diff)
 
 	// demodulate signal
 	uint written_samps = 0, symbol = 0;
-	for (int i=0; i<NFFT; i++) {
+	for (int i=0; i<nfft; i++) {
 		if (common->pilot_sc[i] == OFDMFRAME_SCTYPE_DATA && written_samps<buf_len) {
 			modem_demodulate_soft(common->mcs_modem[mcs], phy->rach_buffer[i], &symbol, &demod_buf[written_samps]);
 			written_samps += modem_get_bps(common->mcs_modem[mcs]);
@@ -432,7 +435,7 @@ int _bs_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd)
 	PhyBS phy = (PhyBS)userd;
 	PhyCommon common = phy->common;
 
-	memcpy(common->rxdata_f[common->rx_symbol],X,sizeof(float complex)*NFFT);
+	memcpy(common->rxdata_f[common->rx_symbol],X,sizeof(float complex)*nfft);
 
 	switch (common->rx_symbol) {
 	case (SLOT_LEN-1):
@@ -523,7 +526,7 @@ void phy_bs_write_symbol(PhyBS phy, float complex* txbuf_time)
 
 	// clear frequency domain memory of the written symbol, to avoid sending garbage
 	// when the symbol is not overwritten in the next subframe
-	memcpy(common->txdata_f[sfn][tx_symb],dummy_data_f,sizeof(float complex)*NFFT);
+	memset(common->txdata_f[sfn][tx_symb],0,sizeof(float complex)*nfft);
 
 	// Update subframe and symbol counter
 	common->tx_symbol++;
@@ -540,7 +543,7 @@ void phy_bs_write_symbol(PhyBS phy, float complex* txbuf_time)
 void phy_bs_rx_symbol(PhyBS phy, float complex* rxbuf_time)
 {
 	PhyCommon common = phy->common;
-	uint rx_sym = NFFT+CP_LEN;
+	uint rx_sym = nfft+cp_len;
 	uint sfn = common->rx_subframe;
 
 	if (sfn == 0 && common->rx_symbol==SUBFRAME_LEN-SLOT_LEN-2) {
@@ -548,7 +551,7 @@ void phy_bs_rx_symbol(PhyBS phy, float complex* rxbuf_time)
 		if (phy->fs_rach!=NULL) {
 			ofdmframesync_reset(phy->fs_rach); // if we didnt find a new user in last RACH, sync object still exists. Reset it
 		} else {
-			phy->fs_rach = ofdmframesync_create(NFFT,CP_LEN,0,phy->common->pilot_sc,_ofdm_rx_rach_cb, phy);
+			phy->fs_rach = ofdmframesync_create(nfft,cp_len,0,phy->common->pilot_sc,_ofdm_rx_rach_cb, phy);
 		}
 	}
 
@@ -557,17 +560,17 @@ void phy_bs_rx_symbol(PhyBS phy, float complex* rxbuf_time)
 		if (phy->fs_rach && !ofdmframesync_is_synced(phy->fs_rach)) {
 			int offset = ofdmframesync_find_data_start(phy->fs_rach, rxbuf_time, rx_sym);
 			if (offset !=-1) {
-				phy->rach_timing = offset+(NFFT+CP_LEN)*(common->rx_symbol-(SUBFRAME_LEN-SLOT_LEN+SYNC_SYMBOLS-1));
+				phy->rach_timing = offset+(nfft+cp_len)*(common->rx_symbol-(SUBFRAME_LEN-SLOT_LEN+SYNC_SYMBOLS-1));
 				LOG(INFO,"[PHY BS] detected preamble of association request in (%d %d)! offset %d. cfo %.3f Hz\n",
-													common->rx_subframe, common->rx_symbol, phy->rach_timing, ofdmframesync_get_cfo(phy->fs_rach)*SAMPLERATE/6.28);
+													common->rx_subframe, common->rx_symbol, phy->rach_timing, ofdmframesync_get_cfo(phy->fs_rach)*samplerate/6.28);
 				// rach can be unaligned to symbol boundaries. receive rx_sym-offset samps
 				ofdmframesync_execute(phy->fs_rach, rxbuf_time+offset,rx_sym-offset);
 			}
 		} else if (phy->fs_rach){
 			// receive the last samps of the association request
             if (phy->rach_timing <= 0)
-				ofdmframesync_execute(phy->fs_rach, rxbuf_time, NFFT+CP_LEN);
-			else
+				ofdmframesync_execute(phy->fs_rach, rxbuf_time, nfft+cp_len);
+            else
 				ofdmframesync_execute(phy->fs_rach, rxbuf_time, phy->rach_timing);
 		}
 	} else {
@@ -585,7 +588,7 @@ void phy_bs_rx_symbol(PhyBS phy, float complex* rxbuf_time)
 			if (common->pilot_symbols_rx[common->rx_symbol] == PILOT) {
 				ofdmframesync_reset_msequence(fs);
 				ofdmframesync_execute(fs,rxbuf_time,rx_sym);
-				LOG_SFN_PHY(DEBUG,"[PHY BS] cfo was: %.3fHz\n",ofdmframesync_get_cfo(fs)*SAMPLERATE/6.28);
+				LOG_SFN_PHY(DEBUG,"[PHY BS] cfo was: %.3fHz\n",ofdmframesync_get_cfo(fs)*samplerate/6.28);
 				//ofdmframesync_set_cfo(fs,0); // TODO cfo estimation. Currently not working since we often receive if no data is sent. -> wrong pilot -> wrong cfo
 			} else {
 				ofdmframesync_execute_nopilot(fs,rxbuf_time,rx_sym);

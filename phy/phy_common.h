@@ -38,7 +38,6 @@ typedef union {
 
 enum {NO_PILOT, PILOT};		// definition for pilot_symbols variable
 
-extern float complex dummy_data_f[];
 
 // Struct contains PHY variables common to UE and BS Phy layer
 typedef struct {
