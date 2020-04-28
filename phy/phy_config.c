@@ -126,7 +126,9 @@ void phy_config_print()
             printf("%d ", subcarrier_alloc[x + y]);
         printf("\n            ");
     }
-    printf("\nslot len:   %d\n", SLOT_LEN);
+    printf("\nnum_data_sc:   %d\n",num_data_sc);
+    printf("num_pilot_sc:  %d\n",num_pilot_sc);
+    printf("slot len:      %d\n", SLOT_LEN);
     printf("slot alloc: ");
     for (int x = 0; x < SLOT_LEN; x++) {
         printf("%d ", pilot_symbols[x]);

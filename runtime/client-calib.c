@@ -35,6 +35,7 @@ platform pluto;
 struct option Options[] = {
   {"rxgain",required_argument,NULL,'g'},
   {"log-file",required_argument,NULL,'f'},
+  {"config",required_argument,NULL,'c'},
   {"help",no_argument,NULL,'h'},
   {NULL},
 };
@@ -139,7 +140,8 @@ int main(int argc,char *argv[])
             strcpy(config_file,optarg);
             phy_config_load_file(optarg);
             buflen = (nfft+cp_len)*SYMBOLS_PER_BUF;
-            case 'h':
+            break;
+        case 'h':
             printf("%s",helpstring);
             exit(0);
             break;
@@ -148,6 +150,7 @@ int main(int argc,char *argv[])
             exit(0);
         }
     }
+    phy_config_print();
 
     // register signal handler
     signal(SIGINT, signalhandler);
