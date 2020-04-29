@@ -255,6 +255,18 @@ int pluto_receive(platform hw, float complex* buf_rx)
 	return i;
 }
 
+void pluto_print(platform hw)
+{
+    pluto_data pluto = (pluto_data)hw->data;
+
+    printf("Pluto configuration:\n");
+    printf("samplerate:    %lld\n",pluto->rxcfg.fs_hz);
+    printf("TX bandwidth:  %lld\n", pluto->txcfg.bw_hz);
+    printf("RX bandwidth:  %lld\n", pluto->rxcfg.bw_hz);
+    printf("PTT enabled:   %d\n",pluto->enable_ptt);
+    printf("PTT delay comp:%dus\n",pluto->ptt_delay_comp);
+
+}
 void init_generic(platform hw, uint buf_len, char* config_file)
 {
     pluto_data pluto = (pluto_data)hw->data;
@@ -374,6 +386,8 @@ void init_generic(platform hw, uint buf_len, char* config_file)
         pluto->ptt_delay= (int) (buf_len * (KERNEL_BUF_TX - 1) * 1000000.0 / samplerate);
         pluto_ptt_set_rx(hw);
     }
+
+    pluto_print(hw);
 
 	// Generate platform interface
 	hw->platform_rx = pluto_receive;
