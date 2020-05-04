@@ -115,7 +115,7 @@ MacMessage mac_frag_get_fragment(MacFrag frag, uint max_frag_size, uint is_uplin
 	}
 
 	// get fragment size and final flag
-	if (max_frag_size > bytes_remain + mac_msg_get_hdrlen(ul_data)) {
+	if (max_frag_size >= bytes_remain + mac_msg_get_hdrlen(ul_data)) {
 		data_len = bytes_remain;
 		final_flag = 1;
 	} else {
