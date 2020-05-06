@@ -108,7 +108,7 @@ void* thread_phy_ue_rx(void* arg)
 	TIMECHECK_INIT(timecheck_ue_rx,"ue.rx_buffer",10000);
 
 	float complex* rxbuf_time = calloc(sizeof(float complex),buflen);
-    int last_rssi = agc_desired_rssi;
+    float last_rssi = agc_desired_rssi;
 	// read some rxbuffer objects in order to empty rxbuffer queue
 	for (int i=0; i<KERNEL_BUF_RX; i++)
 		hw->platform_rx(hw, rxbuf_time);
@@ -132,9 +132,13 @@ void* thread_phy_ue_rx(void* arg)
 		if (fabsf(last_rssi-phy->rssi)>agc_change_threshold && enable_agc) {
 		    int gain_diff = agc_desired_rssi - roundf(phy->rssi);
 		    rxgain += gain_diff;
+		    if (rxgain>RXGAIN_MAX)
+		        rxgain=RXGAIN_MAX;
+		    if (rxgain<RXGAIN_MIN)
+		        rxgain=RXGAIN_MIN;
             pluto_set_rxgain(hw, rxgain);
             last_rssi = phy->rssi;
-            LOG_SFN_PHY(INFO, "new rxgain: %d diff: %d rssi: %.3f\n",rxgain,gain_diff,phy->rssi);
+            LOG(INFO, "[Client] new rxgain: %d diff: %d rssi: %.3f\n",rxgain,gain_diff,phy->rssi);
 		}
 		TIMECHECK_STOP_CHECK(timecheck_ue_rx,1050);
 		TIMECHECK_INFO(timecheck_ue_rx);
@@ -345,14 +349,14 @@ int main(int argc,char *argv[])
         switch(d){
         case 'g':
             rxgain = atoi(optarg);
-            if (rxgain < -1 || rxgain > 73) {
+            if (rxgain < RXGAIN_MIN || rxgain > RXGAIN_MAX) {
                 printf ("Error: rxgain %d out of range [-1 73]!\n",rxgain);
-                exit(0);
+                exit(EXIT_FAILURE);
             }
             break;
         case 't':
             txgain = atoi(optarg);
-            if (txgain < -89 || txgain > 0) {
+            if (txgain < TXGAIN_MIN || txgain > TXGAIN_MAX) {
                 printf ("Error: txgain %d out of range [-89 0]!\n",txgain);
                 exit(EXIT_FAILURE);
             }

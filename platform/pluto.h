@@ -11,6 +11,12 @@
 #include "platform.h"
 #include <pthread.h>
 
+// maximum and minimum rxgain and txgain values
+#define RXGAIN_MAX 73
+#define RXGAIN_MIN -1
+#define TXGAIN_MAX 0
+#define TXGAIN_MIN -89
+
 // The number of kernel buffers for TX and RX
 #define KERNEL_BUF_TX 4
 #define KERNEL_BUF_RX 6

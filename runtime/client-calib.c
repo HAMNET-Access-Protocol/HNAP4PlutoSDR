@@ -126,7 +126,7 @@ int main(int argc,char *argv[])
         switch(d){
         case 'g':
             rxgain = atoi(optarg);
-            if (rxgain < -1 || rxgain > 73) {
+            if (rxgain < RXGAIN_MIN || rxgain > RXGAIN_MAX) {
                 printf ("Error: rxgain %d out of range [-1 73]!\n",rxgain);
                 exit(0);
             }
@@ -250,9 +250,13 @@ int main(int argc,char *argv[])
             if (fabsf(last_rssi-phy->rssi)>3 && enable_agc) {
                 int gain_diff = agc_desired_rssi - roundf(phy->rssi);
                 rxgain += gain_diff;
+                if (rxgain>RXGAIN_MAX)
+                    rxgain=RXGAIN_MAX;
+                if (rxgain<RXGAIN_MIN)
+                    rxgain=RXGAIN_MIN;
                 pluto_set_rxgain(pluto, rxgain);
                 last_rssi = phy->rssi;
-                LOG_SFN_PHY(INFO, "new rxgain: %d diff: %d rssi: %.3f\n",rxgain,gain_diff,phy->rssi);
+                LOG(INFO, "[Client] new rxgain: %d diff: %d rssi: %.3f\n",rxgain,gain_diff,phy->rssi);
             }
 
             if (iteration%1000==0) {

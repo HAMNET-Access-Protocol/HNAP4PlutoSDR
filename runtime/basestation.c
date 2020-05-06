@@ -243,14 +243,14 @@ int main(int argc,char *argv[])
         switch(d){
         case 'g':
             rxgain = atoi(optarg);
-            if (rxgain < -1 || rxgain > 73) {
+            if (rxgain < RXGAIN_MIN || rxgain > RXGAIN_MAX) {
                 printf ("Error: rxgain %d out of range [-1 73]!\n",rxgain);
                 exit(EXIT_FAILURE);
             }
             break;
         case 't':
             txgain = atoi(optarg);
-            if (txgain < -89 || txgain > 0) {
+            if (txgain < TXGAIN_MIN || txgain > TXGAIN_MAX) {
                 printf ("Error: txgain %d out of range [-89 0]!\n",txgain);
                 exit(EXIT_FAILURE);
             }
