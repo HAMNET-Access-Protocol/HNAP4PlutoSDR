@@ -96,9 +96,18 @@ void phy_bs_set_rx_slot_th_signal(PhyBS phy, pthread_cond_t* cond)
     phy->rx_slot_signal = cond;
 }
 
+TIMECHECK_CREATE(timecheck_tx);
+TIMECHECK_CREATE(check_mod);
+TIMECHECK_CREATE(check_fec_tx);
+TIMECHECK_CREATE(check_interl_tx);
 // create phy data channel in frequency domain
 int phy_map_dlslot(PhyBS phy, LogicalChannel chan, uint subframe, uint8_t slot_nr, uint userid, uint mcs)
 {
+    TIMECHECK_INIT(check_mod,"bs.tx_slot.mod",10000);
+    TIMECHECK_INIT(check_fec_tx,"bs.tx_slot.fec",10000);
+    TIMECHECK_INIT(check_interl_tx,"bs.tx_slot.interleaver",10000);
+    TIMECHECK_INIT(timecheck_tx,"bs.tx_slot",10000);
+
 	PhyCommon common = phy->common;
 
 	uint8_t* repacked_b;
@@ -113,15 +122,19 @@ int phy_map_dlslot(PhyBS phy, LogicalChannel chan, uint subframe, uint8_t slot_n
 #ifdef PHY_TEST_BER
 	memcpy(phy_dl[subframe%2][slot_nr], chan->data, chan->payload_len);
 #endif
+    TIMECHECK_START(timecheck_tx);
+    TIMECHECK_START(check_fec_tx);
 	// encode channel
 	uint enc_len = fec_get_enc_msg_length(common->mcs_fec_scheme[mcs],chan->payload_len);
 	uint8_t* enc_b = malloc(enc_len);
 	fec_encode(common->mcs_fec[mcs], blocksize/8, chan->data, enc_b);
-
+    TIMECHECK_STOP(check_fec_tx);
+    TIMECHECK_START(check_interl_tx);
 	//interleaving
 	uint8_t* interleaved_b = malloc(enc_len);
 	interleaver_encode(common->mcs_interlvr[mcs],enc_b,interleaved_b);
-
+    TIMECHECK_STOP(check_interl_tx);
+    TIMECHECK_START(check_mod);
 	// repack bytes so that each array entry can be mapped to one symbol
 	int num_repacked = ceil(enc_len*8.0/modem_get_bps(common->mcs_modem[mcs]));
 	repacked_b = malloc(num_repacked);
@@ -133,10 +146,16 @@ int phy_map_dlslot(PhyBS phy, LogicalChannel chan, uint subframe, uint8_t slot_n
 
 	// modulate signal
 	phy_mod(phy->common,subframe,0,NFFT-1,first_symb,last_symb, mcs, repacked_b, num_repacked, &total_samps);
-
+    TIMECHECK_STOP(check_mod);
+    TIMECHECK_STOP(timecheck_tx);
 	free(interleaved_b);
 	free(enc_b);
 	free(repacked_b);
+
+    TIMECHECK_INFO(timecheck_tx);
+    TIMECHECK_INFO(check_mod);
+    TIMECHECK_INFO(check_interl_tx);
+    TIMECHECK_INFO(check_fec_tx);
 	return 0;
 }
 
