@@ -232,6 +232,7 @@ int phy_ue_proc_dlctrl(PhyUE phy)
 	return 1;
 }
 
+TIMECHECK_CREATE(timecheck_ue_rx);
 TIMECHECK_CREATE(check_demod);
 TIMECHECK_CREATE(check_fec);
 TIMECHECK_CREATE(check_interl);
@@ -241,11 +242,14 @@ void phy_ue_proc_slot(PhyUE phy, uint slotnr)
     TIMECHECK_INIT(check_demod,"ue.rx_slot.demod",10000);
     TIMECHECK_INIT(check_fec,"ue.rx_slot.fec",10000);
     TIMECHECK_INIT(check_interl,"ue.rx_slot.interleaver",10000);
+    TIMECHECK_INIT(timecheck_ue_rx,"ue.rx_slot",10000);
 
 	PhyCommon common = phy->common;
 	assignment_t slot_type = phy->dlslot_assignments[common->rx_subframe%2][slotnr];
 	if (slot_type != NOT_ASSIGNED) {
-		// MCS0 is used for Broadcast. For UE specific traffic use the set mcs
+        TIMECHECK_START(timecheck_ue_rx);
+
+        // MCS0 is used for Broadcast. For UE specific traffic use the set mcs
 		uint mcs = (slot_type == UE_ASSIGNED) ? phy->mcs_dl : 0;
 		uint32_t blocksize = get_tbs_size(common, mcs);
 
@@ -260,9 +264,9 @@ void phy_ue_proc_slot(PhyUE phy, uint slotnr)
 		phy_demod_soft(common, 0, NFFT-1, first_symb, last_symb, mcs,
 					   demod_buf, buf_len, &written_samps);
         TIMECHECK_STOP(check_demod);
-        TIMECHECK_START(check_interl);
 		//deinterleaving
 		uint8_t* deinterleaved_b = malloc(buf_len);
+        TIMECHECK_START(check_interl);
 		interleaver_decode_soft(common->mcs_interlvr[mcs],demod_buf,deinterleaved_b);
         TIMECHECK_STOP(check_interl);
         TIMECHECK_START(check_fec);
@@ -288,6 +292,8 @@ void phy_ue_proc_slot(PhyUE phy, uint slotnr)
 		free(deinterleaved_b);
 		free(demod_buf);
 
+        TIMECHECK_STOP_CHECK(timecheck_ue_rx,3500);
+        TIMECHECK_INFO(timecheck_ue_rx);
         TIMECHECK_INFO(check_demod);
         TIMECHECK_INFO(check_fec);
         TIMECHECK_INFO(check_interl);
@@ -352,7 +358,6 @@ int _ue_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd)
 		// finished receiving one of the dl data slots
 #ifdef USE_RX_SLOT_THREAD
 		phy->rx_slot_nr = 0;
-		LOG_SFN_PHY(DEBUG,"start slot proc\n");
         if (phy->rx_slot_signal)
             pthread_cond_signal(phy->rx_slot_signal);
         else
@@ -363,7 +368,6 @@ int _ue_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd)
 		// finished receiving one of the dl data slots
 #ifdef USE_RX_SLOT_THREAD
 		phy->rx_slot_nr = 1;
-		LOG_SFN_PHY(DEBUG,"start slot proc\n");
         if (phy->rx_slot_signal)
             pthread_cond_signal(phy->rx_slot_signal);
         else
@@ -374,7 +378,6 @@ int _ue_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd)
 		// finished receiving one of the dl data slots
 #ifdef USE_RX_SLOT_THREAD
 		phy->rx_slot_nr = 2;
-		LOG_SFN_PHY(DEBUG,"start slot proc\n");
         if (phy->rx_slot_signal)
             pthread_cond_signal(phy->rx_slot_signal);
         else

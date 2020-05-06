@@ -99,7 +99,7 @@ void* thread_phy_ue_rx(void* arg)
 	pthread_cond_t* scheduler_signal = ((struct rx_th_data_s*)arg)->scheduler_signal;
 	pthread_mutex_t* scheduler_mutex = ((struct rx_th_data_s*)arg)->scheduler_mutex;
 	TIMECHECK_CREATE(timecheck_ue_rx);
-	TIMECHECK_INIT(timecheck_ue_rx,"ue.rx_buffer",1000);
+	TIMECHECK_INIT(timecheck_ue_rx,"ue.rx_buffer",10000);
 
 	float complex* rxbuf_time = calloc(sizeof(float complex),BUFLEN);
     int last_rssi = AGC_DESIRED_RSSI;
@@ -142,7 +142,7 @@ void* thread_phy_ue_tx(void* arg)
 	PhyUE phy = ((struct tx_th_data_s*)arg)->phy;
 	platform hw = ((struct tx_th_data_s*)arg)->hw;
     TIMECHECK_CREATE(timecheck_ue_tx);
-    TIMECHECK_INIT(timecheck_ue_tx,"ue.tx_buffer",1000);
+    TIMECHECK_INIT(timecheck_ue_tx,"ue.tx_buffer",10000);
 
 	float complex* ul_data_tx = calloc(sizeof(float complex),BUFLEN);
 	int timing_advance=0, rx_offset, num_samples, tx_shift=0;;
@@ -171,7 +171,7 @@ void* thread_phy_ue_tx(void* arg)
 		hw->platform_tx_prep(hw, ul_data_tx, tx_shift, num_samples);
 
 		TIMECHECK_STOP_CHECK(timecheck_ue_tx,530);
-		//TIMECHECK_INFO(timecheck_ue_tx);
+		TIMECHECK_INFO(timecheck_ue_tx);
 		// push buffer
 		hw->platform_tx_push(hw);
 
@@ -263,19 +263,14 @@ void* thread_phy_ue_rx_slot(void* arg)
 	PhyUE phy = ((struct rx_slot_th_data_s*)arg)->phy;
 	pthread_cond_t* cond_signal =  ((struct rx_slot_th_data_s*)arg)->rx_slot_signal;
 	pthread_mutex_t* mutex =  ((struct rx_slot_th_data_s*)arg)->rx_slot_mutex;
-    TIMECHECK_CREATE(timecheck_ue_rx);
-    TIMECHECK_INIT(timecheck_ue_rx,"ue.rx_slot",1000);
 
 	while (1) {
 		// Wait for signal from UE rx thread
 		pthread_mutex_lock(mutex);
 		pthread_cond_wait(cond_signal, mutex);
-		TIMECHECK_START(timecheck_ue_rx);
 
 		phy_ue_proc_slot(phy,phy->rx_slot_nr);
 
-        TIMECHECK_STOP_CHECK(timecheck_ue_rx,3500);
-        TIMECHECK_INFO(timecheck_ue_rx);
         pthread_mutex_unlock(mutex);
     }
 	return NULL;
