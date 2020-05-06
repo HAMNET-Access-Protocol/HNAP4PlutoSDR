@@ -271,6 +271,8 @@ int main(int argc,char *argv[])
     // Init phy and mac layer
 	PhyBS phy = phy_bs_init();
 	MacBS mac = mac_bs_init();
+	phy->rxgain = rxgain;
+	phy->txgain = txgain;
 
 	phy_bs_set_mac_interface(phy, mac);
 	mac_bs_set_phy_interface(mac, phy);
@@ -396,7 +398,7 @@ int main(int argc,char *argv[])
         printf("%d ",CPU_ISSET(i, &cpu_set));
 	printf("\n");
 
-    // main thread: regulary show statistics:
+    // main thread: regularly show statistics:
     char stats_buf[512];
     while (1) {
         sleep(60);

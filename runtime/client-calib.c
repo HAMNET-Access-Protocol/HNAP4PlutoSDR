@@ -44,7 +44,8 @@ Options:\n \
   --log-file -f <filename> log all cfo estimates to a file\n";
 
 extern char *optarg;
-int rxgain = 40;
+int rxgain = -100;
+int enable_agc = 0;
 char filename[80];
 FILE* fd = NULL;
 int do_log=0;
@@ -71,29 +72,36 @@ void signalhandler()
 void  phy_carrier_sync(PhyUE phy, platform hw)
 {
     float complex* rxbuf_time = calloc(sizeof(float complex),BUFLEN);
-
+    int gain_diff=0;
     // Find synchronization sequence for the first time
     while(!phy->has_synced_once) {
         hw->platform_rx(hw, rxbuf_time);
         phy_ue_do_rx(phy, rxbuf_time, BUFLEN);
     }
 
-    // receive some slots to get a better cfo estimation
-    float cfo_hz = 0;
-    for (int i=0; i<64; i++) {
-        hw->platform_rx(hw, rxbuf_time);
-        phy_ue_do_rx(phy, rxbuf_time, BUFLEN);
-        cfo_hz += ofdmframesync_get_cfo(phy->fs)*SAMPLERATE/(2*3.1415);
-        printf("cfo: %.2fHz\n",ofdmframesync_get_cfo(phy->fs)*SAMPLERATE/(2*M_PI));
+    // receive some subframes to get a better cfo estimation
+    float cfo_hz=0;
+    const int iterations = 16;
+    for (int i=0; i<iterations; i++) {
+        for (int sym = 0; sym < SUBFRAME_LEN / SYMBOLS_PER_BUF; sym++) {
+            hw->platform_rx(hw, rxbuf_time);
+            phy_ue_do_rx(phy, rxbuf_time, BUFLEN);
+            cfo_hz += ofdmframesync_get_cfo(phy->fs) * SAMPLERATE / (2 * M_PI);
+        }
+        gain_diff += AGC_DESIRED_RSSI - (int)ofdmframesync_get_rssi(phy->fs);
     }
+    cfo_hz /= (float)iterations*SUBFRAME_LEN/SYMBOLS_PER_BUF;
+    if (enable_agc)
+        rxgain += gain_diff/iterations;
+    pluto_set_rxgain(hw, rxgain);
 
     // tune to the correct frequency
-    int avg_cfo = round(cfo_hz/64);
-    pluto_set_tx_freq(hw, LO_FREQ_UL+avg_cfo);
-    pluto_set_rx_freq(hw, LO_FREQ_DL+avg_cfo);
-    LOG(INFO,"[CLIENT] retune transceiver with cfo %dHz:\n",avg_cfo);
-    LOG(INFO,"[CLIENT] TX LO freq: %dHz\n",LO_FREQ_UL+avg_cfo);
-    LOG(INFO,"[CLIENT] RX LO freq: %dHz\n",LO_FREQ_DL+avg_cfo);
+    pluto_set_tx_freq(hw, LO_FREQ_UL+cfo_hz);
+    pluto_set_rx_freq(hw, LO_FREQ_DL+cfo_hz);
+    LOG(INFO,"[CLIENT] retune transceiver with cfo %.3fHz:\n",cfo_hz);
+    LOG(INFO,"[CLIENT] TX LO freq: %dHz\n",LO_FREQ_UL+(int)cfo_hz);
+    LOG(INFO,"[CLIENT] RX LO freq: %dHz\n",LO_FREQ_DL+(int)cfo_hz);
+    LOG(INFO,"[CLIENT] rxgain adjusted: %d\n",rxgain);
     free(rxbuf_time);
 }
 
@@ -139,10 +147,18 @@ int main(int argc,char *argv[])
 	platform pluto = platform_init_simulation(NFFT+CP_LEN);
 #else
     pluto = init_pluto_platform(BUFLEN);
-    pluto_set_rxgain(pluto, rxgain);
     pluto_set_tx_freq(pluto, LO_FREQ_UL);
 	pluto_set_rx_freq(pluto, LO_FREQ_DL);
     usleep(100000);
+
+    if (rxgain==-100) {
+        enable_agc = 1;
+        rxgain = pluto_get_rxgain(pluto)-10;
+    }
+    pluto_set_rxgain(pluto,rxgain);
+    LOG(INFO,"[CLIENT] initial rxgain %d\n",rxgain);
+    usleep(100000);
+
 #endif
 
 	// Init phy and mac layer
@@ -212,6 +228,7 @@ int main(int argc,char *argv[])
                 printf("adapt xo by corr_factor=%d\n",(int)round(cfo_avg/1000*(float)TCXO_HZ/LO_FREQ_DL));
                 printf("Real gain avg: %d, max: %d\n",gain_real_avg/1000/BUFLEN,gain_real_max);
                 printf("Imag gain avg: %d, max: %d\n",gain_imag_avg/1000/BUFLEN,gain_imag_max);
+                printf("RSSI: %.2f\n",ofdmframesync_get_rssi(phy->fs));
                 cfo_avg=0;
                 cfo_min=1000000;
                 cfo_max=-100000;

@@ -57,6 +57,7 @@ Options:\n \
 extern char *optarg;
 int rxgain = -100;
 int txgain = -100;
+int enable_agc = 0;
 long int dl_frequency = LO_FREQ_DL;
 long int ul_frequency = LO_FREQ_UL;
 int ul_mcs = 0;
@@ -277,26 +278,42 @@ void* thread_phy_ue_rx_slot(void* arg)
 void  phy_carrier_sync(PhyUE phy, platform hw)
 {
     float complex* rxbuf_time = calloc(sizeof(float complex),BUFLEN);
-
-    // Find synchronization sequence for the first time
+    int gain_diff=0;
+    // Find synchronization sequence for the first time.
     while(!phy->has_synced_once) {
         hw->platform_rx(hw, rxbuf_time);
         phy_ue_do_rx(phy, rxbuf_time, BUFLEN);
     }
 
-    // receive some slots to get a better cfo estimation
-    for (int i=0; i<64; i++) {
-        hw->platform_rx(hw, rxbuf_time);
-        phy_ue_do_rx(phy, rxbuf_time, BUFLEN);
+    // receive some subframes to get a better cfo estimation
+    float cfo_hz=0;
+    const int iterations = 16;
+    for (int i=0; i<iterations; i++) {
+        for (int sym = 0; sym < SUBFRAME_LEN / SYMBOLS_PER_BUF; sym++) {
+            hw->platform_rx(hw, rxbuf_time);
+            phy_ue_do_rx(phy, rxbuf_time, BUFLEN);
+            cfo_hz += ofdmframesync_get_cfo(phy->fs) * SAMPLERATE / (2 * M_PI);
+        }
+        gain_diff += AGC_DESIRED_RSSI - (int)ofdmframesync_get_rssi(phy->fs);
     }
+    cfo_hz /= (float)iterations*SUBFRAME_LEN/SYMBOLS_PER_BUF;
+    if (enable_agc)
+        rxgain += gain_diff/iterations;
+    pluto_set_rxgain(hw, rxgain);
+
+    // calculate the required txgain, assuming that UL and DL config is symmetrical
+    if (enable_agc)
+        txgain = phy->bs_txgain + (rxgain - phy->bs_rxgain);
+    pluto_set_txgain(hw, txgain);
 
     // tune to the correct frequency
-    int cfo_hz = ofdmframesync_get_cfo(phy->fs)*SAMPLERATE/(2*M_PI);
-    pluto_set_tx_freq(hw, ul_frequency+cfo_hz);
-    pluto_set_rx_freq(hw, dl_frequency+cfo_hz);
-    LOG(INFO,"[CLIENT] retune transceiver with cfo %dHz:\n",cfo_hz);
-    LOG(INFO,"[CLIENT] TX LO freq: %dHz\n",ul_frequency+cfo_hz);
-    LOG(INFO,"[CLIENT] RX LO freq: %dHz\n",dl_frequency+cfo_hz);
+    pluto_set_tx_freq(hw, ul_frequency+(long)cfo_hz);
+    pluto_set_rx_freq(hw, dl_frequency+(long)cfo_hz);
+    LOG(INFO,"[CLIENT] retune transceiver with cfo %.3fHz:\n",cfo_hz);
+    LOG(INFO,"[CLIENT] TX LO freq: %ldHz\n",ul_frequency+(long)cfo_hz);
+    LOG(INFO,"[CLIENT] RX LO freq: %ldHz\n",dl_frequency+(long)cfo_hz);
+    LOG(INFO,"[CLIENT] rxgain adjusted: %d\n",rxgain);
+    LOG(INFO,"[CLIENT] txgain adjusted: %d\n",txgain);
     free(rxbuf_time);
 
 }
@@ -364,25 +381,28 @@ int main(int argc,char *argv[])
 
     pluto_set_tx_freq(pluto, ul_frequency);
     pluto_set_rx_freq(pluto, dl_frequency);
+    usleep(100000);
 
-    // Is the gain is not fixed, we will listen for a moment and use the given value from AGC.
+    // If the gain is not fixed, we will listen for a moment and use the given value from AGC.
     // We have to use manual mode because this AGC does not work with our OFDM modulation
     LOG(INFO,"[Pluto] configuring gain...\n");
-    sleep(1);
-    int gain = pluto_get_rxgain(pluto)-10; // AGC sets gain too high for ofdm, use 10dB less gain
+    int curr_gain = pluto_get_rxgain(pluto)-10; // -10 is a broad estimate, gain is usually set way to high.
 
     // If fixed TX/RX gain values were given, set them, otherwise use the AGC values
-    if (rxgain==-100)
-        rxgain=gain;
+    if (rxgain==-100) {
+        enable_agc = 1;
+        rxgain=curr_gain;
+    }
 
     if (txgain==-100)
-        txgain=-70+gain;
+        txgain=-70+rxgain;
 
     pluto_set_rxgain(pluto, rxgain);
     pluto_set_txgain(pluto, txgain);
+    usleep(100000);
 
-    LOG(INFO,"[CLIENT] fix RX gain to %d\n",rxgain);
-    LOG(INFO,"[CLIENT] fix TX gain to %d\n",txgain);
+    LOG(INFO,"[CLIENT] set initial RX gain to %d\n",rxgain);
+    LOG(INFO,"[CLIENT] set initial TX gain to %d\n",txgain);
 #endif
 
     // seed random

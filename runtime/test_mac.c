@@ -135,7 +135,7 @@ int run_simulation(uint num_subframes, uint mcs)
 			offset = phy_ue_initial_sync(phy_ue, dl_data, NFFT+CP_LEN);
 			if (offset>0) {
 				// receive remaining symbols
-				phy_ue_do_rx(phy_ue, dl_data, NFFT+CP_LEN-offset);
+				phy_ue_do_rx(phy_ue, dl_data+offset, NFFT+CP_LEN-offset);
 				phy_ue->rx_offset =  offset;
 
 				offset = -phy_ue->rx_offset;	// TODO use rx offset to align tx

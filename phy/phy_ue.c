@@ -74,6 +74,8 @@ PhyUE phy_ue_init()
 	phy->rx_slot_signal = NULL;
 	phy->rx_slot_nr = 0;
 
+	phy->bs_txgain = -128;
+	phy->bs_rxgain = -128;
     return phy;
 }
 
@@ -136,14 +138,14 @@ int phy_ue_initial_sync(PhyUE phy, float complex* rxbuf_time, uint num_samples)
 
 	int offset = ofdmframesync_find_data_start(phy->fs,rxbuf_time,num_samples);
 	if (offset!=-1) {
-		common->rx_symbol = SUBFRAME_LEN - 1; //there is one more guard symbol in this subframe to receive
+		common->rx_symbol = SUBFRAME_LEN - 1 - 1; //there is the sync info symbol and one guard symbol remaining in the subframe
 		common->rx_subframe = 0;
 
 		//apply filtering of coarse CFO estimation if we have old estimates
 		if (phy->has_synced_once == 0) {
 			// init TX counters once
 			common->tx_active = 1;
-			common->tx_symbol = SUBFRAME_LEN - DL_UL_SHIFT + DL_UL_SHIFT_COMP_UE; //TODO clarify what happens for offset=0
+			common->tx_symbol = common->rx_symbol + 1 - DL_UL_SHIFT + DL_UL_SHIFT_COMP_UE; //TODO clarify what happens for offset=0
 			common->tx_subframe = 0;
 
 			phy->has_synced_once = 1;
@@ -291,6 +293,46 @@ void phy_ue_proc_slot(PhyUE phy, uint slotnr)
 	}
 }
 
+// Process the synchronization information
+int phy_ue_proc_sync_info(PhyUE phy)
+{
+    PhyCommon common = phy->common;
+
+    uint mcs = 0; // CTRL slots use MCS 0
+    uint32_t blocksize = get_ulctrl_slot_size(common);
+
+    uint buf_len = 8*fec_get_enc_msg_length(common->mcs_fec_scheme[mcs],blocksize/8);
+    uint8_t* demod_buf = malloc(buf_len);
+
+    // demodulate signal
+    const int symb_idx = SUBFRAME_LEN -2;
+    uint written_samps = 0, symbol = 0;
+    for (int i=0; i<NFFT; i++) {
+        if (common->pilot_sc[i] == OFDMFRAME_SCTYPE_DATA && written_samps<buf_len) {
+            modem_demodulate_soft(common->mcs_modem[mcs], common->rxdata_f[symb_idx][i], &symbol, &demod_buf[written_samps]);
+            written_samps += modem_get_bps(common->mcs_modem[mcs]);
+        }
+    }
+    // decoding
+    LogicalChannel chan = lchan_create(blocksize/8,CRC8);
+    fec_decode_soft(common->fec_ctrl, blocksize/8, demod_buf, chan->data);
+
+    // unscrambling
+    unscramble_data((uint8_t*)chan->data,chan->payload_len);
+
+    if (lchan_verify_crc(chan)) {
+        phy->bs_rxgain = chan->data[0];
+        phy->bs_txgain = chan->data[1];
+        LOG(DEBUG,"[PHY UE] BS sync info: bs_rxgain: %d bs_txgain: %d\n",phy->bs_rxgain,phy->bs_txgain);
+    } else {
+        LOG(INFO,"[PHY UE] cannot decode SYNC INFO slot!\n");
+    }
+
+    free(demod_buf);
+    lchan_destroy(chan);
+    return 0;
+}
+
 // callback for OFDM receiver
 // is called for every symbol that is received
 int _ue_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd)
@@ -340,14 +382,18 @@ int _ue_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd)
 		break;
 	case DLCTRL_LEN+1+(SLOT_LEN+1)*4:
 		// finished receiving one of the dl data slots
+		// if subframe==0, it is the sync info slot
+		if (common->rx_subframe==0) {
+            phy_ue_proc_sync_info(phy);
+		} else {
 #ifdef USE_RX_SLOT_THREAD
-		phy->rx_slot_nr = 3;
-		LOG_SFN_PHY(DEBUG,"start slot proc\n");
-        if (phy->rx_slot_signal)
-            pthread_cond_signal(phy->rx_slot_signal);
-        else
+            phy->rx_slot_nr = 3;
+            if (phy->rx_slot_signal)
+                pthread_cond_signal(phy->rx_slot_signal);
+            else
 #endif
-            phy_ue_proc_slot(phy,3);
+                phy_ue_proc_slot(phy, 3);
+        }
 		break;
 	default:
 		break;
@@ -521,7 +567,8 @@ void phy_ue_do_rx(PhyUE phy, float complex* rxbuf_time, uint num_samples)
 		} else {
 			// receive symbols
 			uint rx_sym = fmin(NFFT+CP_LEN,remaining_samps);
-			if (common->pilot_symbols_rx[common->rx_symbol] == PILOT) {
+			if (common->pilot_symbols_rx[common->rx_symbol] == PILOT ||
+                    (common->rx_subframe==0 && common->rx_symbol==SUBFRAME_LEN-2)) {
 				ofdmframesync_execute(phy->fs,rxbuf_time,rx_sym);
 				LOG(TRACE,"[PHY UE] cfo updated: %.3f Hz\n",ofdmframesync_get_cfo(phy->fs)*SAMPLERATE/6.28);
 			} else {

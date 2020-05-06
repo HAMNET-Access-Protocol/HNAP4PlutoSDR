@@ -68,6 +68,10 @@ struct PhyUE_s {
 	//define mutex and condition object to run slot processing in separate thread
 	pthread_cond_t* rx_slot_signal;
 	uint rx_slot_nr;
+
+    // store rx and txgain values from basestation sync signal
+    int8_t bs_rxgain;
+    int8_t bs_txgain;
 };
 
 typedef struct PhyUE_s* PhyUE;

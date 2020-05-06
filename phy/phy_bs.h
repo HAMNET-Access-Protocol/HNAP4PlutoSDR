@@ -49,6 +49,10 @@ struct PhyBS_s {
 	pthread_cond_t* rx_slot_signal;
 	// indicates received slot nr to the slot processing thread
 	int rx_slot_nr;
+
+	// current rx and txgain values. Broadcasted in the sync slot
+	int8_t rxgain;
+	int8_t txgain;
 };
 
 typedef struct PhyBS_s* PhyBS;

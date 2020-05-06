@@ -59,6 +59,9 @@ PhyBS phy_bs_init()
     phy->rach_timing = 0;
     phy->rach_remaining_samps = 0;
 
+    phy->txgain = -128;
+    phy->rxgain = -128;
+
     return phy;
 }
 
@@ -95,6 +98,50 @@ void phy_bs_set_rx_slot_th_signal(PhyBS phy, pthread_cond_t* cond)
 {
     phy->rx_slot_signal = cond;
 }
+
+void phy_bs_write_sync_info(PhyBS phy, float complex* txbuf_time) {
+    PhyCommon common = phy->common;
+
+    uint8_t *repacked_b;
+    uint bytes_written = 0;
+
+    uint mcs = 0;
+    // fixed MCS 0: r=1/2, bps=2, 16tail bits.
+    uint32_t blocksize = get_ulctrl_slot_size(phy->common);
+
+    LogicalChannel chan = lchan_create(blocksize / 8, CRC8);
+
+    chan->data[0] = phy->rxgain;
+    chan->data[1] = phy->txgain;
+    chan->writepos = 2;
+    lchan_calc_crc(chan);
+
+    // scrambling
+    scramble_data((uint8_t*)chan->data,chan->payload_len);
+
+    // encode channel
+    uint enc_len = fec_get_enc_msg_length(common->mcs_fec_scheme[mcs], blocksize / 8);
+    uint8_t *enc_b = malloc(enc_len);
+    fec_encode(common->mcs_fec[mcs], blocksize / 8, chan->data, enc_b);
+
+    // repack bytes so that each array entry can be mapped to one symbol
+    int num_repacked = enc_len * 8 / modem_get_bps(common->mcs_modem[mcs]);
+    repacked_b = malloc(num_repacked);
+    liquid_repack_bytes(enc_b, 8, enc_len, repacked_b, modem_get_bps(common->mcs_modem[mcs]), num_repacked,
+                        &bytes_written);
+
+    // modulate signal
+    uint written_samps = 0;
+    float complex subcarriers[NFFT];
+    for (int i=0; i<NFFT; i++) {
+        if (common->pilot_sc[i] == OFDMFRAME_SCTYPE_DATA && written_samps<num_repacked) {
+            modem_modulate(common->mcs_modem[mcs],(uint)repacked_b[written_samps++], &subcarriers[i]);
+        }
+    }
+    // write symbol in time domain buffer
+    ofdmframegen_writesymbol(phy->fg,subcarriers,txbuf_time);
+}
+
 
 TIMECHECK_CREATE(timecheck_tx);
 TIMECHECK_CREATE(check_mod);
@@ -459,13 +506,15 @@ void phy_bs_write_symbol(PhyBS phy, float complex* txbuf_time)
 	uint sfn = common->tx_subframe %2;
 
 	// check if we have to add synch sequence in this subframe
-	if (common->tx_subframe == 0 && tx_symb == SUBFRAME_LEN-SYNC_SYMBOLS) {
+	if (common->tx_subframe == 0 && tx_symb == SUBFRAME_LEN-1-SYNC_SYMBOLS) {
 		ofdmframegen_reset(phy->fg);
 		ofdmframegen_write_S0a(phy->fg, txbuf_time);
-	} else if (common->tx_subframe == 0 && tx_symb == SUBFRAME_LEN-SYNC_SYMBOLS+1) {
+	} else if (common->tx_subframe == 0 && tx_symb == SUBFRAME_LEN-1-SYNC_SYMBOLS+1) {
 		ofdmframegen_write_S0b(phy->fg, txbuf_time);
-	} else if (common->tx_subframe == 0 && tx_symb == SUBFRAME_LEN-SYNC_SYMBOLS+2) {
-		ofdmframegen_write_S1(phy->fg, txbuf_time);
+	} else if (common->tx_subframe == 0 && tx_symb == SUBFRAME_LEN-1-SYNC_SYMBOLS+2) {
+        ofdmframegen_write_S1(phy->fg, txbuf_time);
+    } else if (common->tx_subframe == 0 && tx_symb == SUBFRAME_LEN-1-SYNC_SYMBOLS+3) {
+        phy_bs_write_sync_info(phy, txbuf_time);
 	} else if (common->pilot_symbols_tx[tx_symb] == PILOT) {
 		ofdmframegen_writesymbol(phy->fg, common->txdata_f[sfn][tx_symb],txbuf_time);
 	} else {

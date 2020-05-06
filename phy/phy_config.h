@@ -61,6 +61,10 @@
 // Set this filter to [0 1] to tune estimation (1= solely based on new cfo)
 #define SYNC_CFO_FILT_PARAM 0.8f
 
+// the desired RSSI of the RX path. Used to tune our AGC
+// Theoretical limits for RSSI are [-66 0]. For OFDM-QAM waveform this should be set to ~ -15
+#define AGC_DESIRED_RSSI -15
+
 // FIR filters, buffers etc introduce a delay that causes
 // uplink data to be received later than expected. Use this
 // variable to compensate for this offset at client side.
