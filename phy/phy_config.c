@@ -28,6 +28,10 @@ void phy_config_load_file(char* config_file)
         config_setting_lookup_int(phy_settings, "nfft",&nfft);
         config_setting_lookup_int(phy_settings, "cp_len",&cp_len);
         config_setting_lookup_int(phy_settings, "samplerate",&samplerate);
+        config_setting_lookup_float(phy_settings,"coarse_cfo_filt_param",&coarse_cfo_filt_param);
+        config_setting_lookup_float(phy_settings,"agc_rssi_filt_param",&agc_rssi_filt_param);
+        config_setting_lookup_int(phy_settings,"agc_change_threshold",&agc_change_threshold);
+        config_setting_lookup_int(phy_settings,"agc_desired_rssi",&agc_desired_rssi);
 
         subcarrier_settings = config_setting_get_member(phy_settings, "subcarrier_alloc");
         if (subcarrier_settings!=NULL && config_setting_length(subcarrier_settings)>0) {
@@ -108,8 +112,10 @@ void phy_config_default_64()
     for (int i=0; i<SLOT_LEN; i+=2)
         pilot_symbols[i]=DATA;
 
-    coarse_cfo_filt_param = 0.8;
-
+    coarse_cfo_filt_param = DEFAULT_COARSE_CFO_FILT_PARAM;
+    agc_rssi_filt_param = DEFAULT_AGC_RSSI_FILT_PARAM;
+    agc_change_threshold = DEFAULT_AGC_CHANGE_THRESHOLD;
+    agc_desired_rssi = DEFAULT_AGC_DESIRED_RSSI;
 }
 
 void phy_config_print()

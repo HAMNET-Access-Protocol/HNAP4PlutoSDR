@@ -76,7 +76,7 @@ PhyUE phy_ue_init()
 
 	phy->bs_txgain = -128;
 	phy->bs_rxgain = -128;
-	phy->rssi = AGC_DESIRED_RSSI;
+	phy->rssi = agc_desired_rssi;
     return phy;
 }
 
@@ -412,7 +412,7 @@ int _ue_rx_symbol_cb(float complex* X,unsigned char* p, uint M, void* userd)
 	if ((common->rx_subframe == 0) &&
 			(common->rx_symbol == DLCTRL_LEN+1+(SLOT_LEN+1)*3)) {
         // set new gain value
-        phy->rssi = (1-AGC_RSSI_FILT_PARAM)*phy->rssi + AGC_RSSI_FILT_PARAM*ofdmframesync_get_rssi(phy->fs);
+        phy->rssi = (1-agc_rssi_filt_param)*phy->rssi + agc_rssi_filt_param*ofdmframesync_get_rssi(phy->fs);
         // store old cfo estimation
 		phy->prev_cfo = ofdmframesync_get_cfo(phy->fs);
 		ofdmframesync_reset(phy->fs);

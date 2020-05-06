@@ -39,18 +39,12 @@
 #define MAX_USER 16
 
 
-// UE constantly adapts the rxgain based on the rssi. The rssi is calculated based on the
-// sync signal, every 8 subframes. The new rssi value is smoothed with an exponential filter
-// the filter coefficient alpha can be tuned here
-#define AGC_RSSI_FILT_PARAM 0.25f
+#define DEFAULT_COARSE_CFO_FILT_PARAM 0.8f
 
-// Threshold for the RSSI change [dB] which is required to change
-// the transceiver gain
-#define AGC_CHANGE_THRESHOLD 3
-
-// the desired RSSI of the RX path. Used to tune our AGC
-// Theoretical limits for RSSI are [-66 0]. For OFDM-QAM waveform this should be set to ~ -15
-#define AGC_DESIRED_RSSI -15
+// AGC default configuration
+#define DEFAULT_AGC_RSSI_FILT_PARAM 0.25f
+#define DEFAULT_AGC_CHANGE_THRESHOLD 3
+#define DEFAULT_AGC_DESIRED_RSSI -15
 
 // FIR filters, buffers etc introduce a delay that causes
 // uplink data to be received later than expected. Use this
@@ -88,7 +82,18 @@ char* pilot_symbols;        // ofdm symbol types within a data-slot
 // pilots (done during slot receive) but is inaccurate
 // We filter the new estimate with the old (pilot based) cfo estimation
 // Set this filter to [0 1] to tune estimation (1= solely based on new cfo)
-float coarse_cfo_filt_param;
+double coarse_cfo_filt_param;
+
+// UE constantly adapts the rxgain based on the rssi. The rssi is calculated based on the
+// sync signal, every 8 subframes. The new rssi value is smoothed with an exponential filter
+// the filter coefficient alpha can be tuned here
+double agc_rssi_filt_param;
+// Threshold for the RSSI change [dB] which is required to change
+// the transceiver gain
+int agc_change_threshold;
+// the desired RSSI of the RX path. Used to tune our AGC
+// Theoretical limits for RSSI are [-66 0]. For OFDM-QAM waveform this should be set to ~ -15
+int agc_desired_rssi;
 
 int log_coarse_cfo_flag;    // set this flag to enable logging the coarse cfo estimate to a file
 char coarse_cfo_logfile[80];// name of the coarse cfo logfile

@@ -108,7 +108,7 @@ void* thread_phy_ue_rx(void* arg)
 	TIMECHECK_INIT(timecheck_ue_rx,"ue.rx_buffer",10000);
 
 	float complex* rxbuf_time = calloc(sizeof(float complex),buflen);
-    int last_rssi = AGC_DESIRED_RSSI;
+    int last_rssi = agc_desired_rssi;
 	// read some rxbuffer objects in order to empty rxbuffer queue
 	for (int i=0; i<KERNEL_BUF_RX; i++)
 		hw->platform_rx(hw, rxbuf_time);
@@ -129,8 +129,8 @@ void* thread_phy_ue_rx(void* arg)
 			pthread_mutex_unlock(scheduler_mutex);
 		}
 		// basic AGC: phy->rssi is updated at the start of each sync slot (before the next sync signal)
-		if (fabsf(last_rssi-phy->rssi)>AGC_CHANGE_THRESHOLD && enable_agc) {
-		    int gain_diff = AGC_DESIRED_RSSI - roundf(phy->rssi);
+		if (fabsf(last_rssi-phy->rssi)>agc_change_threshold && enable_agc) {
+		    int gain_diff = agc_desired_rssi - roundf(phy->rssi);
 		    rxgain += gain_diff;
             pluto_set_rxgain(hw, rxgain);
             last_rssi = phy->rssi;
@@ -303,7 +303,7 @@ void  phy_carrier_sync(PhyUE phy, platform hw)
             phy_ue_do_rx(phy, rxbuf_time, buflen);
             cfo_hz += ofdmframesync_get_cfo(phy->fs) * samplerate / (2 * M_PI);
         }
-        gain_diff += AGC_DESIRED_RSSI - (int)ofdmframesync_get_rssi(phy->fs);
+        gain_diff += agc_desired_rssi - (int)ofdmframesync_get_rssi(phy->fs);
     }
     cfo_hz /= (float)iterations*SUBFRAME_LEN/SYMBOLS_PER_BUF;
     if (enable_agc)
@@ -316,11 +316,11 @@ void  phy_carrier_sync(PhyUE phy, platform hw)
     pluto_set_txgain(hw, txgain);
 
     // tune to the correct frequency
-    pluto_set_tx_freq(hw, ul_frequency+(long)cfo_hz);
-    pluto_set_rx_freq(hw, dl_frequency+(long)cfo_hz);
+    pluto_set_tx_freq(hw, ul_lo+(long)cfo_hz);
+    pluto_set_rx_freq(hw, dl_lo+(long)cfo_hz);
     LOG(INFO,"[CLIENT] retune transceiver with cfo %.3fHz:\n",cfo_hz);
-    LOG(INFO,"[CLIENT] TX LO freq: %ldHz\n",ul_frequency+(long)cfo_hz);
-    LOG(INFO,"[CLIENT] RX LO freq: %ldHz\n",dl_frequency+(long)cfo_hz);
+    LOG(INFO,"[CLIENT] TX LO freq: %lldHz\n",ul_lo+(long)cfo_hz);
+    LOG(INFO,"[CLIENT] RX LO freq: %lldHz\n",dl_lo+(long)cfo_hz);
     LOG(INFO,"[CLIENT] rxgain adjusted: %d\n",rxgain);
     LOG(INFO,"[CLIENT] txgain adjusted: %d\n",txgain);
     free(rxbuf_time);

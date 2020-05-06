@@ -93,7 +93,7 @@ void  phy_carrier_sync(PhyUE phy, platform hw)
             phy_ue_do_rx(phy, rxbuf_time, buflen);
             cfo_hz += ofdmframesync_get_cfo(phy->fs) * samplerate / (2 * M_PI);
         }
-        gain_diff += AGC_DESIRED_RSSI - (int)ofdmframesync_get_rssi(phy->fs);
+        gain_diff += agc_desired_rssi - (int)ofdmframesync_get_rssi(phy->fs);
     }
     cfo_hz /= (float)iterations*SUBFRAME_LEN/SYMBOLS_PER_BUF;
     if (enable_agc)
@@ -220,7 +220,7 @@ int main(int argc,char *argv[])
     float cfo=0,cfo_avg=0, cfo_min=1000000,cfo_max=-100000;
     int gain_real_avg=0, gain_real_max=0;
     int gain_imag_avg=0, gain_imag_max=0;
-    float last_rssi = AGC_DESIRED_RSSI;
+    float last_rssi = agc_desired_rssi;
 
     while (1) {
         pluto->platform_rx(pluto, rxbuf_time);
@@ -248,7 +248,7 @@ int main(int argc,char *argv[])
 
             // basic AGC: phy->rssi is updated at the start of each sync slot (before the next sync signal)
             if (fabsf(last_rssi-phy->rssi)>3 && enable_agc) {
-                int gain_diff = AGC_DESIRED_RSSI - roundf(phy->rssi);
+                int gain_diff = agc_desired_rssi - roundf(phy->rssi);
                 rxgain += gain_diff;
                 pluto_set_rxgain(pluto, rxgain);
                 last_rssi = phy->rssi;
