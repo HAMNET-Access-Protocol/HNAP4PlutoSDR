@@ -284,7 +284,7 @@ void init_generic(platform hw, uint buf_len, char* config_file)
     pluto->txcfg.rfport = "A"; // port A (select for rf freq.)
 
     pluto->ptt_delay_comp = DEFAULT_PTT_DELAY_COMP;
-    pluto->enable_ptt = 1;
+    pluto->enable_ptt = 0;
 
     if (config_file!=NULL) {
         config_t cfg;
@@ -383,9 +383,10 @@ void init_generic(platform hw, uint buf_len, char* config_file)
 
     if (pluto->enable_ptt) {
         pluto_enable_ptt(hw);
-        pluto->ptt_delay= (int) (buf_len * (KERNEL_BUF_TX - 1) * 1000000.0 / samplerate);
         pluto_ptt_set_rx(hw);
     }
+    pluto->ptt_delay= (int) (buf_len * (KERNEL_BUF_TX - 1) * 1000000.0 / samplerate);
+
 
     pluto_print(hw);
 
@@ -452,6 +453,7 @@ int pluto_set_rx_freq(platform hw, long long rxfreq)
 int pluto_enable_ptt(platform hw)
 {
     pluto_data pluto = (pluto_data)hw->data;
+    pluto->enable_ptt = 1;
     pluto->gpio_MIO0 = pluto_gpio_init(PIN_MIO0,OUT);
     return 0;
 }

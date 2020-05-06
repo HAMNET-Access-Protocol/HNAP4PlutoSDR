@@ -416,6 +416,7 @@ int main(int argc,char *argv[])
 	platform pluto = platform_init_simulation(nfft+cp_len);
 #else
     platform pluto = init_pluto_platform(buflen,config_file);
+    pluto_enable_ptt(pluto);
     //platform pluto = init_pluto_network_platform(BUFLEN);
 
     pluto_set_tx_freq(pluto, ul_lo);
