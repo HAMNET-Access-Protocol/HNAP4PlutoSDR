@@ -341,7 +341,7 @@ void phy_bs_proc_slot(PhyBS phy, uint slotnr)
 		// log when crc check failed
 		ofdmframesync fs = mac_bs_get_receiver(phy->mac,userid);
 		if (fs!=NULL)
-			LOG_SFN_PHY(DEBUG,"cfo was: %.3fHz\n",ofdmframesync_get_cfo(fs)*samplerate/6.28);
+			LOG_SFN_PHY(TRACE,"cfo was: %.3fHz\n",ofdmframesync_get_cfo(fs)*samplerate/6.28);
 	}
 	free(deinterleaved_b);
 	free(demod_buf);
@@ -419,7 +419,7 @@ int phy_bs_proc_rach(PhyBS phy, int timing_diff)
 		ofdmframesync_set_cb(phy->fs_rach,_bs_rx_symbol_cb,phy);
 		mac_bs_add_new_ue(phy->mac,rach_userid, rach_try_cnt, phy->fs_rach, timing_diff);
 	} else {
-	    LOG(INFO,"[PHY BS] assoc request could not be decoded. invalid CRC!\n");
+	    LOG(WARN,"[PHY BS] assoc request could not be decoded. invalid CRC!\n");
 	}
 	lchan_destroy(chan);
 
@@ -588,7 +588,7 @@ void phy_bs_rx_symbol(PhyBS phy, float complex* rxbuf_time)
 			if (common->pilot_symbols_rx[common->rx_symbol] == PILOT) {
 				ofdmframesync_reset_msequence(fs);
 				ofdmframesync_execute(fs,rxbuf_time,rx_sym);
-				LOG_SFN_PHY(DEBUG,"[PHY BS] cfo was: %.3fHz\n",ofdmframesync_get_cfo(fs)*samplerate/6.28);
+				LOG_SFN_PHY(TRACE,"[PHY BS] cfo was: %.3fHz\n",ofdmframesync_get_cfo(fs)*samplerate/6.28);
 				//ofdmframesync_set_cfo(fs,0); // TODO cfo estimation. Currently not working since we often receive if no data is sent. -> wrong pilot -> wrong cfo
 			} else {
 				ofdmframesync_execute_nopilot(fs,rxbuf_time,rx_sym);

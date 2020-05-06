@@ -95,7 +95,7 @@ int mac_ue_handle_message(MacUE mac, MacMessage msg, uint is_broadcast)
 		} else {
 			mac->dl_mcs = msg->hdr.DLMCSInfo.mcs;
 			phy_ue_set_mcs_dl(mac->phy, mac->dl_mcs);
-			LOG(WARN,"[MAC UE] switching to DL MCS %d\n",mac->dl_mcs);
+			LOG(INFO,"[MAC UE] switching to DL MCS %d\n",mac->dl_mcs);
 		}
 		break;
 	case ul_mcs_info:
@@ -110,12 +110,12 @@ int mac_ue_handle_message(MacUE mac, MacMessage msg, uint is_broadcast)
 			mac_msg_destroy(response);
 		} else {
 			mac->ul_mcs = msg->hdr.ULMCSInfo.mcs;
-			LOG(WARN,"[MAC UE] switching to UL MCS %d\n",mac->ul_mcs);
+			LOG(INFO,"[MAC UE] switching to UL MCS %d\n",mac->ul_mcs);
 		}
 		break;
 	case timing_advance:
 		mac->timing_advance = msg->hdr.TimingAdvance.timingAdvance;
-		LOG(WARN,"[MAC UE] Updated TimingAdvance to: %d\n",mac->timing_advance);
+		LOG(INFO,"[MAC UE] Updated TimingAdvance to: %d\n",mac->timing_advance);
 		break;
 	case session_end:
 		// Basestation ended connection. Reset connection state
@@ -192,7 +192,7 @@ void mac_ue_run_scheduler(MacUE mac)
 	if (mac->last_assignment + TMR_USER_INACTIVE < mac->subframe_cnt) {
 		mac->is_associated = 0;
 		mac->timing_advance = 0;
-		LOG(WARN,"[MAC UE] assume lost connection to BS!\n");
+		LOG(WARN,"[MAC UE] assume lost connection to BS! End connection.\n");
 	}
 
 	// reset symbol allocation. Will be set during phy modulation
@@ -332,7 +332,7 @@ void* mac_ue_tap_rx_th(void* arg)
 	while (mac->tapdevice == NULL) {
 		usleep(10000);
 	}
-	LOG(WARN,"[MAC/TAP] start TAP thread\n");
+	LOG(INFO,"[MAC/TAP] start TAP thread\n");
 	while (1) {
 		// ensure that we we have space to add a packet to the mac queue
 		while (mac_frag_queue_full(mac->fragmenter)) {

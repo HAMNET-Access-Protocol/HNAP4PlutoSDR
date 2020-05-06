@@ -46,6 +46,7 @@ struct option Options[] = {
   {"ul-mcs",required_argument,NULL,'u'},
   {"config",required_argument,NULL,'c'},
   {"help",no_argument,NULL,'h'},
+  {"log",required_argument,NULL,'l'},
   {NULL},
 };
 char* helpstring = "Client for 70cm Waveform.\n\n \
@@ -55,7 +56,9 @@ Options:\n \
    --frequency -f: tune to a specific (DL) frequency\n \
    --ul-mcs -u:    use given mcs in UL. Default: 0.\n \
    --dl-mcs -d:    use given mcs in DL. Default: 0.\n \
-   --config -c     specify a configuration file\n";
+   --config -c     specify a configuration file\n \
+   --log -l        specify the log level. Default: 2.\n \
+                   0=TRACE 1=DEBUG 2=INFO 3=WARN 4=ERR 5=NONE\n";
 
 extern char *optarg;
 int rxgain = -100;
@@ -338,7 +341,7 @@ int main(int argc,char *argv[])
 
     // parse program args
     int d;
-    while((d = getopt_long(argc,argv,"g:t:f:d:u:c:h",Options,NULL)) != EOF){
+    while((d = getopt_long(argc,argv,"g:t:f:d:u:c:l:h",Options,NULL)) != EOF){
         switch(d){
         case 'g':
             rxgain = atoi(optarg);
@@ -351,7 +354,7 @@ int main(int argc,char *argv[])
             txgain = atoi(optarg);
             if (txgain < -89 || txgain > 0) {
                 printf ("Error: txgain %d out of range [-89 0]!\n",txgain);
-                exit(0);
+                exit(EXIT_FAILURE);
             }
             break;
         case 'f':
@@ -362,14 +365,14 @@ int main(int argc,char *argv[])
             dl_mcs = atoi(optarg);
             if (dl_mcs<0 || dl_mcs>=NUM_MCS_SCHEMES) {
                 printf ("Error: DL MCS %d undefined!\n",dl_mcs);
-                exit(0);
+                exit(EXIT_FAILURE);
             }
             break;
         case 'u':
             ul_mcs = atoi(optarg);
             if (ul_mcs<0 || ul_mcs>=NUM_MCS_SCHEMES) {
                 printf ("Error: UL MCS %d undefined!\n",ul_mcs);
-                exit(0);
+                exit(EXIT_FAILURE);
             }
             break;
         case 'c':
@@ -378,7 +381,13 @@ int main(int argc,char *argv[])
             strncpy(config_file,optarg,strlen(optarg));
             phy_config_load_file(optarg);
             break;
-
+        case 'l':
+            global_log_level = atoi(optarg);
+            if (global_log_level<TRACE || global_log_level>NONE) {
+                printf("ERROR: log level %d undefined!\n",global_log_level);
+                exit(EXIT_FAILURE);
+            }
+            break;
         case 'h':
             printf("%s",helpstring);
             exit(0);

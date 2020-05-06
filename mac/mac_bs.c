@@ -116,8 +116,8 @@ void mac_bs_add_new_ue(MacBS mac, uint8_t rachuserid, uint8_t rach_try_cnt, ofdm
 		}
 		if (userid==MAX_USER) {
 			// no free userid. generate NAK
-			LOG(INFO,"[MAC BS] add_new_ue: no free userID, cannot add user\n");
-			SYSLOG(LOG_INFO,"[MAC BS] add_new_ue: no free userID, cannot add user\n");
+			LOG(WARN,"[MAC BS] add_new_ue: no free userID, cannot add user\n");
+			SYSLOG(LOG_WARNING,"[MAC BS] add_new_ue: no free userID, cannot add user\n");
             response = mac_msg_create_associate_response(0,rachuserid, assoc_resp_full, 0);
 			// Response will be sent via broadcast channel
 			ringbuf_put(mac->broadcast_ctrl_queue, response);
@@ -195,7 +195,7 @@ int mac_bs_add_txdata(MacBS mac, uint8_t destUserID, MacDataFrame frame)
 		LOG(WARN,"[MAC BS] add_txdata: msg queue is full. dropping packet!\n");
 		return 0;
 	}
-	LOG(DEBUG,"[MAC BS] added txdata frame for user %d\n",destUserID);
+	LOG(INFO,"[MAC BS] added txdata frame for user %d\n",destUserID);
 	return 1;
 }
 
@@ -217,12 +217,12 @@ void mac_bs_handle_control_ack(MacBS mac, MacMessage msg, user_s* ue)
 {
 	switch (msg->hdr.ControlAck.acked_ctrl_id) {
 	case dl_mcs_info:
-		LOG(DEBUG,"[MAC BS] received ctrl ack for dl_mcs_info\n");
+		LOG(INFO,"[MAC BS] received ctrl ack for dl_mcs_info\n");
 		ue->dl_mcs = ue->dl_mcs_pending;
 		ue->dl_mcs_pending_time = 0;
 		break;
 	case ul_mcs_info:
-		LOG(DEBUG,"[MAC BS] received ctrl ack for ul_mcs_info\n");
+		LOG(INFO,"[MAC BS] received ctrl ack for ul_mcs_info\n");
 		ue->ul_mcs_pending_time = 0;
 		// NOTE: mcs has already been switch. We just cancel the timer which reverts the change
 		break;
@@ -239,9 +239,9 @@ int mac_bs_handle_message(MacBS mac, MacMessage msg, uint8_t userID)
 	user_s* user = mac->UE[userID];
 	if (user==NULL) {
 		mac_msg_destroy(msg);
-		return 0;
-		LOG_SFN_MAC(WARN,"[MAC BS] received message for unassociated user %d. Drop\n",userID);
-	}
+		LOG_SFN_MAC(WARN,"[MAC BS] received message for unknown user %d. Dropping.\n",userID);
+        return 0;
+    }
 	MacDataFrame frame;
 	switch (msg->type) {
 	case ul_req:
@@ -260,7 +260,7 @@ int mac_bs_handle_message(MacBS mac, MacMessage msg, uint8_t userID)
 		break;
     case mcs_chance_req:
         mac_bs_set_mcs(mac,userID,msg->hdr.MCSChangeReq.mcs,msg->hdr.MCSChangeReq.ul_flag);
-        LOG_SFN_MAC(DEBUG,"[MAC BS] mcs_change_request from user %d mcs: %d is_ul %d\n",userID,
+        LOG_SFN_MAC(INFO,"[MAC BS] mcs_change_request from user %d mcs: %d is_ul %d\n",userID,
                             msg->hdr.MCSChangeReq.mcs,msg->hdr.MCSChangeReq.ul_flag)
         break;
 	case ul_data:
@@ -644,7 +644,7 @@ void* mac_bs_tap_rx_th(void* arg)
 	while (dev == NULL) {
 		usleep(10000);
 	}
-	LOG(WARN,"[MAC/TAP] start TAP thread\n");
+	LOG(INFO,"[MAC/TAP] start TAP thread\n");
 	while (1)
 	{
 		tap_receive(dev);

@@ -16,7 +16,7 @@
 #include "../util/log.h"
 
 // log makro to log with subframe number
-#define LOG_SFN_MAC(level, ...) do { if (level>=LOG_LEVEL) \
+#define LOG_SFN_MAC(level, ...) do { if (level>=global_log_level) \
 	{ printf("[%2d %2d]",mac->phy->common->rx_subframe,mac->phy->common->rx_symbol); \
 	  printf(__VA_ARGS__); }} while(0);
 

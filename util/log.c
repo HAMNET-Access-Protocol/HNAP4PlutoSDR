@@ -8,6 +8,8 @@
 #include "log.h"
 #include <time.h>
 
+int global_log_level = INFO;
+
 // Matlab log helper functions
 void log_matlab_fc(float complex* cpx, int num_samps, char* filename)
 {
@@ -80,7 +82,7 @@ void timecheck_stop(struct timecheck_s* time, int crit_delay_us)
 void timecheck_info(struct timecheck_s* time)
 {
     if (time->count%time->avg_len==0) {
-        LOG(WARN, "[TimingMonitor] '%10s': avg:%4.1fus max:%4.1f after %5d iter\n",time->name,time->avg/time->avg_len,
+        LOG(INFO, "[TimingMonitor] '%10s': avg:%4.1fus max:%4.1f after %5d iter\n",time->name,time->avg/time->avg_len,
                 time->max,time->count);
         time->avg = 0;
         time->max = 0;

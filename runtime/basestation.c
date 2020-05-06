@@ -48,6 +48,7 @@ struct option Options[] = {
   {"txgain",required_argument,NULL,'t'},
   {"frequency",required_argument,NULL,'f'},
   {"config",required_argument,NULL,'c'},
+  {"log",required_argument,NULL,'l'},
   {"help",no_argument,NULL,'h'},
   {NULL},
 };
@@ -56,7 +57,9 @@ Options:\n \
    --rxgain -g:    fix the rxgain to a value [-1 73]\n \
    --txgain -t:    fix the txgain to a value [-89 0]\n \
    --frequency -f: tune to a specific (DL) frequency\n \
-   --config -c:    specify a configuration file";
+   --config -c     specify a configuration file\n \
+   --log -l        specify the log level. Default: 2.\n \
+                   0=TRACE 1=DEBUG 2=INFO 3=WARN 4=ERR 5=NONE\n";
 
 extern char *optarg;
 int rxgain = 70;
@@ -236,20 +239,20 @@ int main(int argc,char *argv[])
 
     // parse program args
     int d;
-    while((d = getopt_long(argc,argv,"g:t:f:c:h",Options,NULL)) != EOF){
+    while((d = getopt_long(argc,argv,"g:t:f:c:l:h",Options,NULL)) != EOF){
         switch(d){
         case 'g':
             rxgain = atoi(optarg);
             if (rxgain < -1 || rxgain > 73) {
                 printf ("Error: rxgain %d out of range [-1 73]!\n",rxgain);
-                exit(0);
+                exit(EXIT_FAILURE);
             }
             break;
         case 't':
             txgain = atoi(optarg);
             if (txgain < -89 || txgain > 0) {
                 printf ("Error: txgain %d out of range [-89 0]!\n",txgain);
-                exit(0);
+                exit(EXIT_FAILURE);
             }
             break;
         case 'f':
@@ -259,6 +262,13 @@ int main(int argc,char *argv[])
             phy_config_load_file(optarg);
             config_file = calloc(strlen(optarg),1);
             strcpy(config_file,optarg);
+            break;
+        case 'l':
+            global_log_level = atoi(optarg);
+            if (global_log_level<TRACE || global_log_level>NONE) {
+                printf("ERROR: log level %d undefined!\n",global_log_level);
+                exit(EXIT_FAILURE);
+            }
             break;
         case 'h':
             printf("%s",helpstring);

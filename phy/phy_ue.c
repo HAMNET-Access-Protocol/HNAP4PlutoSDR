@@ -332,7 +332,7 @@ int phy_ue_proc_sync_info(PhyUE phy)
         phy->bs_txgain = chan->data[1];
         LOG(DEBUG,"[PHY UE] BS sync info: bs_rxgain: %d bs_txgain: %d\n",phy->bs_rxgain,phy->bs_txgain);
     } else {
-        LOG(INFO,"[PHY UE] cannot decode SYNC INFO slot!\n");
+        LOG(WARN,"[PHY UE] cannot decode SYNC INFO slot!\n");
     }
 
     free(demod_buf);

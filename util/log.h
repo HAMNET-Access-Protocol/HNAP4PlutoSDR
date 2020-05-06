@@ -18,8 +18,8 @@
 // Log level enumeration
 enum {TRACE, DEBUG,INFO,WARN,ERR,NONE};
 
-// Set the global log level
-#define LOG_LEVEL INFO
+// global log level
+extern int global_log_level;
 
 // Enable/Disable timing performance evaluation
 #define TIMING_ENABLE
@@ -28,20 +28,20 @@ enum {TRACE, DEBUG,INFO,WARN,ERR,NONE};
 #define SYSLOG_ENABLE
 
 // log macros with specified log level
-#define LOG(level,...) do { if (level>=LOG_LEVEL) \
+#define LOG(level,...) do { if (level>=global_log_level) \
 		{ printf(__VA_ARGS__); } } while(0)
 
-#define PRINT_BIN(level,data,len) do { if (level>=LOG_LEVEL) \
+#define PRINT_BIN(level,data,len) do { if (level>=global_log_level) \
 						{ for(int i=0; i<len; i++) {printf("%02x",data[i]);}}} while(0)
 
 // Log makros for matlab including the log level
-#define LOG_MATLAB_FC(level,x,y,z) do { if (level>=LOG_LEVEL) \
+#define LOG_MATLAB_FC(level,x,y,z) do { if (level>=global_log_level) \
 										{ log_matlab_fc(x,y,z); } } while(0);
-#define LOG_MATLAB_F(level,x,y,z) do { if (level>=LOG_LEVEL) \
+#define LOG_MATLAB_F(level,x,y,z) do { if (level>=global_log_level) \
 										{ log_matlab_f(x,y,z); } } while(0);
-#define LOG_MATLAB_I(level,x,y,z) do { if (level>=LOG_LEVEL) \
+#define LOG_MATLAB_I(level,x,y,z) do { if (level>=global_log_level) \
 										{ log_matlab_i(x,y,z); } } while(0);
-#define LOG_BIN(level,buf,len,filen,mode) do { if (level>=LOG_LEVEL) \
+#define LOG_BIN(level,buf,len,filen,mode) do { if (level>=global_log_level) \
 										{ log_bin(buf,len,filen,mode); } } while(0);
 
 

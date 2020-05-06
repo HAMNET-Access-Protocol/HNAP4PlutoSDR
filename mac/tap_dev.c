@@ -73,6 +73,7 @@ tap_dev tap_init(char* tap_name)
 	if (dev->tapfd==-1) {
 		LOG(ERR,"Could not create TAP device!\n");
 		free(dev);
+		exit(EXIT_FAILURE);
 		return NULL;
 	}
 

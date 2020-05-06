@@ -171,7 +171,7 @@ int run_simulation(uint num_subframes, uint mcs)
 				int new_offset = phy_ue->mac->timing_advance - phy_ue->rx_offset;
 				int diff = new_offset - offset;
 				if (abs(diff)>0) {
-					LOG(ERR,"[Runtime] adapt tx offset. diff: %d old txshift: %d\n",diff, tx_shift);
+					LOG(INFO,"[Runtime] adapt tx offset. diff: %d old txshift: %d\n",diff, tx_shift);
 
 					// if offset shift-diff is <0, we have to skip ofdm symbols
 					while (tx_shift - diff < 0) {

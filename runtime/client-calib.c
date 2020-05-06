@@ -36,6 +36,7 @@ struct option Options[] = {
   {"rxgain",required_argument,NULL,'g'},
   {"log-file",required_argument,NULL,'f'},
   {"config",required_argument,NULL,'c'},
+  {"log",required_argument,NULL,'l'},
   {"help",no_argument,NULL,'h'},
   {NULL},
 };
@@ -43,8 +44,9 @@ char* helpstring = "Estimate clock drift of the client.\n\n \
 Options:\n \
   --rxgain -g:  fix the rxgain to a value [-1 73]\n \
   --config -c:  use a given configuration file\n\
-  --log-file -f <filename> log all cfo estimates to a file\n";
-
+  --log-file -f <filename> log all cfo estimates to a file\n \
+  --log -l      specify the log level. Default: 2.\n \
+                0=TRACE 1=DEBUG 2=INFO 3=WARN 4=ERR 5=NONE\n";
 extern char *optarg;
 int rxgain = -100;
 int enable_agc = 0;
@@ -120,7 +122,7 @@ int main(int argc,char *argv[])
 
     // parse program args
     int d;
-    while((d = getopt_long(argc,argv,"g:f:c:h",Options,NULL)) != EOF){
+    while((d = getopt_long(argc,argv,"g:f:c:l:h",Options,NULL)) != EOF){
         switch(d){
         case 'g':
             rxgain = atoi(optarg);
@@ -140,6 +142,13 @@ int main(int argc,char *argv[])
             strcpy(config_file,optarg);
             phy_config_load_file(optarg);
             buflen = (nfft+cp_len)*SYMBOLS_PER_BUF;
+            break;
+        case 'l':
+            global_log_level = atoi(optarg);
+            if (global_log_level<TRACE || global_log_level>NONE) {
+                printf("ERROR: log level %d undefined!\n",global_log_level);
+                exit(EXIT_FAILURE);
+            }
             break;
         case 'h':
             printf("%s",helpstring);
