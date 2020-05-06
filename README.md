@@ -4,19 +4,26 @@ For installation instructions, read the README in the main project.
 
 ### Build configuration
 
+Most of the configuration is now possible at runtime by editing a config file. For 
+configuration that is not possible via the files, this section applies. 
+
 The Build configuration can be tweaked using C Makros.
 
 Configuration regarding PHY layer can be done in `phy/phy_config.h`.
 The MAC layer is configured in `mac/mac_config.h`. Some platform specific
 configuration for the Pluto can be made in `platform/pluto.h`.
 
-Some useful configuration:
-
-- **Logs**: A global log-level can be defined in `util/log.h`.
-- **PTT**:  PTT signal at port MIO0 can be generated. Set *GENERATE_PTT_SIGNAL*
-            in `platform/pluto.h`. You can tune the toggle timing using *PTT_DELAY_ADJUST_US*.
-
 ## Demo / Usage
+
+### Runtime configuration
+
+Both basestation and client may be configured via a config.txt file. We use library 
+[libconfig](https://hyperrealm.github.io/libconfig/) and its syntax for the config file.
+The configuration is split into currently three parts: PHY layer, Platform and log configuration.
+The default configuration is given in config.txt in this repo.
+
+The configuration file can be used by passing the `-c <config-file>` parameter to the applications.
+
 
 ### Basestation
 
@@ -47,40 +54,29 @@ The following MCS have been defined
 |     2     |    QAM16   | k=7, r=1/2 | |
 |     3     |    QAM16   | k=7, r=3/4 | |
 |     4     |    QAM64   | k=7, r=1/2 | |
-|     5     |    QAM64   | k=7, r=3/4 | |
+|     5     |    QAM64   | k=7, r=3/4 | currently unstable. sometimes not working|
 |     6     |    QAM256  | k=7, r=1/2 | MCS5 gives higher data-rates|
 
 #### Gain
 
-By default the gain is automatically set during startup-phase and fixed  
-during runtime of the client. However, the AGC might set the gain  
-too high so that clipping occurs. If so, the gain can be manually set with  
-the parameters `-g` and `-t`.
-
+By default the rxgain is automatically set during startup-phase and adapted  
+during runtime of the client. If you want to manually fix the gain, use the `-g` flag.
+The gain can be set in the range of [0 73].
+ 
 The application `client-calib` can be used to read the current signal level  
-of the application. It should not exceed 2000 to prevent clipping. The procedure
-to use the manual gain mode looks as follows: first start the calib tool
-with some rxgain value
+of the application. It prints the absolute amplitudes of the I and Q path and the calculated
+rssi. RXgain should be set to keep the RSSI at ~-15dB.
 
 `./client-calib -g <rxgain>`
 
-Tweak the rxgain until the signal level looks good.
+The txgain of the client is automatically set, assuming a symmetrical UL and DL link.
+It is calculated from RX and TX gain broadcasts that the basestation sends and the
+rxgain that the client calculated:
 
->Real gain avg: 115, max: 2122  
->Imag gain avg: 115, max: 2146
+`txgain_client = bs_txgain + rxgain_client - bs_rxgain`
 
-The max value should be ~2000.
-
-Then, start the client. You also have to specify the txgain value. Since
-the basestation operates at a txgain of 0 and rxgain of 70, you can calculate
-the txgain of the client, assuming that Uplink and Downlink have the same channel
-properties:
-
-`txgain(client) = -70 + rxgain(client)`
-
-Start the client:
-
-`./client -g <rxgain> -t <txgain>`
+In the current implementation, neither the rxgain of the basestation nor the
+txgain of a client are adaptive. This feature still has to be implemented.
 
 #### Frequency offset calibration
 
@@ -88,7 +84,8 @@ The default pluto TCXO has a bad accuracy and might need some initial
 calibration. The client and the client calib tool perform an initial
 cfo estimation and retune the transceiver to the correct carrier frequency.
 
-However, if the offset is too high, already the initial sync can fail. A simple method is to
+However, the offset estimation only works in a range of +-2Khz, the default TCXO
+ might give larger offsets. A simple method is to
 recalibrate the XO in steps of 100Hz and test until the client finds sync.
 
 The TCXO can be calibrated using the *fw_setenv* command:
@@ -96,6 +93,15 @@ The TCXO can be calibrated using the *fw_setenv* command:
 `fw_setenv xo_correction <new frequency>`
 
 The default frequency is 40Mhz, so try 39999800 39999900 etc.
+
+Instead of tweaking the TCXO, you can also specify the frequency of the client with the
+`-f` flag. The default DL carrier is located at 439.7 MHz, try frequencies nearby if your client
+cannot get sync.
+
+
+**NOTE:** in the first minutes after the pluto started, the frequency offset varies by somtimes
+multiple Khz. Let the Pluto run and heat up for some minutes, if you cannot find a constant
+offset. The offset will settle after a while.
 
 ### Tests
 
