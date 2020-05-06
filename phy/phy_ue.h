@@ -72,6 +72,7 @@ struct PhyUE_s {
     // store rx and txgain values from basestation sync signal
     int8_t bs_rxgain;
     int8_t bs_txgain;
+    float rssi; // client rssi
 };
 
 typedef struct PhyUE_s* PhyUE;

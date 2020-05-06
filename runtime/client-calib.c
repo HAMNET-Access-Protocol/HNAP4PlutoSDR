@@ -198,6 +198,7 @@ int main(int argc,char *argv[])
     float cfo=0,cfo_avg=0, cfo_min=1000000,cfo_max=-100000;
     int gain_real_avg=0, gain_real_max=0;
     int gain_imag_avg=0, gain_imag_max=0;
+    float last_rssi = AGC_DESIRED_RSSI;
 
     while (1) {
         pluto->platform_rx(pluto, rxbuf_time);
@@ -221,6 +222,15 @@ int main(int argc,char *argv[])
                     gain_real_max = real;
                 if (imag > gain_imag_max)
                     gain_imag_max = imag;
+            }
+
+            // basic AGC: phy->rssi is updated at the start of each sync slot (before the next sync signal)
+            if (fabsf(last_rssi-phy->rssi)>3 && enable_agc) {
+                int gain_diff = AGC_DESIRED_RSSI - roundf(phy->rssi);
+                rxgain += gain_diff;
+                pluto_set_rxgain(pluto, rxgain);
+                last_rssi = phy->rssi;
+                LOG_SFN_PHY(INFO, "new rxgain: %d diff: %d rssi: %.3f\n",rxgain,gain_diff,phy->rssi);
             }
 
             if (iteration%1000==0) {

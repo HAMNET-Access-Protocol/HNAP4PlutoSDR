@@ -102,7 +102,7 @@ void* thread_phy_ue_rx(void* arg)
 	TIMECHECK_INIT(timecheck_ue_rx,"ue.rx_buffer",1000);
 
 	float complex* rxbuf_time = calloc(sizeof(float complex),BUFLEN);
-
+    int last_rssi = AGC_DESIRED_RSSI;
 	// read some rxbuffer objects in order to empty rxbuffer queue
 	for (int i=0; i<KERNEL_BUF_RX; i++)
 		hw->platform_rx(hw, rxbuf_time);
@@ -122,8 +122,16 @@ void* thread_phy_ue_rx(void* arg)
 			pthread_cond_signal(scheduler_signal);
 			pthread_mutex_unlock(scheduler_mutex);
 		}
-		TIMECHECK_STOP_CHECK(timecheck_ue_rx,530);
-		//TIMECHECK_INFO(timecheck_ue_rx);
+		// basic AGC: phy->rssi is updated at the start of each sync slot (before the next sync signal)
+		if (fabsf(last_rssi-phy->rssi)>AGC_CHANGE_THRESHOLD && enable_agc) {
+		    int gain_diff = AGC_DESIRED_RSSI - roundf(phy->rssi);
+		    rxgain += gain_diff;
+            pluto_set_rxgain(hw, rxgain);
+            last_rssi = phy->rssi;
+            LOG_SFN_PHY(INFO, "new rxgain: %d diff: %d rssi: %.3f\n",rxgain,gain_diff,phy->rssi);
+		}
+		TIMECHECK_STOP_CHECK(timecheck_ue_rx,1050);
+		TIMECHECK_INFO(timecheck_ue_rx);
 	}
 	return NULL;
 }

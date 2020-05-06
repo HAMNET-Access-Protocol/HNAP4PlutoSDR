@@ -61,6 +61,15 @@
 // Set this filter to [0 1] to tune estimation (1= solely based on new cfo)
 #define SYNC_CFO_FILT_PARAM 0.8f
 
+// UE constantly adapts the rxgain based on the rssi. The rssi is calculated based on the
+// sync signal, every 8 subframes. The new rssi value is smoothed with an exponential filter
+// the filter coefficient alpha can be tuned here
+#define AGC_RSSI_FILT_PARAM 0.25f
+
+// Threshold for the RSSI change [dB] which is required to change
+// the transceiver gain
+#define AGC_CHANGE_THRESHOLD 3
+
 // the desired RSSI of the RX path. Used to tune our AGC
 // Theoretical limits for RSSI are [-66 0]. For OFDM-QAM waveform this should be set to ~ -15
 #define AGC_DESIRED_RSSI -15
