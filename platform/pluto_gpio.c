@@ -19,6 +19,9 @@
 
 #define EVENT_QUEUE_LEN 8
 
+#define PLUTO_GPIO_WORKER_TH_CPUID 1
+#define PLUTO_GPIO_WORKER_TH_PRIO 3
+
 // event thread declaration
 void* pin_ctrl_thread(void*);
 
@@ -104,9 +107,9 @@ gpio_pin pluto_gpio_init(int pin_id, int direction)
 
     cpu_set_t cpu_set;
     CPU_ZERO(&cpu_set);
-    CPU_SET(1,&cpu_set);
+    CPU_SET(PLUTO_GPIO_WORKER_TH_CPUID,&cpu_set);
     struct sched_param prio_rt_high;
-    prio_rt_high.sched_priority = 3;    // highest prio for gpio control thread
+    prio_rt_high.sched_priority = PLUTO_GPIO_WORKER_TH_PRIO;    // highest prio for gpio control thread
     pthread_setaffinity_np(pin->pin_thread,sizeof(cpu_set_t),&cpu_set);
     pthread_setschedparam(pin->pin_thread, SCHED_FIFO, &prio_rt_high);
 

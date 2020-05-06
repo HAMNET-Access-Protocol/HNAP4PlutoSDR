@@ -107,6 +107,11 @@ void  phy_carrier_sync(PhyUE phy, platform hw)
 
 int main(int argc,char *argv[])
 {
+    // set thread priority
+    struct sched_param prio;
+    prio.sched_priority = 3;
+    sched_setscheduler(0,SCHED_FIFO, &prio);
+
     // parse program args
     int d;
     while((d = getopt_long(argc,argv,"g:f:h",Options,NULL)) != EOF){
@@ -136,11 +141,6 @@ int main(int argc,char *argv[])
 
     // register signal handler
     signal(SIGINT, signalhandler);
-
-    // set thread priority
-    struct sched_param prio;
-    prio.sched_priority = 98;
-    sched_setscheduler(0,SCHED_FIFO, &prio);
 
 	// Init platform
 #if CLIENT_USE_PLATFORM_SIM

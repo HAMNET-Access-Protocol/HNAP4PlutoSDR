@@ -323,7 +323,12 @@ void  phy_carrier_sync(PhyUE phy, platform hw)
 
 int main(int argc,char *argv[])
 {
-	pthread_t ue_phy_rx_th, ue_phy_tx_th, ue_mac_th, ue_tap_th, ue_phy_rx_slot_th;
+    // set main thread prio. We need the thread to be realtime for phy_carrier_sync
+    struct sched_param prio;
+    prio.sched_priority = 3;
+    sched_setscheduler(0,SCHED_FIFO, &prio);
+
+    pthread_t ue_phy_rx_th, ue_phy_tx_th, ue_mac_th, ue_phy_rx_slot_th, ue_tap_th;
 
     // parse program args
     int d;

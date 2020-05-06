@@ -271,6 +271,7 @@ void init_generic(platform hw, uint buf_len)
     pluto->ad9361_phy = get_ad9361_phy(pluto->ctx);
 
     pluto->buflen = buf_len;
+    pluto->gpio_MIO0 = NULL;
 
 	printf("* Acquiring AD9361 streaming devices\n");
 	ASSERT(get_ad9361_stream_dev(pluto->ctx, TX, &pluto->tx) && "No tx dev found");
