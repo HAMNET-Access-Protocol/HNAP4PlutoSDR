@@ -292,6 +292,11 @@ void  phy_carrier_sync(PhyUE phy, platform hw)
 {
     float complex* rxbuf_time = calloc(sizeof(float complex),buflen);
     int gain_diff=0;
+
+    // read some buffers, to ensure we got samples with adjusted rxgain
+    for (int i=0; i<KERNEL_BUF_RX; i++)
+        hw->platform_rx(hw, rxbuf_time);
+
     // Find synchronization sequence for the first time.
     while(!phy->has_synced_once) {
         hw->platform_rx(hw, rxbuf_time);
@@ -425,7 +430,7 @@ int main(int argc,char *argv[])
     // If the gain is not fixed, we will listen for a moment and use the given value from AGC.
     // We have to use manual mode because this AGC does not work with our OFDM modulation
     LOG(INFO,"[Pluto] configuring gain...\n");
-    int curr_gain = pluto_get_rxgain(pluto)-10; // -10 is a broad estimate, gain is usually set way to high.
+    int curr_gain = pluto_get_rxgain(pluto)+agc_desired_rssi;
 
     // If fixed TX/RX gain values were given, set them, otherwise use the AGC values
     if (rxgain==-100) {

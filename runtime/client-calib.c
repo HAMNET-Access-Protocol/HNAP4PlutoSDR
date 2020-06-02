@@ -78,6 +78,11 @@ void  phy_carrier_sync(PhyUE phy, platform hw)
 {
     float complex* rxbuf_time = calloc(sizeof(float complex),buflen);
     int gain_diff=0;
+
+    // read some buffers, to ensure we got samples with adjusted rxgain
+    for (int i=0; i<KERNEL_BUF_RX; i++)
+        hw->platform_rx(hw, rxbuf_time);
+
     // Find synchronization sequence for the first time
     while(!phy->has_synced_once) {
         hw->platform_rx(hw, rxbuf_time);
@@ -86,7 +91,7 @@ void  phy_carrier_sync(PhyUE phy, platform hw)
 
     // receive some subframes to get a better cfo estimation
     float cfo_hz=0;
-    const int iterations = 16;
+    const int iterations = 8*16;
     for (int i=0; i<iterations; i++) {
         for (int sym = 0; sym < SUBFRAME_LEN / SYMBOLS_PER_BUF; sym++) {
             hw->platform_rx(hw, rxbuf_time);
@@ -175,7 +180,7 @@ int main(int argc,char *argv[])
 
     if (rxgain==-100) {
         enable_agc = 1;
-        rxgain = pluto_get_rxgain(pluto)-10;
+        rxgain = pluto_get_rxgain(pluto)+agc_desired_rssi;
     }
     pluto_set_rxgain(pluto,rxgain);
     LOG(INFO,"[CLIENT] initial rxgain %d\n",rxgain);
