@@ -64,8 +64,8 @@ extern char *optarg;
 int rxgain = -100;
 int txgain = -100;
 int enable_agc = 0;
-long int dl_frequency = -1;
-long int ul_frequency = -1;
+long long int dl_frequency = -1;
+long long int ul_frequency = -1;
 int ul_mcs = 0;
 int dl_mcs = 0;
 char* config_file=NULL;      // configuration file string

@@ -64,7 +64,7 @@ Options:\n \
 extern char *optarg;
 int rxgain = 70;
 int txgain = 0;
-int frequency = -1;
+long long int frequency = -1;
 char* config_file=NULL;
 
 // struct holds arguments for RX thread
