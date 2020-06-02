@@ -77,7 +77,6 @@ int mac_ue_handle_message(MacUE mac, MacMessage msg, uint is_broadcast)
 			mac_stats_init(&mac->stats);
 			LOG_SFN_MAC(INFO,"[MAC UE] successfully associated! userid: %d\n",mac->userid);
 			mac->phy->userid = mac->userid; // Notify phy about the userid. TODO define interface functions?
-			phy_ue_proc_dlctrl(mac->phy);	// Decode CTRL slot again, since we now know our userid
 		} else {
 			LOG_SFN_MAC(INFO,"[MAC UE] NACK for assoc req: response is %d\n",msg->hdr.AssociateResponse.response);
 		}
