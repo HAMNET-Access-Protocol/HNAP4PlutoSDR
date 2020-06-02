@@ -415,6 +415,11 @@ void pluto_set_rxgain(platform hw, int gain)
     pluto_data pluto = (pluto_data)hw->data;
     struct iio_channel* chn;
 
+    if (gain>RXGAIN_MAX || gain <RXGAIN_MIN) {
+        LOG(DEBUG,"[Platform] cannot set rxgain to %d\n",gain);
+        return;
+    }
+
     get_phy_chan(pluto->ctx, RX, 0, &chn);
     wr_ch_str(chn, "gain_control_mode", "manual");
     wr_ch_lli(chn, "hardwaregain", gain);
@@ -426,6 +431,10 @@ void pluto_set_txgain(platform hw, int gain)
     pluto_data pluto = (pluto_data)hw->data;
     struct iio_channel* chn;
 
+    if (gain>TXGAIN_MAX || gain <TXGAIN_MIN) {
+        LOG(DEBUG,"[Platform] cannot set txgain to %d\n",gain);
+        return;
+    }
     get_phy_chan(pluto->ctx, TX, 0, &chn);
     wr_ch_lli(chn, "hardwaregain", gain);
 }
