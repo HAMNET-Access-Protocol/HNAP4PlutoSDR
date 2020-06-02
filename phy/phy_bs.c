@@ -571,7 +571,7 @@ void phy_bs_rx_symbol(PhyBS phy, float complex* rxbuf_time)
             if (phy->rach_timing <= 0)
 				ofdmframesync_execute(phy->fs_rach, rxbuf_time, nfft+cp_len);
             else
-				ofdmframesync_execute(phy->fs_rach, rxbuf_time, phy->rach_timing);
+				ofdmframesync_execute(phy->fs_rach, rxbuf_time, phy->rach_timing % rx_sym);
 		}
 	} else {
 		// not in RA slot. Do normal receive
