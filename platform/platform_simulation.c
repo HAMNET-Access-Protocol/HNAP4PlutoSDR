@@ -163,7 +163,7 @@ platform platform_init_simulation(uint buflen, float snr, float cfo)
 
 #if ENABLE_RAYLEIGH
     // rayleigh flat fading
-    channel_cccf_add_rayleigh_flat(channel,20,SAMPLERATE,8);
+    channel_cccf_add_rayleigh_flat(channel,20,samplerate,8);
 #endif
 
 	sim_data->tx_channel = channel;

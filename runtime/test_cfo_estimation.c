@@ -98,6 +98,7 @@ int main(int argc, char* argv[])
 {
     phy_config_default_64();
     buflen = nfft+cp_len;
+    global_log_level = ERR;
 
     for (int cfo=0; cfo<1; cfo+=50) {
         for (int snr = 5; snr < 41; snr += 5) {
