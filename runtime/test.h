@@ -11,7 +11,7 @@
 #include <stdint.h>
 #include "../phy/phy_config.h"
 
-#define MAX_SLOT_DATA 256
+#define MAX_SLOT_DATA 300
 
 // Store binary data that is sent at phy layer to calculate BER
 extern uint8_t phy_dl[FRAME_LEN][4][MAX_SLOT_DATA];
