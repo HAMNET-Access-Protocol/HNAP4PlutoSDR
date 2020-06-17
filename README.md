@@ -1,113 +1,86 @@
-## Installation
+## HNAP4PlutoSDR
 
-For installation instructions, read the README in the main project.
+This is the implementation of the HAMNET Access Protocol for 
+Adalm Pluto SDRs. It uses a 200 kHz duplex channel in the 70cm band to 
+transmit IP traffic.
 
-### Build configuration
+Key Facts
+- OFDM based system with 40 subcarriers (4kHz subcarrier spacing)
+- Basestation - Client topology, supports up to 14 connected clients
+- up to 400kbps data-rate and <150ms RTT at the application layer
 
-Most of the configuration is now possible at runtime by editing a config file. For 
-configuration that is not possible via the files, this section applies. 
+## Quickstart
 
-The Build configuration can be tweaked using C Makros.
+### Installation
+Download the HNAP4PlutoSDR firmware. Connect a PlutoSDR to your PC and copy the 
+image to the Pluto's mass storage device. Eject the Pluto and wait until
+the flashing process is completed (LED1 stops blinking).
 
-Configuration regarding PHY layer can be done in `phy/phy_config.h`.
-The MAC layer is configured in `mac/mac_config.h`. Some platform specific
-configuration for the Pluto can be made in `platform/pluto.h`.
+Now, connect to the Pluto via SSH to initially configure the system.
+Set the following variables:
 
-## Demo / Usage
+```shell script
+# Activate 2nd CPU, isolate core 1
+fw_setenv maxcpus 2 isolcpus=1
+# IP address of this Pluto within the HNAP Network 
+# (you can define any IP address as long as they are within one subnet)
+fw_setenv hnap_tap_ip 192.168.123.1
 
-### Runtime configuration
+# If this Pluto will act as a basestation, set this variable
+# To enable autostart of the basesation
+fw_setenv hnap_bs_autostart 1
+```
+Reboot the Adalm Pluto.
 
-Both basestation and client may be configured via a config.txt file. We use library 
-[libconfig](https://hyperrealm.github.io/libconfig/) and its syntax for the config file.
-The configuration is split into currently three parts: PHY layer, Platform and log configuration.
-The default configuration is given in config.txt in this repo.
+### First tests
 
-The configuration file can be used by passing the `-c <config-file>` parameter to the applications.
+You are going to need 2 Adalm Plutos to do first transmission tests.
+When connecting both Plutos to the same Host PC, make sure that the ethernet
+connection to both Plutos uses different IP addresses. See [here](https://wiki.analog.com/university/tools/pluto/users/customizing)
+for more info. We suggest that you configure your first Pluto with the
+IP addresses 192.168.2.1 (pluto) 192.168.2.10 (host PC) and the second with 
+IP address 192.168.**3**.1 (pluto) and 192.168.**3**.10 (host PC). Also make sure
+that you have configured different *hnap_tap_ip*s in the previous step.
 
+Once this is done, SSH to the client Pluto and start the client application
+```shell script
+./client
+```
 
-### Basestation
+The client should start up and connect to the basestation. Once this is done,
+open another ssh connection and test the HNAP connection with *ping* or *iperf*.
 
-The basestation application will be located in the `/root/` directory of the pluto  
-system. If the basestation firmware is configured to autostart the basesation,
-it will start it with TX-gain 0 (~0dBm) and RX-gain set to 70.
-You can manually specify the gain parameters by passing the -g and -t flag:
+Every Pluto starts an iperf3 server by default, so simply run:
+```shell script
+iperf3 -c 192.168.123.1 -R
+```
 
-`./basestation -g <rxgain> -t <txgain>`
+### Troubleshooting
 
-### Client
+If the client is not able to connect to the basestation, the following might help:
 
-The client application and the calibration tool is located in `/root/`
-directory. Below, the configuration of the client is described.
+**Make sure the second CPU core is active**
 
-#### MCS
+Verify it with `fw_printenv maxcpus`. Without the second core, no realtime operation
+is possible.
 
-By default, MCS0 (QPSK, 1/2rate code) is used. You can manually set other
-MCS values for uplink and downlink. Downlink MCS can be set with the `-d` or
-`--dl-mcs` flag. Uplink MCS can be set with the `-u` or `--ul-mcs` flag.
+**Use correct antennas for the used band**
 
-The following MCS have been defined
+The Pluto does not come with any analog filters after/before the mixing stage.
+We therefore produce strong intermodulation products (e.g. output with -10dBc @1.31GHz).
+These products will be mixed down to the baseband at the receiver and interfere with our signal. 
+Use UHF antennas in order to suppress the intermodulation products. DO NOT use the original 2.4GHz antennas! They just
+recept the intermodulation products, but not the original signal at 440MHz.
 
-| MCS value | modulation | conv-coding| Notes  |
-|:----------|:-----------|:-----------|:-------|
-|     0     |    QPSK    | k=7, r=1/2 | |
-|     1     |    QPSK    | k=7, r=3/4 | |
-|     2     |    QAM16   | k=7, r=1/2 | |
-|     3     |    QAM16   | k=7, r=3/4 | |
-|     4     |    QAM64   | k=7, r=1/2 | |
-|     5     |    QAM64   | k=7, r=3/4 | currently unstable. sometimes not working|
-|     6     |    QAM256  | k=7, r=1/2 | MCS5 gives higher data-rates|
+**Adjust the carrier frequency**
 
-#### Gain
+The default TCXO on the Adalm Pluto has an accuracy of 25ppm. At 440MHz, this can result
+in a frequency offset of up to 10kHz. The application can only detect and compensate +-2kHz, we therefore
+strongly suggest to switch to a more accurate TCXO (more details here TODO!).
 
-By default the rxgain is automatically set during startup-phase and adapted  
-during runtime of the client. If you want to manually fix the gain, use the `-g` flag.
-The gain can be set in the range of [0 73].
- 
-The application `client-calib` can be used to read the current signal level  
-of the application. It prints the absolute amplitudes of the I and Q path and the calculated
-rssi. RXgain should be set to keep the RSSI at ~-15dB.
+If you do not want to swap the TCXO immediately, try the following:
+1. Let the Pluto heat up a bit. The frequency drift is very high in the first minutes of operation. Wait some minutes for the offset to settle.
+2. Adjust the frequency offset manually. Run `./client -f 439702000` to tune to higher and lower carrier frequencies. Do this in 2kHz steps 
+around the default frequency of 439700000. There is a calibration tool *client-calib* that only syncs to the Downlink and 
+estimates the carrier offset that might help: `./client-calib -f <DL-FREQ>`
 
-`./client-calib -g <rxgain>`
-
-The txgain of the client is automatically set, assuming a symmetrical UL and DL link.
-It is calculated from RX and TX gain broadcasts that the basestation sends and the
-rxgain that the client calculated:
-
-`txgain_client = bs_txgain + rxgain_client - bs_rxgain`
-
-In the current implementation, neither the rxgain of the basestation nor the
-txgain of a client are adaptive. This feature still has to be implemented.
-
-#### Frequency offset calibration
-
-The default pluto TCXO has a bad accuracy and might need some initial
-calibration. The client and the client calib tool perform an initial
-cfo estimation and retune the transceiver to the correct carrier frequency.
-
-However, the offset estimation only works in a range of +-2Khz, the default TCXO
- might give larger offsets. A simple method is to
-recalibrate the XO in steps of 100Hz and test until the client finds sync.
-
-The TCXO can be calibrated using the *fw_setenv* command:
-
-`fw_setenv xo_correction <new frequency>`
-
-The default frequency is 40Mhz, so try 39999800 39999900 etc.
-
-Instead of tweaking the TCXO, you can also specify the frequency of the client with the
-`-f` flag. The default DL carrier is located at 439.7 MHz, try frequencies nearby if your client
-cannot get sync.
-
-
-**NOTE:** in the first minutes after the pluto started, the frequency offset varies by somtimes
-multiple Khz. Let the Pluto run and heat up for some minutes, if you cannot find a constant
-offset. The offset will settle after a while.
-
-### Tests
-
-The plutos run a iperf3 server by default. In order to test the connection,
-you can run `iperf3 -c 192.168.123.X` on another pluto.
-
-Note that networking currently only works between the Plutos TAP devices, i.e.
-within Network 192.168.123.0/24.
-No routes have been configured.
