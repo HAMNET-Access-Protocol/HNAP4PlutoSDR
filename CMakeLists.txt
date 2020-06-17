@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.12.0)
+cmake_minimum_required(VERSION 3.0.0)
 project(transceiver C)
 
 set(CMAKE_C_STANDARD 11)
@@ -14,18 +14,14 @@ include_directories(src/util)
 ### Group source files to PHY and MAC layer for UE/BS respectively
 
 # PHY layer
-set(PHY_BS phy_common.h phy_bs.h phy_bs.c phy_common.c phy_config.h phy_config.c)
-set(PHY_UE phy_common.h phy_ue.h phy_ue.c phy_common.c phy_config.h phy_config.c)
-list(TRANSFORM PHY_BS PREPEND src/phy/)
-list(TRANSFORM PHY_UE PREPEND src/phy/)
+set(PHY_BS src/phy/phy_common.h src/phy/phy_bs.h src/phy/phy_bs.c src/phy/phy_common.c src/phy/phy_config.h src/phy/phy_config.c)
+set(PHY_UE src/phy/phy_common.h src/phy/phy_ue.h src/phy/phy_ue.c src/phy/phy_common.c src/phy/phy_config.h src/phy/phy_config.c)
 
 # MAC layer
-set(MAC_COMMON mac_config.h mac_channels.h mac_common.h mac_fragmentation.h mac_messages.h
-               mac_channels.c mac_messages.c mac_common.c mac_fragmentation.c tap_dev.c)
-set(MAC_UE ${MAC_COMMON} mac_ue.h mac_ue.c)
-set(MAC_BS ${MAC_COMMON} mac_bs.h mac_bs.c)
-list(TRANSFORM MAC_BS PREPEND src/mac/)
-list(TRANSFORM MAC_UE PREPEND src/mac/)
+set(MAC_COMMON src/mac/mac_config.h src/mac/mac_channels.h src/mac/mac_common.h src/mac/mac_fragmentation.h src/mac/mac_messages.h
+        src/mac/mac_channels.c src/mac/mac_messages.c src/mac/mac_common.c src/mac/mac_fragmentation.c src/mac/tap_dev.c)
+set(MAC_UE ${MAC_COMMON} src/mac/mac_ue.h src/mac/mac_ue.c)
+set(MAC_BS ${MAC_COMMON} src/mac/mac_bs.h src/mac/mac_bs.c)
 
 # Platform
 set(PLATFORM_PLUTO src/platform/platform.h src/platform/pluto.h src/platform/pluto.c
