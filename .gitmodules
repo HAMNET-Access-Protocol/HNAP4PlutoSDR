@@ -1,0 +1,6 @@
+[submodule "liquid-dsp"]
+	path = liquid-dsp
+	url = https://github.com/HAMNET-Access-Protocol/liquid-dsp
+[submodule "libfec"]
+	path = libfec
+	url = https://github.com/HAMNET-Access-Protocol/libfec
