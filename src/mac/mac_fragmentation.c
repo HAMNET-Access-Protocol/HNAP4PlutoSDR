@@ -7,7 +7,7 @@
 
 #include "mac_fragmentation.h"
 
-#include "../util/ringbuf.h"
+#include <ringbuf.h>
 #include "mac_config.h"
 
 #define MAX_SEQNR 4 // 2 bits are allocated for seqNr in MacMessage

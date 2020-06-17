@@ -5,7 +5,7 @@
 #define _GNU_SOURCE
 
 #include "pluto_gpio.h"
-#include "util/log.h"
+#include "log.h"
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
