@@ -50,6 +50,10 @@ cd ..
 ## Build liquidsdr
 echo "Building liquidsdr..."
 cd liquid-dsp
+if [[ ! -f configure ]]
+then
+    ./bootstrap.sh
+fi
 ./configure arm --host=arm-linux-gnueabihf  --prefix="$PLUTO_SYSROOT_DIR/usr/" CC="arm-linux-gnueabihf-gcc --sysroot=$PLUTO_SYSROOT_DIR"
 
 # Configure somehow does not correctly identify malloc and realloc
@@ -81,11 +85,8 @@ cd ..
 
 ## Copy network init script to rootfs
 echo "Copy network autoconfig script to rootfs..."
-cd startup_scripts
-cp S101transceiver.sh $PLUTOSDR_FW_ROOTOVERLAY/etc/init.d/
-cp S102iperf.sh $PLUTOSDR_FW_ROOTOVERLAY/etc/init.d/
-cp S103basestation.sh $PLUTOSDR_FW_ROOTOVERLAY/etc/init.d/
-cd ..
+cp startup_scripts/* $PLUTOSDR_FW_ROOTOVERLAY/etc/init.d/
+
 
 ## Copy FIR filter to rootfs
 echo "Copy FIR filter coefficients to rootfs..."

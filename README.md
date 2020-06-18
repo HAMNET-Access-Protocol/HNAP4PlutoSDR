@@ -6,29 +6,38 @@ transmit IP traffic.
 
 Main Features:
 - OFDM based system with 40 subcarriers (4kHz subcarrier spacing)
+- DL @ 439.7MHz / UL @ 434.9MHz (can be reconfigured)
 - Basestation - Client topology, supports up to 14 connected clients
 - up to 400kbps data-rate and <150ms RTT at the application layer
 
 ## Quickstart
 
 ### Installation
-Download the HNAP4PlutoSDR firmware. Connect a PlutoSDR to your PC and copy the 
+Download the HNAP4PlutoSDR firmware from [here](https://github.com/HAMNET-Access-Protocol/HNAP4PlutoSDR/releases).
+Connect a PlutoSDR to your PC and copy the 
 image to the Pluto's mass storage device. Eject the Pluto and wait until
 the flashing process is completed (LED1 stops blinking).
 
 Now, connect to the Pluto via SSH to initially configure the system.
-Set the following variables:
+Run the following commands:
 
 ```shell script
 # Activate 2nd CPU, isolate core 1
 fw_setenv maxcpus 2 isolcpus=1
+```
+```
 # IP address of this Pluto within the HNAP Network 
 # (you can define any IP address as long as they are within one subnet)
 fw_setenv hnap_tap_ip 192.168.123.1
-
+```
+```
 # If this Pluto will act as a basestation, set this variable
 # To enable autostart of the basesation
 fw_setenv hnap_bs_autostart 1
+```
+```
+# Set your callsign. It will be broadcasted via LLDP
+fw_setenv hnap_callsign <YOUR-CALLSIGN>
 ```
 Reboot the Adalm Pluto.
 
@@ -84,3 +93,8 @@ If you do not want to swap the TCXO immediately, try the following:
 around the default frequency of 439700000. There is a calibration tool *client-calib* that only syncs to the Downlink and 
 estimates the carrier offset that might help: `./client-calib -f <DL-FREQ>`
 
+### What's next?
+
+Read the docs to reconfigure your system [here](https://manual.hnap.de/system_config/)
+
+Read how to build the firmware yourself [here](https://manual.hnap.de/building_the_fw/)

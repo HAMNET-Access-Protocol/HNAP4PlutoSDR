@@ -2,6 +2,8 @@
 
 [ -f /root/basestation ] || exit 0
 
+# Autostart the basestation service
+
 start() {
   	if [ `fw_printenv -n hnap_bs_autostart` = 1 ]
 	then
