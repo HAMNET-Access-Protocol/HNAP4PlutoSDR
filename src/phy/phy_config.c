@@ -75,13 +75,13 @@ void phy_config_load_file(char* config_file)
         symbol_settings = config_setting_get_member(phy_settings, "pilot_symbols");
         if (symbol_settings!=NULL && config_setting_length(symbol_settings)>0) {
             free(pilot_symbols);
-            pilot_symbols =malloc(nfft);
+            pilot_symbols =malloc(SLOT_LEN);
             pilot_symbols_per_slot = 0;
             for (int i=0; i<SLOT_LEN; i++) {
                 pilot_symbols[i] = (char)config_setting_get_int_elem(symbol_settings,i);
-                if (pilot_symbols[i]==DATA) {
-                    num_data_sc++;
-                } else if (pilot_symbols[i]!=NOT_USED) {
+                if (pilot_symbols[i]==PILOT) {
+                    pilot_symbols_per_slot++;
+                } else if (pilot_symbols[i]!=NO_PILOT) {
                     LOG(ERR, "[PHY CONFIG] error when parsing symbol allocation. %d is an unknown allocation\n",
                         pilot_symbols[i]);
                 }
@@ -124,7 +124,7 @@ void phy_config_default_64()
     pilot_symbols_per_slot = 7;
     pilot_symbols = calloc(SLOT_LEN,1);
     for (int i=0; i<SLOT_LEN; i+=2)
-        pilot_symbols[i]=DATA;
+        pilot_symbols[i]=PILOT;
 
     coarse_cfo_filt_param = DEFAULT_COARSE_CFO_FILT_PARAM;
     agc_rssi_filt_param = DEFAULT_AGC_RSSI_FILT_PARAM;

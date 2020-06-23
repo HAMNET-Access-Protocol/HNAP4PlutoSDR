@@ -216,7 +216,7 @@ void gen_pilot_symbols(PhyCommon phy, uint is_bs)
 
     // replicate slot allocation for one slot over the subframe
     for (int slot_nr=0; slot_nr<NUM_SLOT; slot_nr++) {
-        int slot_start = DLCTRL_LEN+SLOT_GUARD_INTERVAL + slot_nr*(SLOT_LEN+SLOT_GUARD_INTERVAL);
+        int slot_start = DLCTRL_LEN+2*SLOT_GUARD_INTERVAL + slot_nr*(SLOT_LEN+SLOT_GUARD_INTERVAL);
         memcpy(&pilot_dl[slot_start], pilot_symbols, SLOT_LEN);
     }
 

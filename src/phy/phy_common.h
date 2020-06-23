@@ -47,7 +47,6 @@ typedef union {
 	};
 } dlctrl_alloc_t;
 
-enum {NO_PILOT, PILOT};		// definition for pilot_symbols variable
 
 
 // Struct contains PHY variables common to UE and BS Phy layer
