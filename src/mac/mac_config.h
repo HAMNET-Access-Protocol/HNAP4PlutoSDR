@@ -4,16 +4,18 @@
  * Copyright (C) 2020 Lukas Ostendorf <lukas.ostendorf@gmail.com>
  *                    and the project contributors
  *
- * This library is free software; you can redistribute it and/or modify it under the terms of the
- * GNU Lesser General Public License as published by the Free Software Foundation; version 3.0.
+ * This library is free software; you can redistribute it and/or modify it under
+ * the terms of the GNU Lesser General Public License as published by the Free
+ * Software Foundation; version 3.0.
  *
- * This library is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
- * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU Lesser General Public License for more details.
+ * This library is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for more
+ * details.
  *
- * You should have received a copy of the GNU Lesser General Public License along with this library;
- * if not, write to the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
- * Boston, MA 02110-1301 USA
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this library; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #ifndef MAC_MAC_CONFIG_H_
@@ -46,7 +48,8 @@
 #endif
 
 // Number of data/control slots per subframe
-#define MAC_DLDATA_SLOTS 4 //TODO double definition of the same variable here and in phy_config
+#define MAC_DLDATA_SLOTS                                                       \
+  4 // TODO double definition of the same variable here and in phy_config
 #define MAC_ULDATA_SLOTS 4
 #define MAC_ULCTRL_SLOTS 2
 
@@ -54,6 +57,5 @@
 #define USER_BROADCAST 1
 // userID that is used to indicate a disabled/unused slot
 #define USER_UNUSED 0
-
 
 #endif /* MAC_MAC_CONFIG_H_ */
