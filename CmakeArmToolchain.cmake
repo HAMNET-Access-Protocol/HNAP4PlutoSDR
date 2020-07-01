@@ -2,7 +2,7 @@ set(CMAKE_SYSTEM_NAME Linux)
 set(CMAKE_SYSTEM_PROCESSOR arm)
 
 #Define pluto sysroot directory here
-set(CMAKE_SYSROOT /home/lukas/pluto-0.31.sysroot/)
+set(CMAKE_SYSROOT $ENV{PLUTO_SYSROOT_DIR})
 
 # Set the toolchain path. You can either use the Xilinx SDK toolchain
 # or linaro-gcc. Make sure that the path is correct
