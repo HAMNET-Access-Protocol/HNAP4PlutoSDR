@@ -21,9 +21,10 @@
 #ifndef MAC_TAP_DEV_H_
 #define MAC_TAP_DEV_H_
 
+#include <sys/socket.h>
+// has to be included after socket.h
 #include <linux/if.h>
 #include <linux/if_tun.h>
-#include <sys/socket.h>
 
 #include <stdint.h>
 

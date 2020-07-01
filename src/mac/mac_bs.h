@@ -27,6 +27,7 @@
 #include "tap_dev.h"
 
 #include "../phy/phy_bs.h"
+#include "../phy/phy_common.h"
 #include "../util/ringbuf.h"
 #include <liquid/liquid.h>
 #include <sys/queue.h>
