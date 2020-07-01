@@ -239,9 +239,9 @@ void *thread_phy_ue_tx(void *arg) {
         num_samples = buflen - tx_shift;
 
         // set PTT signal delay
-        pluto_ptt_set_switch_delay(hw,
-                                   (int)((buflen * KERNEL_BUF_TX + tx_shift) *
-                                         1000000.0 / samplerate));
+        pluto_ptt_set_switch_delay(
+            hw, (int)((buflen * (KERNEL_BUF_TX - 1) + tx_shift) * 1000000.0 /
+                      samplerate));
       }
     }
   }
