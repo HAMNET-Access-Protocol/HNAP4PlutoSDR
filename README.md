@@ -19,3 +19,4 @@ Visit [manual.hnap.de](https://manual.hnap.de/) for an installation and usage gu
 This repository uses [pre-commit](https://pre-commit.com/) hooks.
 Please make sure you have installed pre-commit (`pip install pre-commit`) and
 set up the git hooks with `pre-commit install` after cloning the repository.
+The linting hook uses clang-format for linting, install it with `apt install clang-format`.
