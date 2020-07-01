@@ -9,6 +9,7 @@ include_directories(src/phy)
 include_directories(src/platform)
 include_directories(src/runtime)
 include_directories(src/util)
+include_directories(tests/unity/src)
 
 
 ### Group source files to PHY and MAC layer for UE/BS respectively
@@ -32,6 +33,9 @@ set(PLATFORM_SIM src/platform/platform.h src/platform/platform_simulation.h src/
 # Utility
 set(UTIL src/util/log.h src/util/log.c src/util/ringbuf.h src/util/ringbuf.c)
 
+# Unit Tests
+set(UNITY tests/unity/src/unity.c)
+set(TESTS tests/test_mac_messages.c)
 
 ### Add different executables
 
@@ -62,3 +66,7 @@ add_executable(test_cfo_estimation src/runtime/test_cfo_estimation.c ${PLATFORM_
         ${PHY_BS} ${PHY_UE} ${MAC_UE} ${MAC_BS} ${UTIL})
 target_link_libraries(test_cfo_estimation liquid m config)
 target_compile_definitions(test_cfo_estimation PUBLIC USE_SIM)
+
+# Unit Tests
+add_executable(unit_tests ${UNITY} ${TESTS} ${MAC_COMMON} ${UTIL})
+target_link_libraries(unit_tests liquid)
