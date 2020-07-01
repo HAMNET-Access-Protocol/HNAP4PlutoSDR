@@ -575,14 +575,16 @@ void phy_ue_write_symbol(PhyUE phy, float complex *txbuf_time) {
       }
     } else if (phy->ul_symbol_alloc[sfn][tx_symb] == DATA) {
       // MAC is associated and have data to send.
-      if (common->pilot_symbols_tx[tx_symb] == PILOT) {
-        ofdmframegen_reset(phy->fg); // TODO we use the same msequence in every
-                                     // pilot symbol sent. Fix this
-        ofdmframegen_writesymbol(phy->fg, common->txdata_f[sfn][tx_symb],
-                                 txbuf_time);
-      } else {
+      // reset msequence for pilot generation every slot
+      if (common->pilot_symbols_tx[tx_symb] == PILOT_RESET)
+        ofdmframegen_reset(phy->fg);
+
+      if (common->pilot_symbols_tx[tx_symb] == NO_PILOT) {
         ofdmframegen_writesymbol_nopilot(
             phy->fg, common->txdata_f[sfn][tx_symb], txbuf_time);
+      } else {
+        ofdmframegen_writesymbol(phy->fg, common->txdata_f[sfn][tx_symb],
+                                 txbuf_time);
       }
     } else if (phy->ul_symbol_alloc[sfn][tx_symb] == PTT_UP) {
       memset(txbuf_time, 0, sizeof(float complex) * (nfft + cp_len));
@@ -624,8 +626,12 @@ void phy_ue_do_rx(PhyUE phy, float complex *rxbuf_time, uint num_samples) {
       }
     } else {
       // receive symbols
+      // reset msequence for pilot reception every slot
+      if (common->pilot_symbols_rx[common->rx_symbol] == PILOT_RESET)
+        ofdmframesync_reset_msequence(phy->fs);
+
       uint rx_sym = fmin(nfft + cp_len, remaining_samps);
-      if (common->pilot_symbols_rx[common->rx_symbol] == PILOT ||
+      if (common->pilot_symbols_rx[common->rx_symbol] != NO_PILOT ||
           (common->rx_subframe == 0 && common->rx_symbol == SUBFRAME_LEN - 2)) {
         ofdmframesync_execute(phy->fs, rxbuf_time, rx_sym);
         LOG(TRACE, "[PHY UE] cfo updated: %.3f Hz\n",
