@@ -541,6 +541,10 @@ void phy_bs_write_symbol(PhyBS phy, float complex *txbuf_time) {
   uint tx_symb = common->tx_symbol;
   uint sfn = common->tx_subframe % 2;
 
+  // reset msequence for pilot generation every slot
+  if (common->pilot_symbols_tx[tx_symb] == PILOT_RESET)
+    ofdmframegen_reset(phy->fg);
+
   // check if we have to add synch sequence in this subframe
   if (common->tx_subframe == 0 && tx_symb == SUBFRAME_LEN - 1 - SYNC_SYMBOLS) {
     ofdmframegen_reset(phy->fg);
@@ -554,12 +558,12 @@ void phy_bs_write_symbol(PhyBS phy, float complex *txbuf_time) {
   } else if (common->tx_subframe == 0 &&
              tx_symb == SUBFRAME_LEN - 1 - SYNC_SYMBOLS + 3) {
     phy_bs_write_sync_info(phy, txbuf_time);
-  } else if (common->pilot_symbols_tx[tx_symb] == PILOT) {
-    ofdmframegen_writesymbol(phy->fg, common->txdata_f[sfn][tx_symb],
-                             txbuf_time);
-  } else {
+  } else if (common->pilot_symbols_tx[tx_symb] == NO_PILOT) {
     ofdmframegen_writesymbol_nopilot(phy->fg, common->txdata_f[sfn][tx_symb],
                                      txbuf_time);
+  } else {
+    ofdmframegen_writesymbol(phy->fg, common->txdata_f[sfn][tx_symb],
+                             txbuf_time);
   }
 
   // clear frequency domain memory of the written symbol, to avoid sending
@@ -628,24 +632,17 @@ void phy_bs_rx_symbol(PhyBS phy, float complex *rxbuf_time) {
     uint userid = phy->ul_symbol_alloc[sfn % 2][common->rx_symbol];
     ofdmframesync fs = mac_bs_get_receiver(phy->mac, userid);
     if (fs != NULL) {
-      // if this is the first symbol of a slot, soft reset the
-      // sync object
-      uint prev_rx_symb = (common->rx_symbol - 1) % SUBFRAME_LEN;
-      if (common->rx_symbol == 0 ||
-          phy->ul_symbol_alloc[sfn % 2][prev_rx_symb] == 0) {
+      // if this is the first symbol of a slot, soft reset the sync object
+      if (common->pilot_symbols_rx[common->rx_symbol] == PILOT_RESET) {
         ofdmframesync_reset_soft(fs);
       }
 
-      if (common->pilot_symbols_rx[common->rx_symbol] == PILOT) {
-        ofdmframesync_reset_msequence(fs);
+      if (common->pilot_symbols_rx[common->rx_symbol] == NO_PILOT) {
+        ofdmframesync_execute_nopilot(fs, rxbuf_time, rx_sym);
+      } else {
         ofdmframesync_execute(fs, rxbuf_time, rx_sym);
         LOG_SFN_PHY(TRACE, "[PHY BS] cfo was: %.3fHz\n",
                     ofdmframesync_get_cfo(fs) * samplerate / 6.28);
-        // ofdmframesync_set_cfo(fs,0); // TODO cfo estimation. Currently not
-        // working since we often receive if no data is sent. -> wrong pilot ->
-        // wrong cfo
-      } else {
-        ofdmframesync_execute_nopilot(fs, rxbuf_time, rx_sym);
       }
     }
   }
