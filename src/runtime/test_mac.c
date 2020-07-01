@@ -4,28 +4,30 @@
  * Copyright (C) 2020 Lukas Ostendorf <lukas.ostendorf@gmail.com>
  *                    and the project contributors
  *
- * This library is free software; you can redistribute it and/or modify it under the terms of the
- * GNU Lesser General Public License as published by the Free Software Foundation; version 3.0.
+ * This library is free software; you can redistribute it and/or modify it under
+ * the terms of the GNU Lesser General Public License as published by the Free
+ * Software Foundation; version 3.0.
  *
- * This library is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
- * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU Lesser General Public License for more details.
+ * This library is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for more
+ * details.
  *
- * You should have received a copy of the GNU Lesser General Public License along with this library;
- * if not, write to the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
- * Boston, MA 02110-1301 USA
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this library; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "../mac/mac_ue.h"
 #include "../mac/mac_bs.h"
-#include "../phy/phy_ue.h"
+#include "../mac/mac_ue.h"
 #include "../phy/phy_bs.h"
+#include "../phy/phy_ue.h"
 #include "../platform/platform_simulation.h"
 
 #include "test.h"
 
 // size of a mac data frame in bytes [VoIP data + UDP + IP + Ethernet header]
-#define payload_size (20+8+20+14)
+#define payload_size (20 + 8 + 20 + 14)
 // how often mac data frames will be sent in ms
 #define PACKETIZATION_TIME 20
 
@@ -36,10 +38,10 @@
 uint8_t phy_ul[FRAME_LEN][4][MAX_SLOT_DATA];
 uint8_t phy_dl[FRAME_LEN][4][MAX_SLOT_DATA];
 
-uint32_t phy_ul_tot_bits=0;
-uint32_t phy_ul_biterr=0;
-uint32_t phy_dl_tot_bits=0;
-uint32_t phy_dl_biterr=0;
+uint32_t phy_ul_tot_bits = 0;
+uint32_t phy_ul_biterr = 0;
+uint32_t phy_dl_tot_bits = 0;
+uint32_t phy_dl_biterr = 0;
 
 // MAC test variables
 int mac_dl_timestamps[num_simulated_subframes];
@@ -59,275 +61,276 @@ uint buflen;
 platform bs;
 platform client;
 
-uint get_sim_time_msec()
-{
-	float time =  1000.0*(global_sfn*SUBFRAME_LEN + global_symbol)*(nfft+cp_len)/samplerate;
-	return time;
+uint get_sim_time_msec() {
+  float time = 1000.0 * (global_sfn * SUBFRAME_LEN + global_symbol) *
+               (nfft + cp_len) / samplerate;
+  return time;
 }
 
-int run_simulation(uint num_subframes, uint mcs)
-{
-	uint subframe_cnt = 0;
-	global_sfn = 0;
-	global_symbol = 0;
-	// offset stores the currently compensated TX advance
-	// tx_shift stores the shift within the buffer that is caused by the offset
-	int offset=0, tx_shift=0, num_samples=buflen;
+int run_simulation(uint num_subframes, uint mcs) {
+  uint subframe_cnt = 0;
+  global_sfn = 0;
+  global_symbol = 0;
+  // offset stores the currently compensated TX advance
+  // tx_shift stores the shift within the buffer that is caused by the offset
+  int offset = 0, tx_shift = 0, num_samples = buflen;
 
-	// Buffers for simulation
-	float complex dl_data[nfft+cp_len];
-	float complex ul_data_tx[nfft+cp_len];
-	float complex ul_data_rx[nfft+cp_len];
+  // Buffers for simulation
+  float complex dl_data[nfft + cp_len];
+  float complex ul_data_tx[nfft + cp_len];
+  float complex ul_data_rx[nfft + cp_len];
 
-	uint last_tx = get_sim_time_msec();
-	uint packet_id = 0;
+  uint last_tx = get_sim_time_msec();
+  uint packet_id = 0;
 
-	while (subframe_cnt<num_subframes)
-	{
-		// Change MCS at some point
-		if (1) {
-			//mac_bs_set_mcs(mac_bs,2,mcs,DL);
-			//mac_bs_set_mcs(mac_bs,2,mcs,UL);
-			// hard set instead of signaling.
-			if (mac_bs->UE[2])  {
-				mac_bs->UE[2]->dl_mcs = mcs;
-				mac_bs->UE[2]->ul_mcs = mcs;
-			}
-			phy_ue->mcs_dl = mcs;
-			mac_ue->dl_mcs = mcs;
-			mac_ue->ul_mcs = mcs;
-		}
+  while (subframe_cnt < num_subframes) {
+    // Change MCS at some point
+    if (1) {
+      // mac_bs_set_mcs(mac_bs,2,mcs,DL);
+      // mac_bs_set_mcs(mac_bs,2,mcs,UL);
+      // hard set instead of signaling.
+      if (mac_bs->UE[2]) {
+        mac_bs->UE[2]->dl_mcs = mcs;
+        mac_bs->UE[2]->ul_mcs = mcs;
+      }
+      phy_ue->mcs_dl = mcs;
+      mac_ue->dl_mcs = mcs;
+      mac_ue->ul_mcs = mcs;
+    }
 
-		// Add some data every 20ms
-		if (get_sim_time_msec() - last_tx > PACKETIZATION_TIME) {
-			last_tx = get_sim_time_msec();
-			LOG(INFO,"Prepare frame %d\n",packet_id);
-			// add some data to send
+    // Add some data every 20ms
+    if (get_sim_time_msec() - last_tx > PACKETIZATION_TIME) {
+      last_tx = get_sim_time_msec();
+      LOG(INFO, "Prepare frame %d\n", packet_id);
+      // add some data to send
 #if BS_SEND_ENABLE
-            MacDataFrame dl_frame = dataframe_create(payload_size);
-			for (int i=0; i<payload_size; i++)
-				dl_frame->data[i] = rand() & 0xFF;
-			memcpy(dl_frame->data,&packet_id,sizeof(uint));
-			if(!mac_bs_add_txdata(mac_bs, 2, dl_frame))
-				dataframe_destroy(dl_frame);
-			mac_dl_timestamps[packet_id] = -global_sfn*SUBFRAME_LEN - global_symbol;
+      MacDataFrame dl_frame = dataframe_create(payload_size);
+      for (int i = 0; i < payload_size; i++)
+        dl_frame->data[i] = rand() & 0xFF;
+      memcpy(dl_frame->data, &packet_id, sizeof(uint));
+      if (!mac_bs_add_txdata(mac_bs, 2, dl_frame))
+        dataframe_destroy(dl_frame);
+      mac_dl_timestamps[packet_id] = -global_sfn * SUBFRAME_LEN - global_symbol;
 #endif
 #if CLIENT_SEND_ENABLE
-			// add some data to send for client
-			MacDataFrame ul_frame = dataframe_create(payload_size);
-			for (int i=0; i<payload_size; i++)
-				ul_frame->data[i] = rand() & 0xFF;
-			memcpy(ul_frame->data,&packet_id,sizeof(uint));
-			mac_ul_timestamps[packet_id] = -global_sfn*SUBFRAME_LEN - global_symbol;
+      // add some data to send for client
+      MacDataFrame ul_frame = dataframe_create(payload_size);
+      for (int i = 0; i < payload_size; i++)
+        ul_frame->data[i] = rand() & 0xFF;
+      memcpy(ul_frame->data, &packet_id, sizeof(uint));
+      mac_ul_timestamps[packet_id] = -global_sfn * SUBFRAME_LEN - global_symbol;
 
-			if(!mac_ue_add_txdata(mac_ue, ul_frame)) {
-				dataframe_destroy(ul_frame);
-			}
+      if (!mac_ue_add_txdata(mac_ue, ul_frame)) {
+        dataframe_destroy(ul_frame);
+      }
 #endif
-			packet_id++;
-		}
+      packet_id++;
+    }
 
-		// run BS scheduler
-		if (phy_bs->common->tx_symbol==0)
-			mac_bs_run_scheduler(mac_bs);
+    // run BS scheduler
+    if (phy_bs->common->tx_symbol == 0)
+      mac_bs_run_scheduler(mac_bs);
 
-		// BS TX
-		phy_bs_write_symbol(phy_bs, dl_data);
-		bs->platform_tx_prep(bs, dl_data, 0, buflen);
-		bs->platform_tx_push(bs);
+    // BS TX
+    phy_bs_write_symbol(phy_bs, dl_data);
+    bs->platform_tx_prep(bs, dl_data, 0, buflen);
+    bs->platform_tx_push(bs);
 
-		// Client RXTX
-		if (!phy_ue->has_synced_once) {
-			// Initial sync
-			// TODO edge case for offset=68
-			client->platform_rx(client, dl_data);
-			offset = phy_ue_initial_sync(phy_ue, dl_data, nfft+cp_len);
-			if (offset>0) {
-				// receive remaining symbols
-				phy_ue_do_rx(phy_ue, dl_data+offset, nfft+cp_len-offset);
-				phy_ue->rx_offset =  offset;
+    // Client RXTX
+    if (!phy_ue->has_synced_once) {
+      // Initial sync
+      // TODO edge case for offset=68
+      client->platform_rx(client, dl_data);
+      offset = phy_ue_initial_sync(phy_ue, dl_data, nfft + cp_len);
+      if (offset > 0) {
+        // receive remaining symbols
+        phy_ue_do_rx(phy_ue, dl_data + offset, nfft + cp_len - offset);
+        phy_ue->rx_offset = offset;
 
-				offset = -phy_ue->rx_offset;	// TODO use rx offset to align tx
-				tx_shift = phy_ue->rx_offset;
-				num_samples = buflen-tx_shift;
-			}
-		} else {
-			// ---------- RX ------------
-			client->platform_rx(client, dl_data);
-			// process samples
-			phy_ue_do_rx(phy_ue, dl_data, nfft+cp_len);
-			// Run scheduler after DLCTRL slot was received
-			if (phy_ue->common->rx_symbol == DLCTRL_LEN) {
-				mac_ue_run_scheduler(mac_ue);
-			}
+        offset = -phy_ue->rx_offset; // TODO use rx offset to align tx
+        tx_shift = phy_ue->rx_offset;
+        num_samples = buflen - tx_shift;
+      }
+    } else {
+      // ---------- RX ------------
+      client->platform_rx(client, dl_data);
+      // process samples
+      phy_ue_do_rx(phy_ue, dl_data, nfft + cp_len);
+      // Run scheduler after DLCTRL slot was received
+      if (phy_ue->common->rx_symbol == DLCTRL_LEN) {
+        mac_ue_run_scheduler(mac_ue);
+      }
 
-			// --------- TX ------------
-			// create tx time data
-			// first add the last samples from the previous generated symbol
-			client->platform_tx_prep(client, ul_data_tx+num_samples, 0, tx_shift);
-			// create new symbol
-			phy_ue_write_symbol(phy_ue, ul_data_tx);
+      // --------- TX ------------
+      // create tx time data
+      // first add the last samples from the previous generated symbol
+      client->platform_tx_prep(client, ul_data_tx + num_samples, 0, tx_shift);
+      // create new symbol
+      phy_ue_write_symbol(phy_ue, ul_data_tx);
 
-			// prepare first part of the new symbol
-			client->platform_tx_prep(client, ul_data_tx, tx_shift, num_samples);
+      // prepare first part of the new symbol
+      client->platform_tx_prep(client, ul_data_tx, tx_shift, num_samples);
 
-			// push buffer
-			client->platform_tx_push(client);
+      // push buffer
+      client->platform_tx_push(client);
 
-			// update timing offset for tx. TODO explain chosen tx_Symbol idx
-			if (phy_ue->common->tx_symbol == 29 && phy_ue->common->tx_subframe == 0) {
-				// check if offset has changed
-				int new_offset = phy_ue->mac->timing_advance - phy_ue->rx_offset;
-				int diff = new_offset - offset;
-				if (abs(diff)>0) {
-					LOG(INFO,"[Runtime] adapt tx offset. diff: %d old txshift: %d\n",diff, tx_shift);
+      // update timing offset for tx. TODO explain chosen tx_Symbol idx
+      if (phy_ue->common->tx_symbol == 29 && phy_ue->common->tx_subframe == 0) {
+        // check if offset has changed
+        int new_offset = phy_ue->mac->timing_advance - phy_ue->rx_offset;
+        int diff = new_offset - offset;
+        if (abs(diff) > 0) {
+          LOG(INFO, "[Runtime] adapt tx offset. diff: %d old txshift: %d\n",
+              diff, tx_shift);
 
-					// if offset shift-diff is <0, we have to skip ofdm symbols
-					while (tx_shift - diff < 0) {
-						phy_ue->common->tx_symbol+=1;
-						diff-=buflen;
-					}
-					while (tx_shift - diff >=buflen) {
-						phy_ue->common->tx_symbol-=1;
-						diff+=buflen;
-					}
-					tx_shift = tx_shift - diff;
-					offset = new_offset;
-					num_samples = buflen - tx_shift;
-				}
-			}
-		} // end(client RXTX)
+          // if offset shift-diff is <0, we have to skip ofdm symbols
+          while (tx_shift - diff < 0) {
+            phy_ue->common->tx_symbol += 1;
+            diff -= buflen;
+          }
+          while (tx_shift - diff >= buflen) {
+            phy_ue->common->tx_symbol -= 1;
+            diff += buflen;
+          }
+          tx_shift = tx_shift - diff;
+          offset = new_offset;
+          num_samples = buflen - tx_shift;
+        }
+      }
+    } // end(client RXTX)
 
-		// BS RX
-		bs->platform_rx(bs, ul_data_rx);
-		phy_bs_rx_symbol(phy_bs, ul_data_rx);
+    // BS RX
+    bs->platform_rx(bs, ul_data_rx);
+    phy_bs_rx_symbol(phy_bs, ul_data_rx);
 
-		global_symbol = (global_symbol+1) % SUBFRAME_LEN;
-		if (global_symbol==0) {
-			subframe_cnt++;
-			global_sfn++;
-		}
+    global_symbol = (global_symbol + 1) % SUBFRAME_LEN;
+    if (global_symbol == 0) {
+      subframe_cnt++;
+      global_sfn++;
+    }
 
-		// show progress
-		if (subframe_cnt%1000==0 && global_symbol==0)
-			printf("Processed %d subframes...\n",subframe_cnt);
+    // show progress
+    if (subframe_cnt % 1000 == 0 && global_symbol == 0)
+      printf("Processed %d subframes...\n", subframe_cnt);
 
-		// Log stats
-		if (subframe_cnt%10000==0 && global_symbol==0) {
-			// PHY
-			printf("PHY BS: %d bit rx, %d biterrors\n",phy_ul_tot_bits,phy_ul_biterr);
-			printf("PHY UE: %d bit rx, %d biterrors\n",phy_dl_tot_bits,phy_dl_biterr);
-			// MAC
-			printf("MAC UE channels received:fail %d:%d\n",mac_ue->stats.chan_rx_succ,mac_ue->stats.chan_rx_fail);
-			printf("       bytes rx: %d bytes tx: %d\n",mac_ue->stats.bytes_rx, mac_ue->stats.bytes_tx);
-		}
-	}
+    // Log stats
+    if (subframe_cnt % 10000 == 0 && global_symbol == 0) {
+      // PHY
+      printf("PHY BS: %d bit rx, %d biterrors\n", phy_ul_tot_bits,
+             phy_ul_biterr);
+      printf("PHY UE: %d bit rx, %d biterrors\n", phy_dl_tot_bits,
+             phy_dl_biterr);
+      // MAC
+      printf("MAC UE channels received:fail %d:%d\n",
+             mac_ue->stats.chan_rx_succ, mac_ue->stats.chan_rx_fail);
+      printf("       bytes rx: %d bytes tx: %d\n", mac_ue->stats.bytes_rx,
+             mac_ue->stats.bytes_tx);
+    }
+  }
 
-	printf("PHY BS: %d bit rx, %d biterrors\n",phy_ul_tot_bits,phy_ul_biterr);
-	printf("PHY UE: %d bit rx, %d biterrors\n",phy_dl_tot_bits,phy_dl_biterr);
-	// MAC
-	printf("MAC UE channels received:fail %d:%d\n",mac_ue->stats.chan_rx_succ,mac_ue->stats.chan_rx_fail);
-	printf("       bytes rx: %d bytes tx: %d\n",mac_ue->stats.bytes_rx, mac_ue->stats.bytes_tx);
+  printf("PHY BS: %d bit rx, %d biterrors\n", phy_ul_tot_bits, phy_ul_biterr);
+  printf("PHY UE: %d bit rx, %d biterrors\n", phy_dl_tot_bits, phy_dl_biterr);
+  // MAC
+  printf("MAC UE channels received:fail %d:%d\n", mac_ue->stats.chan_rx_succ,
+         mac_ue->stats.chan_rx_fail);
+  printf("       bytes rx: %d bytes tx: %d\n", mac_ue->stats.bytes_rx,
+         mac_ue->stats.bytes_tx);
 
-	return 0;
+  return 0;
 }
 
-void setup_simulation(float snr, float cfo)
-{
-	// Setup the hardware
-	bs = platform_init_simulation(buflen, snr, cfo);
-	client = platform_init_simulation(buflen, snr, cfo);
-	simulation_connect(bs, client);
+void setup_simulation(float snr, float cfo) {
+  // Setup the hardware
+  bs = platform_init_simulation(buflen, snr, cfo);
+  client = platform_init_simulation(buflen, snr, cfo);
+  simulation_connect(bs, client);
 
-	// Create PHY and MAC instances
-	phy_ue = phy_ue_init();
-	phy_bs = phy_bs_init();
-	mac_ue = mac_ue_init();
-	mac_bs = mac_bs_init();
+  // Create PHY and MAC instances
+  phy_ue = phy_ue_init();
+  phy_bs = phy_bs_init();
+  mac_ue = mac_ue_init();
+  mac_bs = mac_bs_init();
 
-	phy_ue_set_mac_interface(phy_ue, mac_ue_rx_channel, mac_ue);
-	mac_ue_set_phy_interface(mac_ue, phy_ue);
-	phy_ue_set_platform_interface(phy_ue, client);
-    phy_bs_set_mac_interface(phy_bs, mac_bs);
-	mac_bs_set_phy_interface(mac_bs, phy_bs);
+  phy_ue_set_mac_interface(phy_ue, mac_ue_rx_channel, mac_ue);
+  mac_ue_set_phy_interface(mac_ue, phy_ue);
+  phy_ue_set_platform_interface(phy_ue, client);
+  phy_bs_set_mac_interface(phy_bs, mac_bs);
+  mac_bs_set_phy_interface(mac_bs, phy_bs);
 
+  // init mac delay measurements
+  for (int i = 0; i < num_simulated_subframes; i++) {
+    mac_dl_timestamps[i] = -1;
+    mac_ul_timestamps[i] = -1;
+  }
 
-	// init mac delay measurements
-	for (int i=0; i<num_simulated_subframes; i++) {
-		mac_dl_timestamps[i] = -1;
-		mac_ul_timestamps[i] = -1;
-	}
-
-	// init phy measurements
-	phy_ul_tot_bits=0;
-	phy_ul_biterr=0;
-	phy_dl_tot_bits=0;
-	phy_dl_biterr=0;
+  // init phy measurements
+  phy_ul_tot_bits = 0;
+  phy_ul_biterr = 0;
+  phy_dl_tot_bits = 0;
+  phy_dl_biterr = 0;
 }
 
-void clean_simulation()
-{
-	phy_bs_destroy(phy_bs);
-	phy_ue_destroy(phy_ue);
-	mac_bs_destroy(mac_bs);
-	mac_ue_destroy(mac_ue);
-	bs->end(bs);
-	client->end(client);
+void clean_simulation() {
+  phy_bs_destroy(phy_bs);
+  phy_ue_destroy(phy_ue);
+  mac_bs_destroy(mac_bs);
+  mac_ue_destroy(mac_ue);
+  bs->end(bs);
+  client->end(client);
 }
 
-int main(int argc, char* argv[])
-{
-    // load default configuration
-    phy_config_default_64();
-    buflen = nfft+cp_len;
+int main(int argc, char *argv[]) {
+  // load default configuration
+  phy_config_default_64();
+  buflen = nfft + cp_len;
 
-	// Arrays to store biterror rates. First index: MCS, second index: SNR
-	double biterr_ul_array[8][50]= {0};
-	double biterr_dl_array[8][50]= {0};
-	int mcs=0;
-	float cfo = 100;
+  // Arrays to store biterror rates. First index: MCS, second index: SNR
+  double biterr_ul_array[8][50] = {0};
+  double biterr_dl_array[8][50] = {0};
+  int mcs = 0;
+  float cfo = 100;
 
-	if (argc==2) {
-		char * ptr;
-		mcs = strtol(argv[1],&ptr, 10);
-	}
+  if (argc == 2) {
+    char *ptr;
+    mcs = strtol(argv[1], &ptr, 10);
+  }
 
-	for (int snr= 25; snr<40; snr+=1) {
-		printf("Starting simulation with SNR %ddB mcs%d\n",snr,mcs);
+  for (int snr = 25; snr < 40; snr += 1) {
+    printf("Starting simulation with SNR %ddB mcs%d\n", snr, mcs);
 
-		setup_simulation(snr, cfo);
-		run_simulation(num_simulated_subframes, mcs);
-		clean_simulation();
+    setup_simulation(snr, cfo);
+    run_simulation(num_simulated_subframes, mcs);
+    clean_simulation();
 
-		char filename[40];
-		sprintf(filename,"sim/mac_dl_delays_mcs%d_snr%d",mcs,snr);
-		FILE* fd = fopen(filename,"w");
-		if (fd) {
-			fwrite(mac_dl_timestamps,sizeof(int),num_simulated_subframes,fd);
-			fclose(fd);
-		}
+    char filename[40];
+    sprintf(filename, "sim/mac_dl_delays_mcs%d_snr%d", mcs, snr);
+    FILE *fd = fopen(filename, "w");
+    if (fd) {
+      fwrite(mac_dl_timestamps, sizeof(int), num_simulated_subframes, fd);
+      fclose(fd);
+    }
 
-		sprintf(filename,"sim/mac_ul_delays_mcs%d_snr%d",mcs,snr);
-		fd = fopen(filename,"w");
-		if (fd) {
-			fwrite(mac_ul_timestamps,sizeof(int),num_simulated_subframes,fd);
-			fclose(fd);
-		}
+    sprintf(filename, "sim/mac_ul_delays_mcs%d_snr%d", mcs, snr);
+    fd = fopen(filename, "w");
+    if (fd) {
+      fwrite(mac_ul_timestamps, sizeof(int), num_simulated_subframes, fd);
+      fclose(fd);
+    }
 
-		//log biterr
-		biterr_ul_array[mcs][snr] = (double)phy_ul_biterr / phy_ul_tot_bits;
-		biterr_dl_array[mcs][snr] = (double)phy_dl_biterr / phy_dl_tot_bits;
-	}
+    // log biterr
+    biterr_ul_array[mcs][snr] = (double)phy_ul_biterr / phy_ul_tot_bits;
+    biterr_dl_array[mcs][snr] = (double)phy_dl_biterr / phy_dl_tot_bits;
+  }
 
-	printf("biterr_ul(%d,:) = [",mcs+1);
-	for (int snr=0; snr<50; snr++) {
-		printf("%.12f ",biterr_ul_array[mcs][snr]);
-	}
-	printf("];\n");
+  printf("biterr_ul(%d,:) = [", mcs + 1);
+  for (int snr = 0; snr < 50; snr++) {
+    printf("%.12f ", biterr_ul_array[mcs][snr]);
+  }
+  printf("];\n");
 
-	printf("biterr_dl(%d,:) = [",mcs+1);
-	for (int snr=0; snr<50; snr++) {
-		printf("%.12f ",biterr_dl_array[mcs][snr]);
-	}
-	printf("];");
+  printf("biterr_dl(%d,:) = [", mcs + 1);
+  for (int snr = 0; snr < 50; snr++) {
+    printf("%.12f ", biterr_dl_array[mcs][snr]);
+  }
+  printf("];");
 }
