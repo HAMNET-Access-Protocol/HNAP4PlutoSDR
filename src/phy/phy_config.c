@@ -22,6 +22,7 @@
 #include "../util/log.h"
 #include <libconfig.h>
 #include <liquid/liquid.h>
+#include <string.h>
 
 void phy_config_load_file(char *config_file) {
   config_t cfg;
@@ -134,7 +135,10 @@ void phy_config_default_64() {
   num_data_sc = 32;
   num_pilot_sc = 8;
   pilot_symbols_per_slot = 7;
-  pilot_symbols = calloc(SLOT_LEN, 1);
+
+  pilot_symbols = malloc(SLOT_LEN);
+  memset(pilot_symbols, NO_PILOT, SLOT_LEN);
+  pilot_symbols[0] = PILOT_RESET;
   for (int i = 0; i < SLOT_LEN; i += 2)
     pilot_symbols[i] = PILOT;
 

@@ -76,8 +76,8 @@ enum {
   DATA,
   PTT_UP,
   PTT_DOWN
-};                        // definition for tx_symbol allocation variable
-enum { NO_PILOT, PILOT }; // definition for pilot_symbols variable
+}; // definition for tx_symbol allocation variable
+enum { NO_PILOT, PILOT, PILOT_RESET }; // definition for pilot_symbols variable
 
 // ---------------------------- global PHY layer configurtion
 // --------------------------------- //

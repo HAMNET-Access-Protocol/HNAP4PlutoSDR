@@ -218,13 +218,16 @@ void gen_pilot_symbols(PhyCommon phy, uint is_bs) {
   memset(pilot_ul, NO_PILOT, SUBFRAME_LEN);
 
   // DL: dlctrl slot uses pilots
-  memset(&pilot_dl[0], PILOT, DLCTRL_LEN);
+  pilot_dl[0] = PILOT_RESET;
+  pilot_dl[1] = PILOT;
 
   // replicate slot allocation for one slot over the subframe
   for (int slot_nr = 0; slot_nr < NUM_SLOT; slot_nr++) {
     int slot_start = DLCTRL_LEN + 2 * SLOT_GUARD_INTERVAL +
                      slot_nr * (SLOT_LEN + SLOT_GUARD_INTERVAL);
     memcpy(&pilot_dl[slot_start], pilot_symbols, SLOT_LEN);
+    pilot_dl[slot_start] = PILOT_RESET; // force first symbol of the slot to
+                                        // contain the pilot sequence reset flag
   }
 
   // Pilot symbols within subframe in UL
@@ -236,7 +239,15 @@ void gen_pilot_symbols(PhyCommon phy, uint is_bs) {
   memcpy(&pilot_ul[3 * (SLOT_LEN + SLOT_GUARD_INTERVAL) + NUM_ULCTRL_SLOT * 2],
          pilot_symbols, SLOT_LEN);
 
+  // force first symbol of the slot to contain the pilot sequence reset flag
+  pilot_ul[0] = PILOT_RESET;
+  pilot_ul[SLOT_LEN + SLOT_GUARD_INTERVAL] = PILOT_RESET;
+  pilot_ul[2 * (SLOT_LEN + SLOT_GUARD_INTERVAL) + NUM_ULCTRL_SLOT * 2] =
+      PILOT_RESET;
+  pilot_ul[3 * (SLOT_LEN + SLOT_GUARD_INTERVAL) + NUM_ULCTRL_SLOT * 2] =
+      PILOT_RESET;
+
   // ulctrl slots
-  pilot_ul[2 * (SLOT_LEN + SLOT_GUARD_INTERVAL)] = PILOT;
-  pilot_ul[2 * (SLOT_LEN + SLOT_GUARD_INTERVAL) + 2] = PILOT;
+  pilot_ul[2 * (SLOT_LEN + SLOT_GUARD_INTERVAL)] = PILOT_RESET;
+  pilot_ul[2 * (SLOT_LEN + SLOT_GUARD_INTERVAL) + 2] = PILOT_RESET;
 }
