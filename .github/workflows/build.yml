@@ -1,6 +1,6 @@
 name: Build
 
-on: [push, pull_request]
+on: [push]
 
 jobs:
   build:
@@ -15,17 +15,20 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt install libfftw3-dev libconfig-dev automake autoconf
-    - name: Build Simulation Targets
+    - name: Build libfec
       run: |
         cd libfec
         ./configure
         sudo make install
-        cd ../liquid-dsp
+    - name: Build liquid-dsp
+      run: |
+        cd liquid-dsp
         ./bootstrap.sh
         ./configure
         sudo make install
         sudo ldconfig
-        cd ..
+    - name: Build Simulation Targets
+      run: |
         mkdir cmake-build-simulation
         cd cmake-build-simulation
         cmake -DCMAKE_BUILD_TYPE=Debug ..
