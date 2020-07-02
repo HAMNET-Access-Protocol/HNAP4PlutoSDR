@@ -10,6 +10,27 @@ include_directories(src/platform)
 include_directories(src/runtime)
 include_directories(src/util)
 
+### Create version.h files to include version info in the executables
+# get branch
+execute_process(
+        COMMAND git rev-parse --abbrev-ref HEAD
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE GIT_BRANCH
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+# get latest tag and commit hash
+execute_process(
+        COMMAND git describe --tags
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE GIT_TAG
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+
+message(STATUS "Git current branch: ${GIT_BRANCH}")
+message(STATUS "Git tag: ${GIT_TAG}")
+message(STATUS "Generating version.h")
+configure_file(src/runtime/version.h.in version.h)
+include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
 ### Group source files to PHY and MAC layer for UE/BS respectively
 
