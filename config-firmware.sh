@@ -5,8 +5,8 @@
 #Path to the plutosdr firmware directory
 PLUTOSDR_FW_ROOTOVERLAY=$HOME/plutosdr-fw/rootfs-overlay
 
-#Path to pluto sysroot directory
-PLUTO_SYSROOT_DIR=$HOME/pluto-0.31.sysroot
+#Check if env variable for Path to pluto sysroot directory exists
+: "${PLUTO_SYSROOT_DIR?Need to set PLUTO_SYSROOT_DIR}"
 
 SCRIPT_DIR=`pwd`/`dirname "$0"`
 cd $SCRIPT_DIR
