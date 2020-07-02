@@ -15,15 +15,16 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt install libfftw3-dev libconfig-dev automake autoconf
-    - name: Build Simulation Target
+    - name: Build Simulation Targets
       run: |
         cd libfec
         ./configure
-        make install
+        sudo make install
         cd ../liquid-dsp
         ./bootstrap.sh
         ./configure
-        make install
+        sudo make install
+        sudo ldconfig
         cd ..
         mkdir cmake-build-simulation
         cd cmake-build-simulation
