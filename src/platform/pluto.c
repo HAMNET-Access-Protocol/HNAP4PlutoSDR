@@ -431,7 +431,7 @@ void init_generic(platform hw, uint buf_len, char *config_file) {
   // Set RX AGC to slow attack
   get_phy_chan(pluto->ctx, RX, 0, &chn);
   wr_ch_str(chn, "gain_control_mode",
-            "slow_attack"); // fast_attack, slow_attack, manual
+            "fast_attack"); // fast_attack, slow_attack, manual
                             // wr_ch_lli(chn, "hardwaregain", 26.0);
 
   printf("* Enabling IIO streaming channels\n");
