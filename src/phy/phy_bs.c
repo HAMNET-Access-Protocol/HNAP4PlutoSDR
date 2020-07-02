@@ -70,6 +70,12 @@ PhyBS phy_bs_init() {
   phy->ul_symbol_alloc[0] = calloc(sizeof(uint8_t) * SUBFRAME_LEN, 1);
   phy->ul_symbol_alloc[1] = calloc(sizeof(uint8_t) * SUBFRAME_LEN, 1);
 
+  phy->dl_symbol_alloc = malloc(sizeof(uint8_t *) * 2);
+  phy->dl_symbol_alloc[0] = calloc(SUBFRAME_LEN, 1);
+  phy->dl_symbol_alloc[1] = calloc(SUBFRAME_LEN, 1);
+  memset(phy->dl_symbol_alloc[0], DATA, DLCTRL_LEN);
+  memset(phy->dl_symbol_alloc[1], DATA, DLCTRL_LEN);
+
   // allocate memory for rach_buffer
   phy->rach_buffer = calloc(sizeof(float complex) * nfft, 1);
 
@@ -270,11 +276,20 @@ void phy_map_dlctrl(PhyBS phy, uint subframe) {
 }
 
 // Set the assignments of Downlink data slots
-void phy_assign_dlctrl_dd(PhyBS phy, uint8_t *slot_assignment) {
+void phy_assign_dlctrl_dd(PhyBS phy, uint subframe, uint8_t *slot_assignment) {
   for (int i = 0; i < NUM_SLOT; i += 2) {
     phy->dlctrl_buf[i / 2].h4 = slot_assignment[i];
     phy->dlctrl_buf[i / 2].l4 = slot_assignment[i + 1];
   }
+  // set allocation with ofdm symbol granularity.
+  memset(&phy->dl_symbol_alloc[subframe][4],
+         slot_assignment[0] == 0 ? NOT_USED : DATA, SLOT_LEN);
+  memset(&phy->dl_symbol_alloc[subframe][4 + SLOT_LEN + 1],
+         slot_assignment[1] == 0 ? NOT_USED : DATA, SLOT_LEN);
+  memset(&phy->dl_symbol_alloc[subframe][4 + 2 * (SLOT_LEN + 1)],
+         slot_assignment[2] == 0 ? NOT_USED : DATA, SLOT_LEN);
+  memset(&phy->dl_symbol_alloc[subframe][4 + 3 * (SLOT_LEN + 1)],
+         slot_assignment[3] == 0 ? NOT_USED : DATA, SLOT_LEN);
 }
 
 // Set the assignments of Uplink data slots
@@ -558,12 +573,16 @@ void phy_bs_write_symbol(PhyBS phy, float complex *txbuf_time) {
   } else if (common->tx_subframe == 0 &&
              tx_symb == SUBFRAME_LEN - 1 - SYNC_SYMBOLS + 3) {
     phy_bs_write_sync_info(phy, txbuf_time);
-  } else if (common->pilot_symbols_tx[tx_symb] == NO_PILOT) {
-    ofdmframegen_writesymbol_nopilot(phy->fg, common->txdata_f[sfn][tx_symb],
-                                     txbuf_time);
+  } else if (phy->dl_symbol_alloc[sfn][tx_symb] == DATA) {
+    if (common->pilot_symbols_tx[tx_symb] == NO_PILOT) {
+      ofdmframegen_writesymbol_nopilot(phy->fg, common->txdata_f[sfn][tx_symb],
+                                       txbuf_time);
+    } else {
+      ofdmframegen_writesymbol(phy->fg, common->txdata_f[sfn][tx_symb],
+                               txbuf_time);
+    }
   } else {
-    ofdmframegen_writesymbol(phy->fg, common->txdata_f[sfn][tx_symb],
-                             txbuf_time);
+    memset(txbuf_time, 0, sizeof(float complex) * (nfft + cp_len));
   }
 
   // clear frequency domain memory of the written symbol, to avoid sending

@@ -642,7 +642,8 @@ void mac_bs_run_scheduler(MacBS mac) {
   }
 
   // 4. set slot assignments in PHY
-  phy_assign_dlctrl_dd(mac->phy, mac->dl_data_assignments[next_sfn]);
+  phy_assign_dlctrl_dd(mac->phy, next_sfn % 2,
+                       mac->dl_data_assignments[next_sfn]);
   phy_assign_dlctrl_ud(mac->phy, next_sfn % 2,
                        mac->ul_data_assignments[next_sfn]);
   phy_assign_dlctrl_uc(mac->phy, next_sfn % 2,
