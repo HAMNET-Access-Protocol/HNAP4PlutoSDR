@@ -69,6 +69,10 @@ PhyUE phy_ue_init() {
   phy->ul_symbol_alloc[0] = calloc(sizeof(uint8_t) * SUBFRAME_LEN, 1);
   phy->ul_symbol_alloc[1] = calloc(sizeof(uint8_t) * SUBFRAME_LEN, 1);
 
+  phy->dl_symbol_alloc = calloc(SUBFRAME_LEN, 1);
+  memset(phy->dl_symbol_alloc, DATA,
+         DLCTRL_LEN); // always listen for dlctrl slot
+
   phy->mac_rx_cb = NULL;
   phy->has_synced_once = 0;
 
@@ -255,6 +259,15 @@ int phy_ue_proc_dlctrl(PhyUE phy) {
     idx++;
   }
 
+  // assign which for which symbols we have to do rx
+  memset(&phy->dl_symbol_alloc[DLCTRL_LEN + 2], NOT_USED,
+         NUM_SLOT * (SLOT_LEN + SLOT_GUARD_INTERVAL));
+  for (int i = 0; i < NUM_SLOT; i++) {
+    if (phy->dlslot_assignments[sfn][i] != NOT_ASSIGNED)
+      memset(&phy->dl_symbol_alloc[DLCTRL_LEN + 2 +
+                                   (SLOT_LEN + SLOT_GUARD_INTERVAL) * i],
+             DATA, SLOT_LEN);
+  }
   // Pass slot assignment to MAC
   mac_ue_set_assignments(phy->mac, phy->dlslot_assignments[sfn],
                          phy->ulslot_assignments[sfn],
@@ -624,7 +637,7 @@ void phy_ue_do_rx(PhyUE phy, float complex *rxbuf_time, uint num_samples) {
       } else {
         remaining_samps = 0;
       }
-    } else {
+    } else if (phy->dl_symbol_alloc[common->rx_symbol] == DATA) {
       // receive symbols
       // reset msequence for pilot reception every slot
       if (common->pilot_symbols_rx[common->rx_symbol] == PILOT_RESET)
@@ -639,6 +652,13 @@ void phy_ue_do_rx(PhyUE phy, float complex *rxbuf_time, uint num_samples) {
       } else {
         ofdmframesync_execute_nopilot(phy->fs, rxbuf_time, rx_sym);
       }
+      remaining_samps -= rx_sym;
+      rxbuf_time += rx_sym;
+    } else {
+      // no data transmission is scheduled. Receive anyway, but do not adapt
+      // pilots
+      uint rx_sym = fmin(nfft + cp_len, remaining_samps);
+      ofdmframesync_execute_nopilot(phy->fs, rxbuf_time, rx_sym);
       remaining_samps -= rx_sym;
       rxbuf_time += rx_sym;
     }
