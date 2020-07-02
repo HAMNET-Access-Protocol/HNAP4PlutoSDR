@@ -26,6 +26,7 @@
 #include "../platform/platform_simulation.h"
 #include "../platform/pluto.h"
 #include "../util/log.h"
+#include <version.h>
 
 #include <getopt.h>
 #include <pthread.h>
@@ -61,6 +62,7 @@ struct option Options[] = {
     {"config", required_argument, NULL, 'c'},
     {"help", no_argument, NULL, 'h'},
     {"log", required_argument, NULL, 'l'},
+    {"version", no_argument, NULL, 'v'},
     {NULL},
 };
 char *helpstring = "Client for 70cm Waveform.\n\n \
@@ -72,7 +74,8 @@ Options:\n \
    --dl-mcs -d:    use given mcs in DL. Default: 0.\n \
    --config -c     specify a configuration file\n \
    --log -l        specify the log level. Default: 2.\n \
-                   0=TRACE 1=DEBUG 2=INFO 3=WARN 4=ERR 5=NONE\n";
+                   0=TRACE 1=DEBUG 2=INFO 3=WARN 4=ERR 5=NONE\n\
+   --version -v    show version info";
 
 extern char *optarg;
 int rxgain = -100;
@@ -372,7 +375,7 @@ int main(int argc, char *argv[]) {
 
   // parse program args
   int d;
-  while ((d = getopt_long(argc, argv, "g:t:f:d:u:c:l:h", Options, NULL)) !=
+  while ((d = getopt_long(argc, argv, "g:t:f:d:u:c:l:v:h", Options, NULL)) !=
          EOF) {
     switch (d) {
     case 'g':
@@ -422,6 +425,10 @@ int main(int argc, char *argv[]) {
       break;
     case 'h':
       printf("%s", helpstring);
+      exit(0);
+      break;
+    case 'v':
+      printf("Build version %s %s\n", GIT_TAG, GIT_BRANCH);
       exit(0);
       break;
     default:

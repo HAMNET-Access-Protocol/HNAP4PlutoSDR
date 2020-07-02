@@ -25,6 +25,7 @@
 #include "../platform/platform_simulation.h"
 
 #include "test.h"
+#include <version.h>
 
 // size of a mac data frame in bytes [VoIP data + UDP + IP + Ethernet header]
 #define payload_size (20 + 8 + 20 + 14)
@@ -296,6 +297,7 @@ int main(int argc, char *argv[]) {
   }
 
   for (int snr = 25; snr < 40; snr += 1) {
+    printf("Build version %s %s\n", GIT_TAG, GIT_BRANCH);
     printf("Starting simulation with SNR %ddB mcs%d\n", snr, mcs);
 
     setup_simulation(snr, cfo);
