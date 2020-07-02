@@ -52,6 +52,7 @@ struct PhyUE_s {
   // 1. Index: subframe index: 0 -> even, 1->odd
   // 2. Index ofdm symbol idx
   uint8_t **ul_symbol_alloc;
+  uint8_t *dl_symbol_alloc;
 
   // Currently used modulation scheme for RX
   uint mcs_dl;
