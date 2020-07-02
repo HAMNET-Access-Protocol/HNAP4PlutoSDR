@@ -23,6 +23,7 @@
 #include "../phy/phy_bs.h"
 #include "../phy/phy_ue.h"
 #include "../platform/platform_simulation.h"
+#include <version.h>
 
 extern struct phy_config_s PHY_CONFIG;
 
@@ -110,6 +111,7 @@ int main(int argc, char *argv[]) {
 
   for (int cfo = 0; cfo < 1; cfo += 50) {
     for (int snr = 5; snr < 41; snr += 5) {
+      printf("Build version %s %s\n", GIT_TAG, GIT_BRANCH);
       printf("Starting simulation with SNR %ddB; cfo %dHz\n", snr, cfo);
 
       log_coarse_cfo_flag = 0;
