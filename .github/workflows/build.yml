@@ -1,0 +1,32 @@
+name: Build
+
+on: [push, pull_request]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+        submodules: recursive
+    - name: Install dependencies
+      run: |
+        sudo apt install libfftw3-dev libconfig-dev automake autoconf
+    - name: Build Simulation Target
+      run: |
+        cd libfec
+        ./configure
+        make install
+        cd ../liquid-dsp
+        ./bootstrap.sh
+        ./configure
+        make install
+        cd ..
+        mkdir cmake-build-simulation
+        cd cmake-build-simulation
+        cmake -DCMAKE_BUILD_TYPE=Debug ..
+        make test_mac
+        make test_cfo_estimation
