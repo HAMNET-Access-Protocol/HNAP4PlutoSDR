@@ -27,6 +27,13 @@ jobs:
         ./configure
         sudo make install
         sudo ldconfig
+    - name: Run Unit Tests
+      run: |
+        mkdir cmake-build-unittests
+        cd cmake-build-unittests
+        cmake ..
+        make unit_tests
+        ./unit_tests
     - name: Build Simulation Targets
       run: |
         mkdir cmake-build-simulation
