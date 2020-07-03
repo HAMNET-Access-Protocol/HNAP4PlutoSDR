@@ -76,9 +76,9 @@ typedef struct {
   float complex **rxdata_f;
 
   modem mcs_modem[8]; // array of modems for different mcs
-  fec fec_ctrl; // ctrl slots are encoded with MCS 0. we add a separate coder,
-                // because data and control slots might be decoded in parallel
-                // (multithreading) and cannot use the same coder
+  fec fec_ctrl;   // ctrl slots are encoded with MCS 0. we add a separate coder,
+                  // because data and control slots might be decoded in parallel
+                  // (multithreading) and cannot use the same coder
   fec mcs_fec[8]; // array of encoders/decoders for different mcs
   fec_scheme mcs_fec_scheme[8];
 
