@@ -4,3 +4,6 @@
 [submodule "libfec"]
 	path = libfec
 	url = https://github.com/HAMNET-Access-Protocol/libfec
+[submodule "tests/unity"]
+	path = tests/unity
+	url = https://github.com/ThrowTheSwitch/Unity
