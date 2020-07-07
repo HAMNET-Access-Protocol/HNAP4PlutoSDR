@@ -63,8 +63,8 @@ platform bs;
 platform client;
 
 uint get_sim_time_msec() {
-  float time = 1000.0 * (global_sfn * SUBFRAME_LEN + global_symbol) *
-               (nfft + cp_len) / samplerate;
+  float time = 1000.0 * (global_sfn * SUBFRAME_LEN + global_symbol) * (buflen) /
+               samplerate;
   return time;
 }
 
@@ -77,9 +77,9 @@ int run_simulation(uint num_subframes, uint mcs) {
   int offset = 0, tx_shift = 0, num_samples = buflen;
 
   // Buffers for simulation
-  float complex dl_data[nfft + cp_len];
-  float complex ul_data_tx[nfft + cp_len];
-  float complex ul_data_rx[nfft + cp_len];
+  float complex dl_data[buflen];
+  float complex ul_data_tx[buflen];
+  float complex ul_data_rx[buflen];
 
   uint last_tx = get_sim_time_msec();
   uint packet_id = 0;
@@ -142,10 +142,10 @@ int run_simulation(uint num_subframes, uint mcs) {
       // Initial sync
       // TODO edge case for offset=68
       client->platform_rx(client, dl_data);
-      offset = phy_ue_initial_sync(phy_ue, dl_data, nfft + cp_len);
+      offset = phy_ue_initial_sync(phy_ue, dl_data, buflen);
       if (offset > 0) {
         // receive remaining symbols
-        phy_ue_do_rx(phy_ue, dl_data + offset, nfft + cp_len - offset);
+        phy_ue_do_rx(phy_ue, dl_data + offset, buflen - offset);
         phy_ue->rx_offset = offset;
 
         offset = -phy_ue->rx_offset; // TODO use rx offset to align tx
@@ -156,7 +156,7 @@ int run_simulation(uint num_subframes, uint mcs) {
       // ---------- RX ------------
       client->platform_rx(client, dl_data);
       // process samples
-      phy_ue_do_rx(phy_ue, dl_data, nfft + cp_len);
+      phy_ue_do_rx(phy_ue, dl_data, buflen);
       // Run scheduler after DLCTRL slot was received
       if (phy_ue->common->rx_symbol == DLCTRL_LEN) {
         mac_ue_run_scheduler(mac_ue);
@@ -283,8 +283,11 @@ void clean_simulation() {
 int main(int argc, char *argv[]) {
   // load default configuration
   phy_config_default_64();
+#ifdef USE_SINGLECARRIER
+  buflen = SC_SYMBOL_UNIT * OSF;
+#else
   buflen = nfft + cp_len;
-
+#endif
   // Arrays to store biterror rates. First index: MCS, second index: SNR
   double biterr_ul_array[8][50] = {0};
   double biterr_dl_array[8][50] = {0};
