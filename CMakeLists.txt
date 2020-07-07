@@ -36,8 +36,11 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR})
 ### Group source files to PHY and MAC layer for UE/BS respectively
 
 # PHY layer
-set(PHY_BS src/phy/phy_common.h src/phy/phy_bs.h src/phy/phy_bs.c src/phy/phy_common.c src/phy/phy_config.h src/phy/phy_config.c)
-set(PHY_UE src/phy/phy_common.h src/phy/phy_ue.h src/phy/phy_ue.c src/phy/phy_common.c src/phy/phy_config.h src/phy/phy_config.c)
+set(PHY_OFDM_BS src/phy/phy_ofdm_common.h src/phy/phy_ofdm_bs.h src/phy/phy_ofdm_bs.c src/phy/phy_ofdm_common.c src/phy/phy_config.h src/phy/phy_config.c)
+set(PHY_OFDM_UE src/phy/phy_ofdm_common.h src/phy/phy_ofdm_ue.h src/phy/phy_ofdm_ue.c src/phy/phy_ofdm_common.c src/phy/phy_config.h src/phy/phy_config.c)
+
+set(PHY_SC_BS src/phy/phy_sc_common.h src/phy/phy_sc_bs.h src/phy/phy_sc_bs.c src/phy/phy_sc_common.c src/phy/phy_config.h src/phy/phy_config.c)
+set(PHY_SC_UE src/phy/phy_sc_common.h src/phy/phy_sc_ue.h src/phy/phy_sc_ue.c src/phy/phy_sc_common.c src/phy/phy_config.h src/phy/phy_config.c)
 
 # MAC layer
 set(MAC_COMMON src/mac/mac_config.h src/mac/mac_channels.h src/mac/mac_common.h src/mac/mac_fragmentation.h src/mac/mac_messages.h
@@ -62,29 +65,35 @@ set(TESTS tests/test_mac_messages.c)
 
 # Simulation target
 add_executable(test_mac src/runtime/test.h src/runtime/test_mac.c ${PLATFORM_SIM}
-                        ${PHY_BS} ${PHY_UE} ${MAC_UE} ${MAC_BS} ${UTIL})
+                        ${PHY_OFDM_BS} ${PHY_OFDM_UE} ${MAC_UE} ${MAC_BS} ${UTIL})
 target_link_libraries(test_mac liquid m config)
 target_compile_definitions(test_mac PUBLIC USE_SIM SIM_LOG_BER SIM_LOG_DELAY)
 
+# Singlecarrier simulation target
+add_executable(test_mac_sc src/runtime/test.h src/runtime/test_mac.c ${PLATFORM_SIM}
+                           ${PHY_SC_BS} ${PHY_SC_UE} ${MAC_UE} ${MAC_BS} ${UTIL})
+target_link_libraries(test_mac_sc liquid m config)
+target_compile_definitions(test_mac_sc PUBLIC USE_SIM SIM_LOG_BER SIM_LOG_DELAY USE_SINGLECARRIER)
+
 # Basestation
-add_executable(basestation src/runtime/basestation.c  ${PLATFORM_PLUTO} ${PHY_BS} ${MAC_BS} ${UTIL})
+add_executable(basestation src/runtime/basestation.c  ${PLATFORM_PLUTO} ${PHY_OFDM_BS} ${MAC_BS} ${UTIL})
 target_link_libraries(basestation liquid m iio pthread rt config)
 target_compile_definitions(basestation PUBLIC MAC_ENABLE_TAP_DEV)
 
 #Client
 add_executable(client src/runtime/client.c ${PLATFORM_PLUTO}
-        ${PHY_UE} ${MAC_UE} ${UTIL})
+        ${PHY_OFDM_UE} ${MAC_UE} ${UTIL})
 target_link_libraries(client liquid m iio pthread rt config)
 target_compile_definitions(client PUBLIC MAC_ENABLE_TAP_DEV)
 
 #Client XO calibration tool
 add_executable(client-calib src/runtime/client-calib.c ${PLATFORM_PLUTO}
-        ${PHY_UE} ${MAC_UE} ${UTIL})
+        ${PHY_OFDM_UE} ${MAC_UE} ${UTIL})
 target_link_libraries(client-calib liquid m iio pthread rt config)
 
 # CFO estimation accuracy test
 add_executable(test_cfo_estimation src/runtime/test_cfo_estimation.c ${PLATFORM_SIM}
-        ${PHY_BS} ${PHY_UE} ${MAC_UE} ${MAC_BS} ${UTIL})
+        ${PHY_OFDM_BS} ${PHY_OFDM_UE} ${MAC_UE} ${MAC_BS} ${UTIL})
 target_link_libraries(test_cfo_estimation liquid m config)
 target_compile_definitions(test_cfo_estimation PUBLIC USE_SIM)
 
