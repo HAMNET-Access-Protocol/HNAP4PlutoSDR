@@ -18,12 +18,12 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef PHY_BS_H_
-#define PHY_BS_H_
+#ifndef PHY_OFDM_BS_H_
+#define PHY_OFDM_BS_H_
 
 #include "../mac/mac_bs.h"
 #include "../platform/platform.h"
-#include "phy_common.h"
+#include "phy_ofdm_common.h"
 #include <pthread.h>
 
 // forward declaration of mac struct

@@ -18,11 +18,11 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef PHY_UE_H_
-#define PHY_UE_H_
+#ifndef PHY_OFDM_UE_H_
+#define PHY_OFDM_UE_H_
 
 #include "../platform/platform.h"
-#include "phy_common.h"
+#include "phy_ofdm_common.h"
 #include <pthread.h>
 
 typedef enum { NO_SYNC, HAS_SYNC } phy_states;

@@ -18,7 +18,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "phy_ue.h"
+#include "phy_ofdm_ue.h"
 
 #include "../mac/mac_ue.h"
 #include "../platform/pluto.h"

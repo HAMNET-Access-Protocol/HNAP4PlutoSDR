@@ -18,7 +18,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "phy_bs.h"
+#include "phy_ofdm_bs.h"
 
 #ifdef PHY_TEST_BER
 #include "../runtime/test.h"

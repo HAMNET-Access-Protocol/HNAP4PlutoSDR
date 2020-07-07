@@ -18,8 +18,8 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef PHY_COMMON_H_
-#define PHY_COMMON_H_
+#ifndef PHY_OFDM_COMMON_H_
+#define PHY_OFDM_COMMON_H_
 
 #include "../mac/mac_channels.h"
 #include "phy_config.h"

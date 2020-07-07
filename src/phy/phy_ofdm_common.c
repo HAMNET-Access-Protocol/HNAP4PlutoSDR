@@ -18,7 +18,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "phy_common.h"
+#include "phy_ofdm_common.h"
 #include "phy_config.h"
 
 // Init the PHY instance
