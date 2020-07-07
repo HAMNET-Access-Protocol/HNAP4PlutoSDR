@@ -354,6 +354,7 @@ void sc_receiver_set_cb(sc_receiver rec, sc_rec_callback cb, void *cb_userd) {
 }
 
 void sc_receiver_reset(sc_receiver rec) {
+  rec->sync_state = SEARCH_ZADOFF;
   symsync_crcf_reset(rec->symsync);
   eqlms_cccf_reset(rec->eqlms);
   detector_cccf_reset(rec->sync_correlator);
