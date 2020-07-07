@@ -110,6 +110,10 @@ void phy_bs_destroy(PhyBS phy) {
   free(phy->ul_symbol_alloc[1]);
   free(phy->ul_symbol_alloc);
 
+  free(phy->dl_symbol_alloc[0]);
+  free(phy->dl_symbol_alloc[1]);
+  free(phy->dl_symbol_alloc);
+
   free(phy);
 }
 
