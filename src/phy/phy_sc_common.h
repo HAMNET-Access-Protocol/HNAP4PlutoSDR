@@ -63,8 +63,6 @@ typedef union {
   };
 } dlctrl_alloc_t;
 
-enum { NO_PILOT, PILOT }; // definition for pilot_symbols variable
-
 // SC receiver states
 enum sc_rec_states { SEARCH_ZADOFF, SYNC };
 

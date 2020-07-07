@@ -46,6 +46,7 @@ struct PhyBS_s {
   // 1. Index: subframe index: 0 -> even, 1->odd
   // 2. Index ofdm symbol idx
   uint8_t **ul_symbol_alloc;
+  uint8_t **dl_symbol_alloc;
 
   dlctrl_alloc_t *dlctrl_buf; // holds DL ctrl slot data
 
@@ -79,7 +80,7 @@ void phy_bs_set_rx_slot_th_signal(PhyBS phy, pthread_cond_t *cond);
 int phy_map_dlslot(PhyBS phy, LogicalChannel chan, uint subframe,
                    uint8_t slot_nr, uint userid, uint mcs);
 void phy_map_dlctrl(PhyBS phy, uint subframe);
-void phy_assign_dlctrl_dd(PhyBS phy, uint8_t *slot_assignment);
+void phy_assign_dlctrl_dd(PhyBS phy, uint subframe, uint8_t *slot_assignment);
 void phy_assign_dlctrl_ud(PhyBS phy, uint subframe, uint8_t *slot_assignment);
 void phy_assign_dlctrl_uc(PhyBS phy, uint subframe, uint8_t *slot_assignment);
 
