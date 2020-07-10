@@ -72,5 +72,5 @@ cd $BUILD_DIR || exit 1
 rm -R .tmp_create_sysroot
 
 SYSROOT_NAME="pluto-custom-"`git describe --tags`".sysroot.tar.gz"
-tar -czf $SYSROOT_NAME $BUILD_DIR
+tar -czf $SYSROOT_NAME $SYSROOT_DIR
 echo "Created sysroot archive $SYSROOT_NAME in $BUILD_DIR"

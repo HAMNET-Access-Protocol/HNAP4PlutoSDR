@@ -24,7 +24,7 @@ linux_rt_patch() {
 
 # Changes to buildroot
 config_buildroot() {
-  BR_CONFIG=$BUILD_DIR/buildroot/configs/zynq_pluto_defconfig
+  BR_CONFIG=$PLUTOSDR_FW_DIR/buildroot/configs/zynq_pluto_defconfig
   echo 'BR2_ROOTFS_OVERLAY="'"$PLUTOSDR_FW_ROOTOVERLAY"'"' >> $BR_CONFIG
   echo 'BR2_PACKAGE_LIBCONFIG=y' >> $BR_CONFIG
   echo 'BR2_PACKAGE_FFTW_SINGLE=y' >> $BR_CONFIG
@@ -42,6 +42,7 @@ BUILD_DIR=$SCRIPT_DIR/build
 PLUTOSDR_FW_DIR=$BUILD_DIR/plutosdr-fw
 SYSROOT_DIR=$BUILD_DIR/pluto-custom.sysroot
 FW_OVERLAY=$BUILD_DIR/rootfs-overlay
+SRC_DIR=$SCRIPT_DIR/..
 
 mkdir -p $BUILD_DIR
 cd $BUILD_DIR || exit 1
@@ -107,6 +108,7 @@ echo "hnap "`git describe --tags` > $FW_OVERLAY/root/VERSION
 echo "plutosdr-fw "PLUTOSDR_FW_TAG >> $FW_OVERLAY/root/VERSION
 
 ## Copy network init script to rootfs
+cd $SRC_DIR || exit 1
 echo "Copy network autoconfig script to rootfs..."
 cp startup_scripts/* $FW_OVERLAY/etc/init.d/
 
@@ -119,7 +121,7 @@ cp AD9361_256kSPS.ftr $FW_OVERLAY/root/
 echo "Copy config.txt to rootfs..."
 cp config.txt $FW_OVERLAY/root/
 
-cd $SCRIPT_DIR/plutosdr-fw/ || exit 1
+cd $PLUTOSDR_FW_DIR || exit 1
 make || exit 1
 cp $PLUTOSDR_FW_DIR/build/pluto.frm $BUILD_DIR
 echo "Created pluto.frm in $BUILD_DIR"
