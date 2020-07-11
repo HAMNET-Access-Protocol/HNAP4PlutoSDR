@@ -25,7 +25,7 @@ linux_rt_patch() {
 # Changes to buildroot
 config_buildroot() {
   BR_CONFIG=$PLUTOSDR_FW_DIR/buildroot/configs/zynq_pluto_defconfig
-  echo 'BR2_ROOTFS_OVERLAY="'"$PLUTOSDR_FW_ROOTOVERLAY"'"' >> $BR_CONFIG
+  echo 'BR2_ROOTFS_OVERLAY="'"$FW_OVERLAY"'"' >> $BR_CONFIG
   echo 'BR2_PACKAGE_LIBCONFIG=y' >> $BR_CONFIG
   echo 'BR2_PACKAGE_FFTW_SINGLE=y' >> $BR_CONFIG
   echo 'BR2_PACKAGE_TUNCTL=y' >> $BR_CONFIG
@@ -47,11 +47,17 @@ SRC_DIR=$SCRIPT_DIR/..
 mkdir -p $BUILD_DIR
 cd $BUILD_DIR || exit 1
 
+# Read current build status
+BUILD_STATUS=$BUILD_DIR/build_status
+touch $BUILD_STATUS
+source $BUILD_STATUS || exit 1
+
 # Download the current plutosdr-fw image
-if [[ ! -d $PLUTOSDR_FW_DIR ]]
+if [[ $STATUS_GOT_FW != "y" ]]
 then
   echo "plutosdr-fw repository not found. Downloading it..."
   git clone --recurse-submodules -j8 https://github.com/analogdevicesinc/plutosdr-fw.git
+  echo "STATUS_GOT_FW=y" >> $BUILD_STATUS
 else
   echo "plutosdr-fw already exists. Skipping git clone."
 fi
@@ -69,13 +75,13 @@ else
   echo "plutosdr-fw version is ok."
 fi
 
-if [[ ! -f $BUILD_DIR/kernel_configured ]]
+if [[ $STATUS_PATCHED_KERNEL != "y" ]]
 then
   # Apply kernel patch and configure userspace
   echo "Patching Linux kernel and configure userspace"
   linux_rt_patch
   config_buildroot
-  touch $BUILD_DIR/kernel_configured
+  echo "STATUS_PATCHED_KERNEL=y" >> $BUILD_STATUS
 else
   echo "Linux kernel seems to be already configured."
 fi
@@ -89,6 +95,10 @@ mkdir -p $FW_OVERLAY/etc/init.d
 cd $SCRIPT_DIR || exit 1
 
 ## Create sysroot
+# Delete libfec and libliquid status vars, to force a rebuild
+# of those libs when we create the FW
+sed -i '/STATUS_SYSROOT_GOT_LIBFEC/d' $BUILD_STATUS
+sed -i '/STATUS_SYSROOT_GOT_LIBLIQUID/d' $BUILD_STATUS
 ./create_sysroot.sh || exit 1
 
 # Copy libfec and liquid-dsp to rootfs overlay. These libs are not built with buildroot
@@ -105,7 +115,7 @@ cp basestation client client-calib $FW_OVERLAY/root/
 # Create VERSION file
 touch $FW_OVERLAY/root/VERSION
 echo "hnap "`git describe --tags` > $FW_OVERLAY/root/VERSION
-echo "plutosdr-fw "PLUTOSDR_FW_TAG >> $FW_OVERLAY/root/VERSION
+echo "plutosdr-fw "$PLUTOSDR_FW_TAG >> $FW_OVERLAY/root/VERSION
 
 ## Copy network init script to rootfs
 cd $SRC_DIR || exit 1
