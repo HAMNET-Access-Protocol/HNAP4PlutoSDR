@@ -6,6 +6,8 @@
 # Required plutosdr-fw version
 PLUTOSDR_FW_TAG="v0.32"
 
+# Stop on the first error
+set -e
 
 # Apply linux PREEMPT_RT patch
 linux_rt_patch() {

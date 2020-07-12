@@ -8,6 +8,8 @@
 # Required plutosdr-fw version
 PLUTOSDR_FW_TAG="v0.32"
 
+# Stop on first error
+set -e
 
 SCRIPT_DIR=`pwd`/`dirname "$0"`
 BUILD_DIR=$SCRIPT_DIR/build
@@ -24,6 +26,9 @@ cd .tmp_create_sysroot || exit 1
 BUILD_STATUS=$BUILD_DIR/build_status
 touch $BUILD_STATUS
 source $BUILD_STATUS || exit 1
+
+# Ensure that submodules of this repo are initialized
+git submodule update --init --recursive
 
 if [[ $STATUS_DOWNLOAD_SYSROOT != "y" ]]
 then
@@ -73,7 +78,11 @@ then
   cd $SRC_DIR/libfec || exit 1
   echo "Installing libfec..."
   ./configure arm --host=arm-linux-gnueabihf --prefix="$SYSROOT_DIR/usr/" CC="arm-linux-gnueabihf-gcc --sysroot=$SYSROOT_DIR/"
-  make install
+  make
+  mkdir -p $SYSROOT_DIR/usr/lib
+  install -m 644 -p libfec.so libfec.a $SYSROOT_DIR/usr/lib
+  mkdir -p $SYSROOT_DIR/usr/include
+  install -m 644 -p fec.h $SYSROOT_DIR/usr/include
   echo "STATUS_SYSROOT_GOT_LIBFEC=y" >> $BUILD_STATUS
 else
   echo "Libfec is already present"

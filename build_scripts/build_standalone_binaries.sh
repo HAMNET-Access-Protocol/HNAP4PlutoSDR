@@ -7,6 +7,9 @@ BUILD_DIR=$SCRIPT_DIR/build
 SYSROOT_DIR=$BUILD_DIR/pluto-custom.sysroot
 SRC_DIR=$SCRIPT_DIR/..
 
+# Stop on first error
+set -e
+
 echo "Building main application..."
 mkdir -p $BUILD_DIR/cmake-build
 
