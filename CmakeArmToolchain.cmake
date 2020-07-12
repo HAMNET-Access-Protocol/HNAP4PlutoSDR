@@ -4,13 +4,9 @@ set(CMAKE_SYSTEM_PROCESSOR arm)
 #Define pluto sysroot directory here
 set(CMAKE_SYSROOT $ENV{PLUTO_SYSROOT_DIR})
 
-# Set the toolchain path. You can either use the Xilinx SDK toolchain
-# or linaro-gcc. Make sure that the path is correct
-# set(tools /usr/local/bin/gcc-linaro-7.2.1/)
-set(tools /opt/Xilinx/SDK/2018.2/gnu/aarch32/lin/gcc-arm-linux-gnueabi/)
-
-set(CMAKE_C_COMPILER ${tools}/bin/arm-linux-gnueabihf-gcc)
-set(CMAKE_CXX_COMPILER ${tools}/bin/arm-linux-gnueabihf-g++)
+# Set the toolchain. This assumes that the toolchain can be found via the PATH variable
+set(CMAKE_C_COMPILER arm-linux-gnueabihf-gcc)
+set(CMAKE_CXX_COMPILER arm-linux-gnueabihf-g++)
 
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
 set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
