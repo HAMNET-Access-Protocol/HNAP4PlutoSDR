@@ -30,6 +30,14 @@ source $BUILD_STATUS || exit 1
 # Ensure that submodules of this repo are initialized
 git submodule update --init --recursive
 
+# Ensure that the toolchain is present
+arm-linux-gnueabihf-gcc --version
+if [ $? != 0 ]
+then
+  echo "Could not find the cross-compiler. Make sure that it can be found in the PATH variable"
+  exit 1
+fi
+
 if [[ $STATUS_DOWNLOAD_SYSROOT != "y" ]]
 then
   echo "Could not locate existing sysroot dir. Downloading sources"
