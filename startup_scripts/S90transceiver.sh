@@ -12,7 +12,7 @@ PLATFORM_STRING=$(grep plutosdr-fw /root/VERSION)
 DESC_STRING="$CALLSIGN $(grep hnap /root/VERSION | cut -c6-)"
 
 lldpcli configure lldp tx-interval 60
-lldpcli configure system platform "$PLATFORM_STRING"
+lldpcli configure system hostname "$PLATFORM_STRING"
 lldpcli configure system description "$DESC_STRING"
 lldpcli resume
 
