@@ -9,11 +9,11 @@ FILTER=AD9361_256kSPS.ftr
 # This has to be done after lldp is started (S60)
 CALLSIGN=$(fw_printenv -n hnap_callsign)
 PLATFORM_STRING=$(grep plutosdr-fw /root/VERSION)
-DESC_STRING="$CALLSIGN $(grep hnap /root/VERSION | cut -c6-)"
+DESC_STRING="$(grep hnap /root/VERSION) $PLATFORM_STRING"
 
 lldpcli configure lldp tx-interval 60
-lldpcli configure system hostname "$PLATFORM_STRING"
-lldpcli configure system description "$DESC_STRING"
+lldpcli configure system hostname "$CALLSIGN"
+lldpcli configure system platform "$DESC_STRING"
 lldpcli resume
 
 # Install custom FIR filter
