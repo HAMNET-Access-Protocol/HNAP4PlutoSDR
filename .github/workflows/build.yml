@@ -3,7 +3,8 @@ name: Build
 on: [push]
 
 jobs:
-  build:
+  tests_and_simulation:
+    name: Tests and Simulation
 
     runs-on: ubuntu-latest
 
@@ -41,3 +42,30 @@ jobs:
         cmake -DCMAKE_BUILD_TYPE=Debug ..
         make test_mac
         make test_cfo_estimation
+
+  standalone_binaries:
+    name: Standalone Binaries
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+        submodules: recursive
+    - name: Cache custom sysroot
+      uses: actions/cache@v2
+      env:
+        cache-name: custom-sysroot
+      with:
+        path: build_scripts/build/pluto-custom.sysroot
+        key: ${{ env.cache-name }}-${{ hashFiles('build_scripts/create_sysroot.sh') }}
+    - name: Install GCC Linaro
+      run: |
+        wget -q http://releases.linaro.org/components/toolchain/binaries/7.2-2017.11/arm-linux-gnueabihf/gcc-linaro-7.2.1-2017.11-x86_64_arm-linux-gnueabihf.tar.xz
+        tar xf gcc-linaro-7.2.1-2017.11-x86_64_arm-linux-gnueabihf.tar.xz
+    - name: Run Buildscript
+      run: |
+        export PATH=$PATH:$(pwd)/gcc-linaro-7.2.1-2017.11-x86_64_arm-linux-gnueabihf/bin
+        cd build_scripts
+        ./build_standalone_binaries.sh
