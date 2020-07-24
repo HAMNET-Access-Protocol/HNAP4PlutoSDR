@@ -9,7 +9,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v2
+    - name: Checkout code
+      uses: actions/checkout@v2
       with:
         fetch-depth: 0
         submodules: recursive
@@ -43,18 +44,23 @@ jobs:
         make test_mac
         make test_cfo_estimation
 
-  standalone_binaries:
-    name: Standalone Binaries
+  standalone_binaries_linaro:
+    name: Standalone Binaries Linaro
 
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v2
+    - name: Checkout code
+      uses: actions/checkout@v2
       with:
         fetch-depth: 0
         submodules: recursive
+    - name: Set variables
+      id: vars
+      run: |
+        echo "::set-output name=tag::$(git describe --tags)"
     - name: Cache custom sysroot
-      uses: actions/cache@v2
+      uses: actions/cache@v2.1.0
       env:
         cache-name: custom-sysroot
       with:
@@ -69,3 +75,80 @@ jobs:
         export PATH=$PATH:$(pwd)/gcc-linaro-7.2.1-2017.11-x86_64_arm-linux-gnueabihf/bin
         cd build_scripts
         ./build_standalone_binaries.sh
+        cd build
+        zip binaries.zip basestation client client-calib
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: HNAP-binaries-Linaro7.2.1-${{ steps.vars.outputs.tag }}.zip
+        path: build_scripts/build/binaries.zip
+
+  standalone_binaries_xilinx:
+    name: Standalone Binaries Xilinx
+
+    runs-on: [linux,vivado-2019.1]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+        submodules: recursive
+    - name: Set variables
+      id: vars
+      run: |
+        echo "::set-output name=tag::$(git describe --tags)"
+    - name: Cache custom sysroot
+      uses: actions/cache@v2.1.0
+      env:
+        cache-name: custom-sysroot
+      with:
+        path: build_scripts/build/pluto-custom.sysroot
+        key: ${{ env.cache-name }}-${{ hashFiles('build_scripts/create_sysroot.sh') }}
+    - name: Run Buildscript
+      run: |
+        source /opt/Xilinx/Vivado/2019.1/settings64.sh
+        cd build_scripts
+        ./build_standalone_binaries.sh
+        cd build
+        zip binaries.zip basestation client client-calib
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: HNAP-binaries-Xilinx2019.1-${{ steps.vars.outputs.tag }}.zip
+        path: build_scripts/build/binaries.zip
+
+  firmware_image:
+    name: Firmware Image
+
+    runs-on: [linux,vivado-2019.1]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+        submodules: recursive
+    - name: Set variables
+      id: vars
+      run: |
+        echo "::set-output name=tag::$(git describe --tags)"
+    - name: Cache custom sysroot
+      uses: actions/cache@v2.1.0
+      env:
+        cache-name: build-env
+      with:
+        path: build_scripts/build
+        key: ${{ env.cache-name }}-${{ hashFiles('build_scripts/*.sh') }}
+    - name: Run Buildscript
+      run: |
+        export VIVADO_SETTINGS=/opt/Xilinx/Vivado/2019.1/settings64.sh
+        cd build_scripts
+        ./build_firmware.sh
+        cd build
+        zip pluto.frm.zip pluto.frm
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: HNAP-${{ steps.vars.outputs.tag }}.zip
+        path: build_scripts/build/pluto.frm.zip
