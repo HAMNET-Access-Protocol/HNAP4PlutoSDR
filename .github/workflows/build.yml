@@ -110,13 +110,14 @@ jobs:
         source /opt/Xilinx/Vivado/2019.1/settings64.sh
         cd build_scripts
         ./build_standalone_binaries.sh
-        cd build
-        zip binaries.zip basestation client client-calib
     - name: Upload artifacts
       uses: actions/upload-artifact@v2
       with:
         name: HNAP-binaries-Xilinx2019.1-${{ steps.vars.outputs.tag }}.zip
-        path: build_scripts/build/binaries.zip
+        path: |
+          build_scripts/build/basestation
+          build_scripts/build/client
+          build_scripts/build/client-calib
 
   firmware_image:
     name: Firmware Image
@@ -145,10 +146,8 @@ jobs:
         export VIVADO_SETTINGS=/opt/Xilinx/Vivado/2019.1/settings64.sh
         cd build_scripts
         ./build_firmware.sh
-        cd build
-        zip pluto.frm.zip pluto.frm
     - name: Upload artifacts
       uses: actions/upload-artifact@v2
       with:
         name: HNAP-${{ steps.vars.outputs.tag }}.zip
-        path: build_scripts/build/pluto.frm.zip
+        path: build_scripts/build/pluto.frm
