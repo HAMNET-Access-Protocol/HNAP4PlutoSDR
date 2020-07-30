@@ -1,6 +1,10 @@
 name: Lint
 
-on: [push]
+on:
+  push:
+    paths:
+      - 'src/**'
+      - 'tests/**'
 
 jobs:
   lint:
@@ -11,5 +15,6 @@ jobs:
     - uses: actions/checkout@v2
     - uses: DoozyX/clang-format-lint-action@v0.5
       with:
-        source: './src'
+        source: 'src tests'
+        exclude: 'tests/unity/*'
         extensions: 'h,c'
