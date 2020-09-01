@@ -25,10 +25,94 @@ void test_mac_msg_get_hdrlen(void) {
     TEST_ASSERT_EQUAL_INT(mac_msg_get_hdrlen(255), -1);
 }
 
+void test_mac_msg_parse_associate_response(void) {
+  // create message
+  uint8_t userid = 2;
+  uint8_t rachuserid = 5;
+  uint8_t response = assoc_resp_success;
+  uint8_t timingadvance = 123;
+  MacMessage test_msg = mac_msg_create_associate_response(userid,rachuserid,response,timingadvance);
+
+  // write it to buffer
+  uint len = 128;
+  uint8_t* buf = malloc(len);
+  mac_msg_generate(test_msg,buf,len);
+
+  // parse and check
+  MacMessage parsed_msg = mac_msg_parse(buf,len,0);
+  TEST_ASSERT_EQUAL(associate_response, parsed_msg->type);
+  TEST_ASSERT_EQUAL(userid,parsed_msg->hdr.AssociateResponse.userid);
+  TEST_ASSERT_EQUAL(rachuserid,parsed_msg->hdr.AssociateResponse.rachuserid);
+  TEST_ASSERT_EQUAL(response,parsed_msg->hdr.AssociateResponse.response);
+  TEST_ASSERT_EQUAL(timingadvance,parsed_msg->hdr.AssociateResponse.timing_advance);
+
+  mac_msg_destroy(test_msg);
+  mac_msg_destroy(parsed_msg);
+}
+
+void test_mac_msg_parse_dldata(void) {
+  // create message
+  uint8_t ack_mode = AM;
+  uint8_t final_flag = 1;
+  uint8_t fragnr = 31;
+  uint8_t seqnr = 7;
+  uint datalen = 531;
+  uint8_t databuf[531] = {1,124,85,213,12,90,34,0,1,255};
+  MacMessage test_msg = mac_msg_create_dl_data(datalen,ack_mode,final_flag,seqnr,fragnr,databuf);
+
+  // write it to buffer
+  uint buflen = 1024;
+  uint8_t* msgbuf = malloc(buflen);
+  mac_msg_generate(test_msg,msgbuf,buflen);
+
+  // parse and check
+  MacMessage parsed_msg = mac_msg_parse(msgbuf,buflen,0);
+  TEST_ASSERT_EQUAL(dl_data, parsed_msg->type);
+  TEST_ASSERT_EQUAL(datalen,parsed_msg->hdr.DLdata.data_length);
+  TEST_ASSERT_EQUAL(ack_mode,parsed_msg->hdr.DLdata.do_ack);
+  TEST_ASSERT_EQUAL(final_flag,parsed_msg->hdr.DLdata.final_flag);
+  TEST_ASSERT_EQUAL(fragnr,parsed_msg->hdr.DLdata.fragNr);
+  TEST_ASSERT_EQUAL(seqnr,parsed_msg->hdr.DLdata.seqNr);
+  TEST_ASSERT_EQUAL_MEMORY(databuf,parsed_msg->data,datalen);
+  mac_msg_destroy(test_msg);
+  mac_msg_destroy(parsed_msg);
+}
+
+void test_mac_msg_parse_uldata(void) {
+  // create message
+  uint8_t ack_mode = AM;
+  uint8_t final_flag = 1;
+  uint8_t fragnr = 31;
+  uint8_t seqnr = 7;
+  uint datalen = 531;
+  uint8_t databuf[531] = {1,124,85,213,12,90,34,0,1,255};
+  MacMessage test_msg = mac_msg_create_ul_data(datalen,ack_mode,final_flag,seqnr,fragnr,databuf);
+
+  // write it to buffer
+  uint buflen = 1024;
+  uint8_t* msgbuf = malloc(buflen);
+  mac_msg_generate(test_msg,msgbuf,buflen);
+
+  // parse and check
+  MacMessage parsed_msg = mac_msg_parse(msgbuf,buflen,1);
+  TEST_ASSERT_EQUAL(ul_data, parsed_msg->type);
+  TEST_ASSERT_EQUAL(datalen,parsed_msg->hdr.DLdata.data_length);
+  TEST_ASSERT_EQUAL(ack_mode,parsed_msg->hdr.DLdata.do_ack);
+  TEST_ASSERT_EQUAL(final_flag,parsed_msg->hdr.DLdata.final_flag);
+  TEST_ASSERT_EQUAL(fragnr,parsed_msg->hdr.DLdata.fragNr);
+  TEST_ASSERT_EQUAL(seqnr,parsed_msg->hdr.DLdata.seqNr);
+  TEST_ASSERT_EQUAL_MEMORY(databuf,parsed_msg->data,datalen);
+
+  mac_msg_destroy(test_msg);
+  mac_msg_destroy(parsed_msg);
+}
 
 // not needed when using generate_test_runner.rb
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_mac_msg_get_hdrlen);
+    RUN_TEST(test_mac_msg_parse_associate_response);
+    RUN_TEST(test_mac_msg_parse_dldata);
+    RUN_TEST(test_mac_msg_parse_uldata);
     return UNITY_END();
 }
