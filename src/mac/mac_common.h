@@ -43,6 +43,7 @@
 typedef struct {
   uint size;
   uint8_t *data;
+  uint do_arq;
 } MacDataFrame_s;
 
 // Store some MAC layer statistics

@@ -23,7 +23,7 @@
 #include "mac_config.h"
 #include <ringbuf.h>
 
-#define MAX_SEQNR 4   // 2 bits are allocated for seqNr in MacMessage
+#define MAX_SEQNR 8   // 3 bits are allocated for seqNr in MacMessage
 #define MAX_FRAGNR 32 // 5 bits are allocated for fragNr in MacMessage
 
 struct MacFragmenter_s {

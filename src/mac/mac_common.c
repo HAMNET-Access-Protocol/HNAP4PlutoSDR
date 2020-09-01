@@ -32,6 +32,7 @@ MacDataFrame dataframe_create(uint size) {
   MacDataFrame frame = malloc(sizeof(MacDataFrame_s));
   frame->data = malloc(size);
   frame->size = size;
+  frame->do_arq = 0; // do not use ARQ mode by default
   return frame;
 }
 

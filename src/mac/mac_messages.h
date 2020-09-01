@@ -52,6 +52,9 @@ typedef enum {
 // Association response types
 enum { assoc_resp_success = 0, assoc_resp_full };
 
+// ACK-mode types: UM - unacknowledged, AM - ack mode with selective repeat ARQ
+enum { UM = 0, AM = 1 };
+
 typedef struct {
   uint32_t ctrl_id : 3;
   uint32_t userid : 4;
@@ -78,7 +81,8 @@ typedef struct {
 
 typedef struct {
   uint32_t ctrl_id : 3;
-  uint32_t data_length : 12;
+  uint32_t do_ack : 1;
+  uint32_t data_length : 11;
   uint32_t final_flag : 1;
   uint32_t seqNr : 3;
   uint32_t fragNr : 5;
@@ -112,7 +116,8 @@ typedef struct {
 
 typedef struct {
   uint32_t ctrl_id : 3;
-  uint32_t data_length : 12;
+  uint32_t do_ack : 1;
+  uint32_t data_length : 11;
   uint32_t final_flag : 1;
   uint32_t seqNr : 3;
   uint32_t fragNr : 5;
@@ -156,16 +161,18 @@ MacMessage mac_msg_create_dl_mcs_info(uint mcs);
 MacMessage mac_msg_create_ul_mcs_info(uint mcs);
 MacMessage mac_msg_create_timing_advance(uint timingAdvance);
 MacMessage mac_msg_create_session_end();
-MacMessage mac_msg_create_dl_data(uint data_length, uint8_t fragment,
-                                  uint8_t seqNr, uint8_t fragNr, uint8_t *data);
+MacMessage mac_msg_create_dl_data(uint data_length, uint8_t do_ack,
+                                  uint8_t final_flag, uint8_t seqNr,
+                                  uint8_t fragNr, uint8_t *data);
 // Uplink
 MacMessage mac_msg_create_ul_req(uint PacketQueueSize);
 MacMessage mac_msg_create_channel_quality(uint quality_idx);
 MacMessage mac_msg_create_keepalive();
 MacMessage mac_msg_create_control_ack(uint acked_ctrl_id);
 MacMessage mac_msg_create_mcs_change_req(uint is_ul, uint mcs);
-MacMessage mac_msg_create_ul_data(uint data_length, uint8_t final,
-                                  uint8_t seqNr, uint8_t fragNr, uint8_t *data);
+MacMessage mac_msg_create_ul_data(uint data_length, uint8_t do_ack,
+                                  uint8_t final, uint8_t seqNr, uint8_t fragNr,
+                                  uint8_t *data);
 
 void mac_msg_destroy(MacMessage genericmsg);
 
