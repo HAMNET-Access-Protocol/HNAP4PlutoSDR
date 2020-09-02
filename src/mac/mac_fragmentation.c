@@ -21,10 +21,12 @@
 #include "mac_fragmentation.h"
 
 #include "mac_config.h"
+#include "mac_messages.h"
 #include <ringbuf.h>
 
-#define MAX_SEQNR 8   // 3 bits are allocated for seqNr in MacMessage
-#define MAX_FRAGNR 32 // 5 bits are allocated for fragNr in MacMessage
+#define MAX_SEQNR 8           // 3 bits are allocated for seqNr in MacMessage
+#define MAX_FRAGNR 32         // 5 bits are allocated for fragNr in MacMessage
+#define MAX_FRAGMENT_SIZE 512 // max size per fragment, currently static
 
 #define ARQ_WINDOW_LEN 7 // arq window len must be smaller than MAX_SEQNR
 #define ARQ_ACK_TIMEOUT                                                        \
@@ -52,7 +54,7 @@ struct MacFragmenter_s {
       *subframe; // pointer to subframe counter of main MAC instance
 };
 
-struct MacReassembler_s {
+struct MacReassembler_um_s {
   uint frame_open;
   uint seqNr;
   uint fragNr;
@@ -60,6 +62,50 @@ struct MacReassembler_s {
   uint fragments_len[MAX_FRAGNR];
   uint frame_len;
 };
+
+struct MacReassembler_am_s {
+  uint8_t seq_got_final[MAX_SEQNR];
+  uint8_t num_fragments[MAX_SEQNR];
+  uint8_t frag_rcv_bitmask[MAX_SEQNR][MAX_FRAGNR];
+  uint8_t *fragments[MAX_SEQNR][MAX_FRAGNR];
+  uint fragments_len[MAX_SEQNR][MAX_FRAGNR];
+};
+
+typedef struct MacReassembler_um_s *MacAssmblUM;
+typedef struct MacReassembler_am_s *MacAssmblAM;
+
+struct MacReassembler_s {
+  MacAssmblUM um_assmbl;
+  MacAssmblAM am_assmbl;
+};
+
+void arq_window_put(MacFrag frag, MacMessage msg) {
+  frag->am_send_window[frag->am_window_idx] = msg;
+  frag->am_window_retransmits[frag->am_window_idx] = 0;
+  frag->am_window_timestamp[frag->am_window_idx] = *frag->subframe;
+  frag->am_window_idx = (frag->am_window_idx + 1) % ARQ_WINDOW_LEN;
+}
+
+void arq_window_remove(MacFrag frag, int idx) {
+  frag->am_window_retransmits[idx] = 0;
+  mac_msg_destroy(frag->am_send_window[idx]);
+  frag->am_send_window[idx] = NULL;
+  frag->am_window_timestamp[idx] = 0;
+  if (idx == frag->am_last_ack_idx) {
+    // last element from window has been removed, find new last element
+    while (frag->am_last_ack_idx != frag->am_window_idx &&
+           frag->am_send_window[frag->am_last_ack_idx] == NULL)
+      frag->am_last_ack_idx = (frag->am_last_ack_idx + 1) % ARQ_WINDOW_LEN;
+  }
+}
+
+int arq_window_isempty(MacFrag frag) {
+  return (frag->am_last_ack_idx == frag->am_window_idx);
+}
+
+int arq_window_isfull(MacFrag frag) {
+  return ((frag->am_window_idx + 1) % ARQ_WINDOW_LEN == frag->am_last_ack_idx);
+}
 
 MacFrag mac_frag_init(long long unsigned int *subframe_ptr) {
   MacFrag frag = calloc(1, sizeof(struct MacFragmenter_s));
@@ -96,7 +142,8 @@ int mac_frag_add_frame(MacFrag frag, MacDataFrame frame) {
 }
 
 int mac_frag_has_fragment(MacFrag frag) {
-  if (ringbuf_isempty(frag->frame_queue) && (frag->curr_frame == NULL)) {
+  if (ringbuf_isempty(frag->frame_queue) && (frag->curr_frame == NULL) &&
+      arq_window_isempty(frag)) {
     return 0;
   } else {
     return 1;
@@ -112,26 +159,6 @@ int mac_frag_get_buffersize(MacFrag frag) {
     return (frag->curr_frame->size - frag->bytes_sent) + frag->bytes_buffered;
   } else {
     return frag->bytes_buffered;
-  }
-}
-
-void am_window_put(MacFrag frag, MacMessage msg) {
-  frag->am_send_window[frag->am_window_idx] = msg;
-  frag->am_window_retransmits[frag->am_window_idx] = 0;
-  frag->am_window_timestamp[frag->am_window_idx] = *frag->subframe;
-  frag->am_window_idx = (frag->am_window_idx + 1) % ARQ_WINDOW_LEN;
-}
-
-void am_window_remove(MacFrag frag, int idx) {
-  frag->am_window_retransmits[idx] = 0;
-  mac_msg_destroy(frag->am_send_window[idx]);
-  frag->am_send_window[idx] = NULL;
-  frag->am_window_timestamp[idx] = 0;
-  if (idx == frag->am_last_ack_idx) {
-    // last element from window has been removed, find new last element
-    while (frag->am_last_ack_idx != frag->am_window_idx &&
-           frag->am_send_window[frag->am_last_ack_idx] == NULL)
-      frag->am_last_ack_idx = (frag->am_last_ack_idx + 1) % ARQ_WINDOW_LEN;
   }
 }
 
@@ -177,12 +204,12 @@ MacMessage mac_frag_get_fragment(MacFrag frag, uint max_frag_size,
   for (int i = 0; i < ARQ_WINDOW_LEN; i++) {
     int idx = (frag->am_last_ack_idx + i) % ARQ_WINDOW_LEN;
     if (frag->am_send_window[idx] != NULL) {
-      if (frag->am_window_timestamp[idx] + ARQ_WINDOW_LEN < *frag->subframe) {
+      if (frag->am_window_timestamp[idx] + ARQ_ACK_TIMEOUT < *frag->subframe) {
         // no ack received, retransmit this frame
         fragment = mac_msg_copy(frag->am_send_window[idx]);
         frag->am_window_retransmits[idx]++;
         if (frag->am_window_retransmits[idx] > ARQ_MAX_RETRANSMITS) {
-          am_window_remove(frag, idx);
+          arq_window_remove(frag, idx);
         }
         return fragment;
       }
@@ -190,7 +217,7 @@ MacMessage mac_frag_get_fragment(MacFrag frag, uint max_frag_size,
   }
 
   if (frag->curr_frame->do_arq) {
-    if ((frag->am_window_idx + 1) % ARQ_WINDOW_LEN != frag->am_last_ack_idx) {
+    if (!arq_window_isfull(frag)) {
       // create MAC Message in Acknowledged mode and add it to send window
       if (is_uplink) {
         fragment = mac_msg_create_ul_data(
@@ -201,7 +228,7 @@ MacMessage mac_frag_get_fragment(MacFrag frag, uint max_frag_size,
             data_len, 1, final_flag, frag->am_seqNr, frag->am_fragNr++,
             frag->curr_frame->data + frag->bytes_sent);
       }
-      am_window_put(frag, fragment);
+      arq_window_put(frag, fragment);
     }
   } else {
     // create MAC Message in Unacknowledged Mode
@@ -228,16 +255,31 @@ MacMessage mac_frag_get_fragment(MacFrag frag, uint max_frag_size,
 
 MacAssmbl mac_assmbl_init() {
   MacAssmbl assmbl = calloc(sizeof(struct MacReassembler_s), 1);
+
+  assmbl->um_assmbl = calloc(sizeof(struct MacReassembler_um_s), 1);
+  assmbl->am_assmbl = calloc(sizeof(struct MacReassembler_am_s), 1);
+
+  for (int i = 0; i < MAX_SEQNR; i++) {
+    for (int j = 0; j < MAX_FRAGNR; j++) {
+      assmbl->am_assmbl->fragments[i][j] = malloc(MAX_FRAGMENT_SIZE);
+    }
+  }
   return assmbl;
 }
 
 void mac_assmbl_destroy(MacAssmbl assmbl) {
-  for (int i = 0; i < assmbl->fragNr; i++)
-    free(assmbl->fragments[i]);
+  for (int i = 0; i < assmbl->um_assmbl->fragNr; i++) {
+    free(assmbl->um_assmbl->fragments[i]);
+  }
+  for (int i = 0; i < MAX_SEQNR; i++) {
+    for (int j = 0; j < MAX_SEQNR; j++) {
+      free(assmbl->am_assmbl->fragments[i][j]);
+    }
+  }
   free(assmbl);
 }
 
-MacDataFrame mac_assmbl_reassemble(MacAssmbl assmbl, MacMessage fragment) {
+MacDataFrame mac_assmbl_reassemble_um(MacAssmblUM assmbl, MacMessage fragment) {
   MacDLdata *data = &fragment->hdr.DLdata;
   MacDataFrame frame;
 
@@ -308,5 +350,55 @@ MacDataFrame mac_assmbl_reassemble(MacAssmbl assmbl, MacMessage fragment) {
   } else {
     // no complete frame received yet
     return NULL;
+  }
+}
+
+MacDataFrame mac_assmbl_reassemble_am(MacAssmblAM assmbl, MacMessage fragment) {
+  MacDataFrame frame;
+  MacDLdata hdr = fragment->hdr.DLdata;
+  uint8_t seqnr = hdr.seqNr;
+  uint8_t fragnr = hdr.fragNr;
+
+  // store fragment in buffer
+  memcpy(assmbl->fragments[seqnr][fragnr], fragment->data,
+         fragment->payload_len);
+  assmbl->fragments_len[seqnr][fragnr] = fragment->payload_len;
+  assmbl->frag_rcv_bitmask[seqnr][fragnr] = 1;
+  if (hdr.final_flag) {
+    assmbl->seq_got_final[seqnr] = 1;
+    assmbl->num_fragments[seqnr] = fragnr;
+  }
+
+  // check if we have all fragments to release a frame
+  if (assmbl->seq_got_final[seqnr]) {
+    uint frag_cnt = 0;
+    for (int i = 0; i < MAX_FRAGNR; i++) {
+      frag_cnt += assmbl->frag_rcv_bitmask[seqnr][i];
+    }
+    if (frag_cnt == assmbl->num_fragments[seqnr]) {
+      // we got all fragments and can release the frame
+      uint frame_len = 0;
+      for (int i = 0; i < assmbl->num_fragments[seqnr]; i++) {
+        frame_len += assmbl->fragments_len[seqnr][i];
+      }
+      frame = dataframe_create(frame_len);
+      uint8_t *p = frame->data;
+      for (int i = 0; i < assmbl->num_fragments[seqnr]; i++) {
+        memcpy(p, assmbl->fragments[i], assmbl->fragments_len[seqnr][i]);
+        p += assmbl->fragments_len[seqnr][i];
+        assmbl->frag_rcv_bitmask[seqnr][i] = 0;
+      }
+      assmbl->seq_got_final[seqnr] = 0;
+      assmbl->num_fragments[seqnr] = 0;
+      return frame;
+    }
+  }
+}
+
+MacDataFrame mac_assmbl_reassemble(MacAssmbl assmbl, MacMessage fragment) {
+  if (fragment->hdr.DLdata.do_ack) {
+    return mac_assmbl_reassemble_am(assmbl->am_assmbl, fragment);
+  } else {
+    return mac_assmbl_reassemble_um(assmbl->um_assmbl, fragment);
   }
 }
