@@ -139,10 +139,16 @@ int mac_ue_handle_message(MacUE mac, MacMessage msg, uint is_broadcast) {
     mac->userid = 0;
     break;
   case dl_data:
-    if (is_broadcast)
+    if (is_broadcast) {
       frame = mac_assmbl_reassemble(mac->reassembler_brcst, msg);
-    else
+    } else {
+      if (msg->hdr.ULdata.do_ack) {
+        MacMessage ack = mac_msg_create_ul_data_ack(ACK, msg->hdr.ULdata.seqNr,
+                                                    msg->hdr.ULdata.fragNr);
+        ringbuf_put(mac->msg_control_queue, ack);
+      }
       frame = mac_assmbl_reassemble(mac->reassembler, msg);
+    }
     if (frame != NULL) {
       mac->stats.bytes_rx += frame->size;
       LOG(INFO, "[MAC UE] received dataframe of %d bytes. brdcst: %d\n",

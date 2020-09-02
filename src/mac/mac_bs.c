@@ -285,6 +285,11 @@ int mac_bs_handle_message(MacBS mac, MacMessage msg, uint8_t userID) {
         userID, msg->hdr.MCSChangeReq.mcs, msg->hdr.MCSChangeReq.ul_flag)
     break;
   case ul_data:
+    if (msg->hdr.ULdata.do_ack) {
+      MacMessage ack = mac_msg_create_ul_data_ack(ACK, msg->hdr.ULdata.seqNr,
+                                                  msg->hdr.ULdata.fragNr);
+      ringbuf_put(user->msg_control_queue, ack);
+    }
     frame = mac_assmbl_reassemble(user->reassembler, msg);
     if (frame != NULL) {
       user->stats.bytes_rx += frame->size;
