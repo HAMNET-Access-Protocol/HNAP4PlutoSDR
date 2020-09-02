@@ -49,6 +49,7 @@ struct MacFragmenter_s {
   long long unsigned int am_window_timestamp[ARQ_WINDOW_LEN];
   uint8_t am_last_ack_idx;
   uint8_t am_window_idx;
+  uint am_window_bytes_buffered;
 
   long long unsigned int
       *subframe; // pointer to subframe counter of main MAC instance
@@ -84,10 +85,12 @@ void arq_window_put(MacFrag frag, MacMessage msg) {
   frag->am_window_retransmits[frag->am_window_idx] = 0;
   frag->am_window_timestamp[frag->am_window_idx] = *frag->subframe;
   frag->am_window_idx = (frag->am_window_idx + 1) % ARQ_WINDOW_LEN;
+  frag->am_window_bytes_buffered += msg->payload_len;
 }
 
 void arq_window_remove(MacFrag frag, int idx) {
   frag->am_window_retransmits[idx] = 0;
+  frag->am_window_bytes_buffered -= frag->am_send_window[idx]->payload_len;
   mac_msg_destroy(frag->am_send_window[idx]);
   frag->am_send_window[idx] = NULL;
   frag->am_window_timestamp[idx] = 0;
@@ -96,6 +99,17 @@ void arq_window_remove(MacFrag frag, int idx) {
     while (frag->am_last_ack_idx != frag->am_window_idx &&
            frag->am_send_window[frag->am_last_ack_idx] == NULL)
       frag->am_last_ack_idx = (frag->am_last_ack_idx + 1) % ARQ_WINDOW_LEN;
+  }
+}
+
+void arq_window_ack_msg(MacFrag frag, uint8_t acked_seqnr,
+                        uint8_t acked_fragnr) {
+  for (int idx = 0; idx < MAX_SEQNR; idx++) {
+    uint8_t seqnr = frag->am_send_window[idx]->hdr.DLdata.seqNr;
+    uint8_t fragnr = frag->am_send_window[idx]->hdr.DLdata.fragNr;
+    if (seqnr == acked_seqnr && fragnr == acked_fragnr) {
+      arq_window_remove(frag, idx);
+    }
   }
 }
 
@@ -156,9 +170,19 @@ int mac_frag_queue_full(MacFrag frag) {
 
 int mac_frag_get_buffersize(MacFrag frag) {
   if (frag->curr_frame) {
-    return (frag->curr_frame->size - frag->bytes_sent) + frag->bytes_buffered;
+    return (frag->curr_frame->size - frag->bytes_sent) + frag->bytes_buffered +
+           frag->am_window_bytes_buffered;
   } else {
-    return frag->bytes_buffered;
+    return frag->bytes_buffered + frag->am_window_bytes_buffered;
+  }
+}
+
+void mac_frag_ack_fragment(MacFrag frag, MacMessage ack) {
+  uint8_t seqnr = ack->hdr.DLdataAck.seqNr;
+  uint8_t fragnr = ack->hdr.DLdataAck.fragNr;
+
+  if (ack->hdr.DLdataAck.ack_type == ACK) {
+    arq_window_ack_msg(frag, seqnr, fragnr);
   }
 }
 

@@ -56,6 +56,9 @@ int mac_frag_get_buffersize(MacFrag frag);
 MacMessage mac_frag_get_fragment(MacFrag frag, uint max_frag_size,
                                  uint is_uplink);
 
+// callback to acknowledge a fragment that has been sent using Ack mode
+void mac_frag_ack_fragment(MacFrag frag, MacMessage ack);
+
 //// MAC Reassembler methods ////
 
 // Initialize the reassembler structure

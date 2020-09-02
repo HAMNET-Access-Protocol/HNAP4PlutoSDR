@@ -138,6 +138,9 @@ int mac_ue_handle_message(MacUE mac, MacMessage msg, uint is_broadcast) {
     mac->phy->userid = -1;
     mac->userid = 0;
     break;
+  case ul_data_ack:
+    mac_frag_ack_fragment(mac->fragmenter, msg);
+    break;
   case dl_data:
     if (is_broadcast) {
       frame = mac_assmbl_reassemble(mac->reassembler_brcst, msg);

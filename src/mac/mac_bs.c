@@ -199,6 +199,8 @@ int mac_bs_add_txdata(MacBS mac, uint8_t destUserID, MacDataFrame frame) {
   MacFrag fragmenter = NULL;
   if (destUserID == USER_BROADCAST) {
     fragmenter = mac->broadcast_data_fragmenter;
+    // force frames that are forwarded using broadcast frag to disable ARQ
+    frame->do_arq = 0;
   } else if (mac->UE[destUserID] != NULL) {
     fragmenter = mac->UE[destUserID]->fragmenter;
   } else {
@@ -283,6 +285,9 @@ int mac_bs_handle_message(MacBS mac, MacMessage msg, uint8_t userID) {
     LOG_SFN_MAC(
         INFO, "[MAC BS] mcs_change_request from user %d mcs: %d is_ul %d\n",
         userID, msg->hdr.MCSChangeReq.mcs, msg->hdr.MCSChangeReq.ul_flag)
+    break;
+  case dl_data_ack:
+    mac_frag_ack_fragment(user->fragmenter, msg);
     break;
   case ul_data:
     if (msg->hdr.ULdata.do_ack) {
