@@ -35,7 +35,7 @@ typedef struct MacReassembler_s *MacAssmbl;
 //// MAC Fragmenter methods ////
 
 // Initialize the fragmenter structure
-MacFrag mac_frag_init();
+MacFrag mac_frag_init(long long unsigned int *subframe_ptr);
 void mac_frag_destroy(MacFrag frag);
 
 // Add a frame to the MAC queue

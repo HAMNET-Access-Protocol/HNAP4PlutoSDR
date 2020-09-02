@@ -30,7 +30,7 @@
 MacUE mac_ue_init() {
   MacUE mac = calloc(sizeof(struct MacUE_s), 1);
   mac->msg_control_queue = ringbuf_create(MAC_CTRL_MSG_BUF_SIZE);
-  mac->fragmenter = mac_frag_init();
+  mac->fragmenter = mac_frag_init(&mac->subframe_cnt);
   mac->reassembler = mac_assmbl_init();
   mac->reassembler_brcst = mac_assmbl_init();
 #ifdef MAC_ENABLE_TAP_DEV

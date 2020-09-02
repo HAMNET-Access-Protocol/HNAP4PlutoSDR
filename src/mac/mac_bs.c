@@ -26,11 +26,11 @@
 #include "../runtime/test.h"
 #endif
 
-user_s *ue_create(uint userid) {
+user_s *ue_create(uint userid, long long unsigned int *subframe_ptr) {
   // create user instance and association response
   user_s *new_ue = calloc(sizeof(user_s), 1);
   new_ue->msg_control_queue = ringbuf_create(MAC_CTRL_MSG_BUF_SIZE);
-  new_ue->fragmenter = mac_frag_init();
+  new_ue->fragmenter = mac_frag_init(subframe_ptr);
   new_ue->reassembler = mac_assmbl_init();
   new_ue->userid = userid;
   new_ue->ul_queue = 0;
@@ -63,7 +63,7 @@ MacBS mac_bs_init() {
     macinst->UE[i] = NULL;
   }
   macinst->broadcast_ctrl_queue = ringbuf_create(MAC_CTRL_MSG_BUF_SIZE);
-  macinst->broadcast_data_fragmenter = mac_frag_init();
+  macinst->broadcast_data_fragmenter = mac_frag_init(&macinst->subframe_cnt);
 
 #ifdef MAC_ENABLE_TAP_DEV
   macinst->tapdevice = tap_init("tap0");
@@ -137,7 +137,7 @@ void mac_bs_add_new_ue(MacBS mac, uint8_t rachuserid, uint8_t rach_try_cnt,
       ringbuf_put(mac->broadcast_ctrl_queue, response);
     } else {
       // create new UE struct
-      mac->UE[userid] = ue_create(userid);
+      mac->UE[userid] = ue_create(userid, &mac->subframe_cnt);
       mac->UE[userid]->fs = fs;
       mac->UE[userid]->last_seen = mac->subframe_cnt;
       mac->UE[userid]->timingadvance = timing_diff;
