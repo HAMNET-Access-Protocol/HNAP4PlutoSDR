@@ -38,6 +38,8 @@ int mac_msg_get_hdrlen(CtrlID_e type) {
     return 2;
   case session_end:
     return 1;
+  case ul_data_ack:
+    return 2;
   case dl_data:
     return 3;
   case ul_req:
@@ -50,6 +52,8 @@ int mac_msg_get_hdrlen(CtrlID_e type) {
     return 1;
   case mcs_chance_req:
     return 1;
+  case dl_data_ack:
+    return 2;
   case ul_data:
     return 3;
   default:
@@ -143,6 +147,25 @@ MacMessage mac_msg_create_session_end() {
   return genericmsg;
 }
 
+MacMessage mac_msg_create_ul_data_ack(uint8_t ack_type, uint8_t seqNr,
+                                      uint8_t fragNr) {
+  MacMessage genericmsg = mac_msg_create_generic(ul_data_ack);
+  MacULdataAck *msg = &genericmsg->hdr.ULdataAck;
+  genericmsg->payload_len = 0;
+
+  genericmsg->hdr_bin[0] = (ul_data_ack & 0b111) << 5;
+  genericmsg->hdr_bin[0] |= (ack_type & 0b11) << 3;
+  genericmsg->hdr_bin[0] |= (seqNr & 0b111);
+  genericmsg->hdr_bin[1] = (fragNr & 0b11111) << 3;
+
+  msg->ctrl_id = ul_data_ack & 0b111;
+  msg->ack_type = ack_type;
+  msg->seqNr = seqNr;
+  msg->fragNr = fragNr;
+
+  return genericmsg;
+}
+
 MacMessage mac_msg_create_dl_data(uint data_length, uint8_t do_ack,
                                   uint8_t final, uint8_t seqNr, uint8_t fragNr,
                                   uint8_t *data) {
@@ -231,6 +254,25 @@ MacMessage mac_msg_create_mcs_change_req(uint is_ul, uint mcs) {
   return genericmsg;
 }
 
+MacMessage mac_msg_create_dl_data_ack(uint8_t ack_type, uint8_t seqNr,
+                                      uint8_t fragNr) {
+  MacMessage genericmsg = mac_msg_create_generic(dl_data_ack);
+  MacDLdataAck *msg = &genericmsg->hdr.DLdataAck;
+  genericmsg->payload_len = 0;
+
+  genericmsg->hdr_bin[0] = (dl_data_ack & 0b111) << 5;
+  genericmsg->hdr_bin[0] |= (ack_type & 0b11) << 3;
+  genericmsg->hdr_bin[0] |= (seqNr & 0b111);
+  genericmsg->hdr_bin[1] = (fragNr & 0b11111) << 3;
+
+  msg->ctrl_id = dl_data_ack & 0b111;
+  msg->ack_type = ack_type;
+  msg->seqNr = seqNr;
+  msg->fragNr = fragNr;
+
+  return genericmsg;
+}
+
 MacMessage mac_msg_create_ul_data(uint data_length, uint8_t do_ack,
                                   uint8_t final, uint8_t seqNr, uint8_t fragNr,
                                   uint8_t *data) {
@@ -281,6 +323,18 @@ int mac_msg_generate(MacMessage genericmsg, uint8_t *buf, uint buflen) {
   return 1;
 }
 
+// generate a deep copy of a mac message
+MacMessage mac_msg_copy(MacMessage msg) {
+  MacMessage copied_msg = mac_msg_create_generic(msg->type);
+  copied_msg->hdr = msg->hdr;
+  memcpy(copied_msg->hdr_bin, msg->hdr_bin, MSG_HDR_BYTES);
+  copied_msg->hdr_len = msg->hdr_len;
+  copied_msg->payload_len = msg->payload_len;
+  copied_msg->data = malloc(msg->payload_len);
+  memcpy(copied_msg->data, msg->data, msg->payload_len);
+  return copied_msg;
+}
+
 void mac_msg_parse_associate_response(MacMessage msg) {
   msg->hdr.AssociateResponse.ctrl_id = msg->type & 0b111;
   msg->hdr.AssociateResponse.userid = (msg->hdr_bin[0] & 0b00011110) >> 1;
@@ -305,6 +359,13 @@ void mac_msg_parse_timing_advance(MacMessage msg) {
   msg->hdr.TimingAdvance.ctrl_id = msg->type & 0b111;
   msg->hdr.TimingAdvance.timingAdvance =
       ((msg->hdr_bin[0] & 0b11111) << 8) | msg->hdr_bin[1];
+}
+
+void mac_msg_parse_ul_data_ack(MacMessage msg) {
+  msg->hdr.ULdataAck.ctrl_id = msg->type & 0b111;
+  msg->hdr.ULdataAck.ack_type = (msg->hdr_bin[0] >> 3) & 0b11;
+  msg->hdr.ULdataAck.seqNr = msg->hdr_bin[0] & 0b111;
+  msg->hdr.ULdataAck.fragNr = (msg->hdr_bin[1] >> 3) & 0b11111;
 }
 
 void mac_msg_parse_dl_data(MacMessage msg) {
@@ -340,6 +401,13 @@ void mac_msg_parse_mcs_change_req(MacMessage msg) {
   msg->hdr.MCSChangeReq.ctrl_id = msg->type & 0b111;
   msg->hdr.MCSChangeReq.ul_flag = (msg->hdr_bin[0] & 0b10000) >> 4;
   msg->hdr.MCSChangeReq.mcs = (msg->hdr_bin[0] & 0b1111);
+}
+
+void mac_msg_parse_dl_data_ack(MacMessage msg) {
+  msg->hdr.DLdataAck.ctrl_id = msg->type & 0b111;
+  msg->hdr.DLdataAck.ack_type = (msg->hdr_bin[0] >> 3) & 0b11;
+  msg->hdr.DLdataAck.seqNr = msg->hdr_bin[0] & 0b111;
+  msg->hdr.DLdataAck.fragNr = (msg->hdr_bin[1] >> 3) & 0b11111;
 }
 
 void mac_msg_parse_ul_data(MacMessage msg) {
@@ -399,6 +467,9 @@ MacMessage mac_msg_parse(uint8_t *buf, uint buflen, uint8_t ul_flag) {
     break;
   case session_end:
     break;
+  case ul_data_ack:
+    mac_msg_parse_ul_data_ack(genericmsg);
+    break;
   case dl_data:
     mac_msg_parse_dl_data(genericmsg);
     break;
@@ -416,6 +487,9 @@ MacMessage mac_msg_parse(uint8_t *buf, uint buflen, uint8_t ul_flag) {
     break;
   case mcs_chance_req:
     mac_msg_parse_mcs_change_req(genericmsg);
+    break;
+  case dl_data_ack:
+    mac_msg_parse_dl_data_ack(genericmsg);
     break;
   case ul_data:
     mac_msg_parse_ul_data(genericmsg);

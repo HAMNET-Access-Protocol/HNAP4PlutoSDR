@@ -1,4 +1,5 @@
 #include <mac_messages.h>
+#include <src/mac/mac_messages.h>
 #include <unity.h>
 
 void setUp(void) {
@@ -79,6 +80,7 @@ void test_mac_msg_parse_dldata(void) {
   TEST_ASSERT_EQUAL_MEMORY(databuf, parsed_msg->data, datalen);
   mac_msg_destroy(test_msg);
   mac_msg_destroy(parsed_msg);
+  free(msgbuf);
 }
 
 void test_mac_msg_parse_uldata(void) {
@@ -109,6 +111,55 @@ void test_mac_msg_parse_uldata(void) {
 
   mac_msg_destroy(test_msg);
   mac_msg_destroy(parsed_msg);
+  free(msgbuf);
+}
+
+void test_mac_msg_parse_dl_data_ack(void) {
+  // create message
+  uint8_t ack_type = ACK;
+  uint8_t seqNr = 5;
+  uint8_t fragNr = 13;
+  MacMessage test_msg = mac_msg_create_dl_data_ack(ack_type, seqNr, fragNr);
+
+  // write msg to buffer
+  uint buflen = 128;
+  uint8_t *buf = malloc(buflen);
+  mac_msg_generate(test_msg, buf, buflen);
+
+  // parse and check
+  MacMessage parsed_msg = mac_msg_parse(buf, buflen, 1);
+  TEST_ASSERT_EQUAL(dl_data_ack, parsed_msg->type);
+  TEST_ASSERT_EQUAL(ack_type, parsed_msg->hdr.DLdataAck.ack_type);
+  TEST_ASSERT_EQUAL(seqNr, parsed_msg->hdr.DLdataAck.seqNr);
+  TEST_ASSERT_EQUAL(fragNr, parsed_msg->hdr.DLdataAck.fragNr);
+
+  mac_msg_destroy(test_msg);
+  mac_msg_destroy(parsed_msg);
+  free(buf);
+}
+
+void test_mac_msg_parse_ul_data_ack(void) {
+  // create message
+  uint8_t ack_type = ACK;
+  uint8_t seqNr = 5;
+  uint8_t fragNr = 13;
+  MacMessage test_msg = mac_msg_create_ul_data_ack(ack_type, seqNr, fragNr);
+
+  // write msg to buffer
+  uint buflen = 128;
+  uint8_t *buf = malloc(buflen);
+  mac_msg_generate(test_msg, buf, buflen);
+
+  // parse and check
+  MacMessage parsed_msg = mac_msg_parse(buf, buflen, 0);
+  TEST_ASSERT_EQUAL(ul_data_ack, parsed_msg->type);
+  TEST_ASSERT_EQUAL(ack_type, parsed_msg->hdr.ULdataAck.ack_type);
+  TEST_ASSERT_EQUAL(seqNr, parsed_msg->hdr.ULdataAck.seqNr);
+  TEST_ASSERT_EQUAL(fragNr, parsed_msg->hdr.ULdataAck.fragNr);
+
+  mac_msg_destroy(test_msg);
+  mac_msg_destroy(parsed_msg);
+  free(buf);
 }
 
 // not needed when using generate_test_runner.rb
@@ -118,5 +169,7 @@ int main(void) {
   RUN_TEST(test_mac_msg_parse_associate_response);
   RUN_TEST(test_mac_msg_parse_dldata);
   RUN_TEST(test_mac_msg_parse_uldata);
+  RUN_TEST(test_mac_msg_parse_dl_data_ack);
+  RUN_TEST(test_mac_msg_parse_ul_data_ack);
   return UNITY_END();
 }
