@@ -167,6 +167,9 @@ void phy_bs_write_sync_info(PhyBS phy, float complex *txbuf_time) {
   }
   // write symbol in time domain buffer
   ofdmframegen_writesymbol(phy->fg, subcarriers, txbuf_time);
+  lchan_destroy(chan);
+  free(enc_b);
+  free(repacked_b);
 }
 
 TIMECHECK_CREATE(timecheck_tx);
