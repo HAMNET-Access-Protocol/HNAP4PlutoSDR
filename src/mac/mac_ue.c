@@ -20,6 +20,8 @@
 
 #include "mac_ue.h"
 #include "../phy/phy_ue.h"
+#include <net/ethernet.h>
+#include <netinet/ip.h>
 #include <unistd.h>
 
 #ifdef MAC_TEST_DELAY
@@ -247,9 +249,11 @@ void mac_ue_run_scheduler(MacUE mac) {
           }
           MacMessage msg = mac_frag_get_fragment(mac->fragmenter,
                                                  lchan_unused_bytes(chan), 1);
-          lchan_add_message(chan, msg);
-          mac->stats.bytes_tx += msg->payload_len;
-          mac_msg_destroy(msg);
+          if (msg != NULL) {
+            lchan_add_message(chan, msg);
+            mac->stats.bytes_tx += msg->payload_len;
+            mac_msg_destroy(msg);
+          }
         } else {
           // client is assigned to slot but has no data
           // send keepalive instead.
@@ -367,6 +371,17 @@ void *mac_ue_tap_rx_th(void *arg) {
     if (mac->tapdevice->bytes_rec > 0) {
       MacDataFrame frame = dataframe_create(mac->tapdevice->bytes_rec);
       memcpy(frame->data, mac->tapdevice->buffer, frame->size);
+      // Packet inspection: determine if this is TCP traffic
+      // then activate ARQ
+      struct ether_header *etherhdr = (struct ether_header *)frame->data;
+      struct iphdr *ip4hdr = (struct iphdr *)&frame->data[14];
+      frame->do_arq = 0; // no ARQ by default
+      if (etherhdr->ether_type == ETHERTYPE_IP) {
+        // is IPv4 packet, check if TCP
+        if (ip4hdr->protocol == 6) {
+          frame->do_arq = 1;
+        }
+      }
       if (!mac_ue_add_txdata(mac, frame)) {
         dataframe_destroy(frame);
         LOG(WARN, "[MAC UE] could not forward TAP data to MAC. queue full\n");

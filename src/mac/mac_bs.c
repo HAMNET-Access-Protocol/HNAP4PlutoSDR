@@ -708,14 +708,12 @@ void *mac_bs_tap_rx_th(void *arg) {
       // then activate ARQ
       struct ether_header *etherhdr = (struct ether_header *)frame->data;
       struct iphdr *ip4hdr = (struct iphdr *)&frame->data[14];
+      frame->do_arq = 0; // no ARQ by default
       if (etherhdr->ether_type == ETHERTYPE_IP) {
         // is IPv4 packet, check if TCP
         if (ip4hdr->protocol == 6) {
           frame->do_arq = 1;
         }
-      } else {
-        // UM mode for all other payload types
-        frame->do_arq = 0;
       }
       // find correct userid to forward EtherFrame to
       // if no entry is found, broadcast channel is used

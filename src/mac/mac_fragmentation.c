@@ -105,10 +105,12 @@ void arq_window_remove(MacFrag frag, int idx) {
 void arq_window_ack_msg(MacFrag frag, uint8_t acked_seqnr,
                         uint8_t acked_fragnr) {
   for (int idx = 0; idx < MAX_SEQNR; idx++) {
-    uint8_t seqnr = frag->am_send_window[idx]->hdr.DLdata.seqNr;
-    uint8_t fragnr = frag->am_send_window[idx]->hdr.DLdata.fragNr;
-    if (seqnr == acked_seqnr && fragnr == acked_fragnr) {
-      arq_window_remove(frag, idx);
+    if (frag->am_send_window[idx] != NULL) {
+      uint8_t seqnr = frag->am_send_window[idx]->hdr.DLdata.seqNr;
+      uint8_t fragnr = frag->am_send_window[idx]->hdr.DLdata.fragNr;
+      if (seqnr == acked_seqnr && fragnr == acked_fragnr) {
+        arq_window_remove(frag, idx);
+      }
     }
   }
 }
@@ -156,6 +158,12 @@ int mac_frag_add_frame(MacFrag frag, MacDataFrame frame) {
 }
 
 int mac_frag_has_fragment(MacFrag frag) {
+  // check if current frame is sent with AM and arq window is full. We cannot
+  // send further data in this case
+  if (frag->curr_frame && frag->curr_frame->do_arq && arq_window_isfull(frag)) {
+    return 0;
+  }
+  // Check if there is any data buffered to send.
   if (ringbuf_isempty(frag->frame_queue) && (frag->curr_frame == NULL) &&
       arq_window_isempty(frag)) {
     return 0;
@@ -253,6 +261,7 @@ MacMessage mac_frag_get_fragment(MacFrag frag, uint max_frag_size,
             frag->curr_frame->data + frag->bytes_sent);
       }
       arq_window_put(frag, fragment);
+      fragment = mac_msg_copy(fragment);
     }
   } else {
     // create MAC Message in Unacknowledged Mode
@@ -390,7 +399,7 @@ MacDataFrame mac_assmbl_reassemble_am(MacAssmblAM assmbl, MacMessage fragment) {
   assmbl->frag_rcv_bitmask[seqnr][fragnr] = 1;
   if (hdr.final_flag) {
     assmbl->seq_got_final[seqnr] = 1;
-    assmbl->num_fragments[seqnr] = fragnr;
+    assmbl->num_fragments[seqnr] = fragnr + 1;
   }
 
   // check if we have all fragments to release a frame
@@ -417,6 +426,7 @@ MacDataFrame mac_assmbl_reassemble_am(MacAssmblAM assmbl, MacMessage fragment) {
       return frame;
     }
   }
+  return NULL;
 }
 
 MacDataFrame mac_assmbl_reassemble(MacAssmbl assmbl, MacMessage fragment) {
