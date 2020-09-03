@@ -20,6 +20,8 @@
 
 #include "mac_bs.h"
 #include "../util/log.h"
+#include <net/ethernet.h>
+#include <netinet/ip.h>
 #include <unistd.h>
 
 #ifdef MAC_TEST_DELAY
@@ -702,6 +704,19 @@ void *mac_bs_tap_rx_th(void *arg) {
       MacDataFrame frame = dataframe_create(dev->bytes_rec);
       memcpy(frame->data, dev->buffer, dev->bytes_rec);
 
+      // Packet inspection: determine if this is TCP traffic
+      // then activate ARQ
+      struct ether_header *etherhdr = (struct ether_header *)frame->data;
+      struct iphdr *ip4hdr = (struct iphdr *)&frame->data[14];
+      if (etherhdr->ether_type == ETHERTYPE_IP) {
+        // is IPv4 packet, check if TCP
+        if (ip4hdr->protocol == 6) {
+          frame->do_arq = 1;
+        }
+      } else {
+        // UM mode for all other payload types
+        frame->do_arq = 0;
+      }
       // find correct userid to forward EtherFrame to
       // if no entry is found, broadcast channel is used
       struct entry *np = NULL;
