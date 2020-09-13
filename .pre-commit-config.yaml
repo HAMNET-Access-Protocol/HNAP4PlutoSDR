@@ -4,4 +4,4 @@ repos:
       hooks:
           - id: clang-format
             args: [-i]
-            files: 'src/.*\.[ch]'
+            files: '[src,tests]/.*\.[ch]'
