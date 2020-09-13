@@ -104,7 +104,7 @@ void arq_window_remove(MacFrag frag, int idx) {
 
 void arq_window_ack_msg(MacFrag frag, uint8_t acked_seqnr,
                         uint8_t acked_fragnr) {
-  for (int idx = 0; idx < MAX_SEQNR; idx++) {
+  for (int idx = 0; idx < ARQ_WINDOW_LEN; idx++) {
     if (frag->am_send_window[idx] != NULL) {
       uint8_t seqnr = frag->am_send_window[idx]->hdr.DLdata.seqNr;
       uint8_t fragnr = frag->am_send_window[idx]->hdr.DLdata.fragNr;
@@ -402,6 +402,7 @@ MacDataFrame mac_assmbl_reassemble_am(MacAssmblAM assmbl, MacMessage fragment) {
     assmbl->num_fragments[seqnr] = fragnr + 1;
   }
 
+  LOG(DEBUG, "[MAC FRAG] got frag %d:%d\n", seqnr, fragnr);
   // check if we have all fragments to release a frame
   if (assmbl->seq_got_final[seqnr]) {
     uint frag_cnt = 0;

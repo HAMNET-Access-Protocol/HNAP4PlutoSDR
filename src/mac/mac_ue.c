@@ -142,6 +142,8 @@ int mac_ue_handle_message(MacUE mac, MacMessage msg, uint is_broadcast) {
     break;
   case ul_data_ack:
     mac_frag_ack_fragment(mac->fragmenter, msg);
+    LOG(DEBUG, "got ack for %d:%d\n", msg->hdr.ULdataAck.seqNr,
+        msg->hdr.ULdataAck.fragNr);
     break;
   case dl_data:
     if (is_broadcast) {
