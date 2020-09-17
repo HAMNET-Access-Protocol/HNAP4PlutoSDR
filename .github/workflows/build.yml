@@ -1,6 +1,9 @@
 name: Build
 
-on: [push]
+on:
+  push:
+    paths-ignore:
+    - '*.md'
 
 jobs:
   tests_and_simulation:
