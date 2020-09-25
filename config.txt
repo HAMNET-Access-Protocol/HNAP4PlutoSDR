@@ -52,8 +52,9 @@ phy:
 # Platform configuration
 platform:
 {
-  tx_bandwdith = 1701126;   # Passband of the analog TX filter.
+  tx_bandwidth = 1701126;   # Passband of the analog TX filter.
   rx_bandwidth = 1703632;   # Passband of the analog RX filter.
+  enable_ptt = 0;           # Enable output of PTT signal on MIO0 pin
   ptt_delay_comp = 200;     # Adjust the timing of the PTT signal in usec
 }
 
