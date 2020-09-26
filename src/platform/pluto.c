@@ -364,9 +364,9 @@ void init_generic(platform hw, uint buf_len, char *config_file) {
     }
     platform_settings = config_lookup(&cfg, "platform");
     if (platform_settings != NULL) {
-      config_setting_lookup_int64(platform_settings, "tx_bandwdith",
+      config_setting_lookup_int64(platform_settings, "tx_bandwidth",
                                   &pluto->txcfg.bw_hz);
-      config_setting_lookup_int64(platform_settings, "rx_bandwdith",
+      config_setting_lookup_int64(platform_settings, "rx_bandwidth",
                                   &pluto->rxcfg.bw_hz);
       config_setting_lookup_int(platform_settings, "enable_ptt",
                                 &pluto->enable_ptt);
