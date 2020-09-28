@@ -706,10 +706,12 @@ void *mac_bs_tap_rx_th(void *arg) {
 
       // Packet inspection: determine if this is TCP traffic
       // then activate ARQ
-      struct ether_header *etherhdr = (struct ether_header *)frame->data;
+      uint16_t ether_type = (frame->data[12] << 8) + frame->data[13];
       struct iphdr *ip4hdr = (struct iphdr *)&frame->data[14];
       frame->do_arq = 0; // no ARQ by default
-      if (etherhdr->ether_type == ETHERTYPE_IP) {
+      LOG(DEBUG, "[TAP] Packet inspect: ethertype %04x, proto %d\n", ether_type,
+          ip4hdr->protocol);
+      if (ether_type == ETHERTYPE_IP) {
         // is IPv4 packet, check if TCP
         if (ip4hdr->protocol == 6) {
           frame->do_arq = 1;

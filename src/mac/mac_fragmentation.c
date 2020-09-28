@@ -324,7 +324,7 @@ MacDataFrame mac_assmbl_reassemble_um(MacAssmblUM assmbl, MacMessage fragment) {
       assmbl->frame_open = 1;
     } else {
       LOG(DEBUG,
-          "[MAC ASSMBL] unexpected fragNr for new frame. "
+          "[MAC ASSMBL UM] unexpected fragNr for new frame. "
           "Got %d Expect 0\n",
           data->fragNr);
       return NULL;
@@ -334,6 +334,8 @@ MacDataFrame mac_assmbl_reassemble_um(MacAssmblUM assmbl, MacMessage fragment) {
   // ensure that the sequence number and fragment number matches
   // TODO implement unordered fragment reception
   if ((assmbl->seqNr == data->seqNr) && (assmbl->fragNr == data->fragNr)) {
+    LOG(DEBUG, "[MAC ASSMBL UM] new matching fragment %d:%d\n", assmbl->seqNr,
+        assmbl->fragNr);
     assmbl->fragments[assmbl->fragNr] = malloc(fragment->payload_len);
     memcpy(assmbl->fragments[assmbl->fragNr], fragment->data,
            fragment->payload_len);
@@ -343,8 +345,8 @@ MacDataFrame mac_assmbl_reassemble_um(MacAssmblUM assmbl, MacMessage fragment) {
   } else {
     // reset reassembler state
     LOG(DEBUG,
-        "[MAC ASSMBL] seq/frag Nr does not match: Got seqNr %d fragNr %d, "
-        "expect %d:%d\n",
+        "[MAC ASSMBL UM] seq/frag Nr does not match: Got %d:%d, "
+        "expected %d:%d\n",
         data->seqNr, data->fragNr, assmbl->seqNr, assmbl->fragNr);
     for (int i = 0; i < assmbl->fragNr; i++) {
       free(assmbl->fragments[i]);
@@ -370,6 +372,7 @@ MacDataFrame mac_assmbl_reassemble_um(MacAssmblUM assmbl, MacMessage fragment) {
 
   if (data->final_flag) {
     frame = dataframe_create(assmbl->frame_len);
+    frame->do_arq = 0;
     uint8_t *p = frame->data;
     for (int i = 0; i < assmbl->fragNr; i++) {
       memcpy(p, assmbl->fragments[i], assmbl->fragments_len[i]);
@@ -402,7 +405,7 @@ MacDataFrame mac_assmbl_reassemble_am(MacAssmblAM assmbl, MacMessage fragment) {
     assmbl->num_fragments[seqnr] = fragnr + 1;
   }
 
-  LOG(DEBUG, "[MAC FRAG] got frag %d:%d\n", seqnr, fragnr);
+  LOG(DEBUG, "[MAC FRAG AM] got fragment %d:%d\n", seqnr, fragnr);
   // check if we have all fragments to release a frame
   if (assmbl->seq_got_final[seqnr]) {
     uint frag_cnt = 0;
@@ -416,6 +419,7 @@ MacDataFrame mac_assmbl_reassemble_am(MacAssmblAM assmbl, MacMessage fragment) {
         frame_len += assmbl->fragments_len[seqnr][i];
       }
       frame = dataframe_create(frame_len);
+      frame->do_arq = 1;
       uint8_t *p = frame->data;
       for (int i = 0; i < assmbl->num_fragments[seqnr]; i++) {
         memcpy(p, assmbl->fragments[i], assmbl->fragments_len[seqnr][i]);

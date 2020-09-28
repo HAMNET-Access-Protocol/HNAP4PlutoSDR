@@ -158,8 +158,9 @@ int mac_ue_handle_message(MacUE mac, MacMessage msg, uint is_broadcast) {
     }
     if (frame != NULL) {
       mac->stats.bytes_rx += frame->size;
-      LOG(INFO, "[MAC UE] received dataframe of %d bytes. brdcst: %d\n",
-          frame->size, is_broadcast);
+      LOG(INFO,
+          "[MAC UE] received dataframe of %d bytes. brdcst: %d arq_mode: %d \n",
+          frame->size, is_broadcast, frame->do_arq);
       // PRINT_BIN(INFO,frame->data,frame->size); LOG(INFO,"\n");
 
 #ifdef MAC_ENABLE_TAP_DEV
@@ -375,10 +376,12 @@ void *mac_ue_tap_rx_th(void *arg) {
       memcpy(frame->data, mac->tapdevice->buffer, frame->size);
       // Packet inspection: determine if this is TCP traffic
       // then activate ARQ
-      struct ether_header *etherhdr = (struct ether_header *)frame->data;
+      uint16_t ether_type = (frame->data[12] << 8) + frame->data[13];
       struct iphdr *ip4hdr = (struct iphdr *)&frame->data[14];
+      LOG(DEBUG, "[TAP] Packet inspect: ethertype %04x, proto %d\n", ether_type,
+          ip4hdr->protocol);
       frame->do_arq = 0; // no ARQ by default
-      if (etherhdr->ether_type == ETHERTYPE_IP) {
+      if (ether_type == ETHERTYPE_IP) {
         // is IPv4 packet, check if TCP
         if (ip4hdr->protocol == 6) {
           frame->do_arq = 1;
