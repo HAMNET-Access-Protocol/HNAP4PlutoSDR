@@ -28,7 +28,7 @@
 #define MAX_FRAGNR 32         // 5 bits are allocated for fragNr in MacMessage
 #define MAX_FRAGMENT_SIZE 512 // max size per fragment, currently static
 
-#define ARQ_WINDOW_LEN 7 // arq window len must be smaller than MAX_SEQNR
+#define ARQ_WINDOW_LEN 15 // arq window len must be smaller than MAX_SEQNR
 #define ARQ_ACK_TIMEOUT                                                        \
   15 // number of subframes until the sender assumes a timeout for
      // the ACK. 1 subframe = 17ms

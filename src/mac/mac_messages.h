@@ -95,10 +95,10 @@ typedef struct {
 
 typedef struct {
   uint32_t ctrl_id : 3;
-  uint32_t do_ack : 1;
-  uint32_t data_length : 11;
+  uint32_t data_length : 10;
   uint32_t final_flag : 1;
-  uint32_t seqNr : 3;
+  uint32_t do_ack : 1;
+  uint32_t seqNr : 4;
   uint32_t fragNr : 5;
 } MacDLdata;
 
@@ -137,10 +137,10 @@ typedef struct {
 
 typedef struct {
   uint32_t ctrl_id : 3;
-  uint32_t do_ack : 1;
-  uint32_t data_length : 11;
+  uint32_t data_length : 10;
   uint32_t final_flag : 1;
-  uint32_t seqNr : 3;
+  uint32_t do_ack : 1;
+  uint32_t seqNr : 4;
   uint32_t fragNr : 5;
 } MacULdata;
 

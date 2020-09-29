@@ -174,10 +174,11 @@ MacMessage mac_msg_create_dl_data(uint data_length, uint8_t do_ack,
   genericmsg->payload_len = data_length;
 
   genericmsg->hdr_bin[0] = (dl_data & 0b111) << 5;
-  genericmsg->hdr_bin[0] |= (do_ack & 0b1) << 4;
-  genericmsg->hdr_bin[0] |= (data_length >> 7) & 0b1111;
-  genericmsg->hdr_bin[1] = (data_length & 0b01111111) << 1;
-  genericmsg->hdr_bin[1] |= final & 0b1;
+  genericmsg->hdr_bin[0] |= (data_length >> 5) & 0b11111;
+  genericmsg->hdr_bin[1] = (data_length & 0b00011111) << 3;
+  genericmsg->hdr_bin[1] |= (final & 0b1) << 2;
+  genericmsg->hdr_bin[1] |= (do_ack & 0b1) << 1;
+  genericmsg->hdr_bin[1] |= (seqNr >> 3) & 0b1;
   genericmsg->hdr_bin[2] = (seqNr & 0b111) << 5;
   genericmsg->hdr_bin[2] |= fragNr & 0b11111;
 
@@ -281,14 +282,16 @@ MacMessage mac_msg_create_ul_data(uint data_length, uint8_t do_ack,
   genericmsg->payload_len = data_length;
 
   genericmsg->hdr_bin[0] = (ul_data & 0b111) << 5;
-  genericmsg->hdr_bin[0] |= (do_ack & 0b1) << 4;
-  genericmsg->hdr_bin[0] |= (data_length >> 7) & 0b1111;
-  genericmsg->hdr_bin[1] = (data_length & 0b01111111) << 1;
-  genericmsg->hdr_bin[1] |= final & 0b1;
+  genericmsg->hdr_bin[0] |= (data_length >> 5) & 0b11111;
+  genericmsg->hdr_bin[1] = (data_length & 0b00011111) << 3;
+  genericmsg->hdr_bin[1] |= (final & 0b1) << 2;
+  genericmsg->hdr_bin[1] |= (do_ack & 0b1) << 1;
+  genericmsg->hdr_bin[1] |= (seqNr >> 3);
   genericmsg->hdr_bin[2] = (seqNr & 0b111) << 5;
   genericmsg->hdr_bin[2] |= fragNr & 0b11111;
 
   msg->ctrl_id = ul_data & 0b111;
+  msg->do_ack = do_ack;
   msg->data_length = data_length;
   msg->fragNr = fragNr;
   msg->seqNr = seqNr;
@@ -370,11 +373,12 @@ void mac_msg_parse_ul_data_ack(MacMessage msg) {
 
 void mac_msg_parse_dl_data(MacMessage msg) {
   msg->hdr.DLdata.ctrl_id = msg->type & 0b111;
-  msg->hdr.DLdata.do_ack = (msg->hdr_bin[0] >> 4) & 0b1;
   msg->hdr.DLdata.data_length =
-      ((msg->hdr_bin[0] & 0b1111) << 7) | (msg->hdr_bin[1] >> 1);
-  msg->hdr.DLdata.final_flag = msg->hdr_bin[1] & 0b1;
-  msg->hdr.DLdata.seqNr = msg->hdr_bin[2] >> 5;
+      ((msg->hdr_bin[0] & 0b11111) << 5) | (msg->hdr_bin[1] >> 3);
+  msg->hdr.DLdata.final_flag = (msg->hdr_bin[1] >> 2) & 0b1;
+  msg->hdr.DLdata.do_ack = (msg->hdr_bin[1] >> 1) & 0b1;
+  msg->hdr.DLdata.seqNr =
+      ((msg->hdr_bin[1] & 0b1) << 3) + (msg->hdr_bin[2] >> 5);
   msg->hdr.DLdata.fragNr = msg->hdr_bin[2] & 0b11111;
 }
 
@@ -412,11 +416,12 @@ void mac_msg_parse_dl_data_ack(MacMessage msg) {
 
 void mac_msg_parse_ul_data(MacMessage msg) {
   msg->hdr.ULdata.ctrl_id = msg->type & 0b111;
-  msg->hdr.ULdata.do_ack = (msg->hdr_bin[0] >> 4) & 0b1;
   msg->hdr.ULdata.data_length =
-      ((msg->hdr_bin[0] & 0b1111) << 7) | (msg->hdr_bin[1] >> 1);
-  msg->hdr.ULdata.final_flag = msg->hdr_bin[1] & 0b1;
-  msg->hdr.ULdata.seqNr = msg->hdr_bin[2] >> 5;
+      ((msg->hdr_bin[0] & 0b11111) << 5) | (msg->hdr_bin[1] >> 3);
+  msg->hdr.ULdata.final_flag = (msg->hdr_bin[1] >> 2) & 0b1;
+  msg->hdr.ULdata.do_ack = (msg->hdr_bin[1] >> 1) & 0b1;
+  msg->hdr.ULdata.seqNr =
+      ((msg->hdr_bin[1] & 0b1) << 3) + (msg->hdr_bin[2] >> 5);
   msg->hdr.ULdata.fragNr = msg->hdr_bin[2] & 0b11111;
 }
 
