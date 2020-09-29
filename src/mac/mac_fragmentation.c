@@ -158,18 +158,27 @@ int mac_frag_add_frame(MacFrag frag, MacDataFrame frame) {
 }
 
 int mac_frag_has_fragment(MacFrag frag) {
-  // check if current frame is sent with AM and arq window is full. We cannot
+  // check if arq window is full. We cannot
   // send further data in this case
-  if (frag->curr_frame && frag->curr_frame->do_arq && arq_window_isfull(frag)) {
+  if (arq_window_isfull(frag)) {
     return 0;
   }
-  // Check if there is any data buffered to send.
-  if (ringbuf_isempty(frag->frame_queue) && (frag->curr_frame == NULL) &&
-      arq_window_isempty(frag)) {
-    return 0;
-  } else {
+  // Check if there is any frame buffered that can be sent.
+  if (!ringbuf_isempty(frag->frame_queue) || (frag->curr_frame != NULL)) {
     return 1;
   }
+  // Check if there is any retransmission that can be made
+  for (int i = 0; i < ARQ_WINDOW_LEN; i++) {
+    int idx = (frag->am_last_ack_idx + i) % ARQ_WINDOW_LEN;
+    if (frag->am_send_window[idx] != NULL) {
+      if (frag->am_window_timestamp[idx] + ARQ_ACK_TIMEOUT < *frag->subframe) {
+        return 1;
+      }
+    }
+  }
+
+  // there is nothing to send
+  return 0;
 }
 
 int mac_frag_queue_full(MacFrag frag) {
@@ -189,6 +198,7 @@ void mac_frag_ack_fragment(MacFrag frag, MacMessage ack) {
   uint8_t seqnr = ack->hdr.DLdataAck.seqNr;
   uint8_t fragnr = ack->hdr.DLdataAck.fragNr;
 
+  LOG(DEBUG, "[MAC FRAG] got ACK for %d:%d\n", seqnr, fragnr);
   if (ack->hdr.DLdataAck.ack_type == ACK) {
     arq_window_ack_msg(frag, seqnr, fragnr);
   }
@@ -198,6 +208,32 @@ MacMessage mac_frag_get_fragment(MacFrag frag, uint max_frag_size,
                                  uint is_uplink) {
   uint bytes_remain = 0, final_flag, data_len;
   MacMessage fragment = NULL;
+
+  // ensure that we can transmit at least one payload byte
+  if (max_frag_size <= mac_msg_get_hdrlen(ul_data)) {
+    return NULL;
+  }
+  // check if there are timed out fragments that have not been acknowledged
+  // retransmit them
+  for (int i = 0; i < ARQ_WINDOW_LEN; i++) {
+    int idx = (frag->am_last_ack_idx + i) % ARQ_WINDOW_LEN;
+    if (frag->am_send_window[idx] != NULL) {
+      if (frag->am_window_timestamp[idx] + ARQ_ACK_TIMEOUT < *frag->subframe) {
+        // no ack received, retransmit this frame
+        fragment = mac_msg_copy(frag->am_send_window[idx]);
+        frag->am_window_retransmits[idx]++;
+        frag->am_window_timestamp[idx] = *frag->subframe;
+        // if (frag->am_window_retransmits[idx] > ARQ_MAX_RETRANSMITS) {
+        //  arq_window_remove(frag, idx);
+        //}
+        LOG(DEBUG,
+            "[MAC FRAG] retransmit fragment %d:%d. Num retransmits: %d\n",
+            fragment->hdr.DLdata.seqNr, fragment->hdr.DLdata.fragNr,
+            frag->am_window_retransmits[idx]);
+        return fragment;
+      }
+    }
+  }
 
   if (frag->curr_frame) {
     // there is a open frame that is being fragmented
@@ -229,23 +265,6 @@ MacMessage mac_frag_get_fragment(MacFrag frag, uint max_frag_size,
   } else {
     data_len = max_frag_size - mac_msg_get_hdrlen(ul_data);
     final_flag = 0;
-  }
-
-  // check if there are timed out fragments that have not been acknowledged
-  // retransmit them
-  for (int i = 0; i < ARQ_WINDOW_LEN; i++) {
-    int idx = (frag->am_last_ack_idx + i) % ARQ_WINDOW_LEN;
-    if (frag->am_send_window[idx] != NULL) {
-      if (frag->am_window_timestamp[idx] + ARQ_ACK_TIMEOUT < *frag->subframe) {
-        // no ack received, retransmit this frame
-        fragment = mac_msg_copy(frag->am_send_window[idx]);
-        frag->am_window_retransmits[idx]++;
-        if (frag->am_window_retransmits[idx] > ARQ_MAX_RETRANSMITS) {
-          arq_window_remove(frag, idx);
-        }
-        return fragment;
-      }
-    }
   }
 
   if (frag->curr_frame->do_arq) {
@@ -422,7 +441,7 @@ MacDataFrame mac_assmbl_reassemble_am(MacAssmblAM assmbl, MacMessage fragment) {
       frame->do_arq = 1;
       uint8_t *p = frame->data;
       for (int i = 0; i < assmbl->num_fragments[seqnr]; i++) {
-        memcpy(p, assmbl->fragments[i], assmbl->fragments_len[seqnr][i]);
+        memcpy(p, assmbl->fragments[seqnr][i], assmbl->fragments_len[seqnr][i]);
         p += assmbl->fragments_len[seqnr][i];
         assmbl->frag_rcv_bitmask[seqnr][i] = 0;
       }
