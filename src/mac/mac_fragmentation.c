@@ -24,7 +24,7 @@
 #include "mac_messages.h"
 #include <ringbuf.h>
 
-#define MAX_SEQNR 8           // 3 bits are allocated for seqNr in MacMessage
+#define MAX_SEQNR 16          // 4 bits are allocated for seqNr in MacMessage
 #define MAX_FRAGNR 32         // 5 bits are allocated for fragNr in MacMessage
 #define MAX_FRAGMENT_SIZE 512 // max size per fragment, currently static
 

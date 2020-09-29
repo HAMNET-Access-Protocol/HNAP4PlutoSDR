@@ -88,8 +88,8 @@ typedef struct {
 
 typedef struct {
   uint32_t ctrl_id : 3;
-  uint32_t ack_type : 2;
-  uint32_t seqNr : 3;
+  uint32_t ack_type : 1;
+  uint32_t seqNr : 4;
   uint32_t fragNr : 5;
 } MacULdataAck;
 
@@ -130,8 +130,8 @@ typedef struct {
 
 typedef struct {
   uint32_t ctrl_id : 3;
-  uint32_t ack_type : 2;
-  uint32_t seqNr : 3;
+  uint32_t ack_type : 1;
+  uint32_t seqNr : 4;
   uint32_t fragNr : 5;
 } MacDLdataAck;
 
