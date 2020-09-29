@@ -396,6 +396,11 @@ void mac_bs_map_slot(MacBS mac, uint subframe, uint slot, user_s *ue) {
     MacMessage msg = mac_frag_get_fragment(ue->fragmenter, payload_size, 0);
     lchan_add_message(chan, msg);
     ue->stats.bytes_tx += msg->payload_len;
+    if (msg->hdr.DLdata.do_ack) {
+      // if the user is expected to send an ack for this frame, indicade a
+      // pending transmission to the scheduler
+      ue->ul_queue++;
+    }
     mac_msg_destroy(msg);
   }
   lchan_calc_crc(chan);
