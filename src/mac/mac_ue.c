@@ -250,8 +250,11 @@ void mac_ue_run_scheduler(MacUE mac) {
             lchan_add_message(chan, msg);
             mac_msg_destroy(msg);
           }
-          MacMessage msg = mac_frag_get_fragment(mac->fragmenter,
-                                                 lchan_unused_bytes(chan), 1);
+          MacMessage msg = NULL;
+          if (mac_frag_has_fragment(mac->fragmenter)) {
+            msg = mac_frag_get_fragment(mac->fragmenter,
+                                        lchan_unused_bytes(chan), 1);
+          }
           if (msg != NULL) {
             lchan_add_message(chan, msg);
             mac->stats.bytes_tx += msg->payload_len;
