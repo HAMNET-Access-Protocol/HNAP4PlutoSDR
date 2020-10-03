@@ -142,8 +142,6 @@ int mac_ue_handle_message(MacUE mac, MacMessage msg, uint is_broadcast) {
     break;
   case ul_data_ack:
     mac_frag_ack_fragment(mac->fragmenter, msg);
-    LOG(DEBUG, "got ack for %d:%d\n", msg->hdr.ULdataAck.seqNr,
-        msg->hdr.ULdataAck.fragNr);
     break;
   case dl_data:
     if (is_broadcast) {
@@ -300,7 +298,7 @@ void mac_ue_run_scheduler(MacUE mac) {
     for (int i = 0; i < MAC_ULCTRL_SLOTS; i++) {
       if (mac->ul_ctrl_assignments[i] == UE_ASSIGNED) {
         phy_map_ulctrl(mac->phy, chan, next_sfn, i);
-        LOG_SFN_MAC(DEBUG, "[MAC UE] map ulctrl %d %d\n",
+        LOG_SFN_MAC(TRACE, "[MAC UE] map ulctrl %d %d\n",
                     mac->phy->common->tx_subframe, mac->phy->common->tx_symbol);
       }
     }
