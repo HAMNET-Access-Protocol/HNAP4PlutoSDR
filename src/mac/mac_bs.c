@@ -391,13 +391,13 @@ void mac_bs_map_slot(MacBS mac, uint subframe, uint slot, user_s *ue) {
   uint tbs = get_tbs_size(mac->phy->common, ue->dl_mcs);
   LogicalChannel chan = lchan_create(tbs / 8, CRC16);
   lchan_add_all_msgs(chan, ue->msg_control_queue);
-  if (mac_frag_has_fragment(ue->fragmenter)) {
-    uint payload_size = lchan_unused_bytes(chan);
-    MacMessage msg = mac_frag_get_fragment(ue->fragmenter, payload_size, 0);
+  uint payload_size = lchan_unused_bytes(chan);
+  MacMessage msg = mac_frag_get_fragment(ue->fragmenter, payload_size, 0);
+  if (msg != NULL) {
     lchan_add_message(chan, msg);
     ue->stats.bytes_tx += msg->payload_len;
     if (msg->hdr.DLdata.do_ack) {
-      // if the user is expected to send an ack for this frame, indicade a
+      // if the user is expected to send an ack for this frame, indicate a
       // pending transmission to the scheduler
       ue->ul_queue++;
     }
@@ -575,10 +575,10 @@ void mac_bs_run_scheduler(MacBS mac) {
     uint tbs = get_tbs_size(mac->phy->common, 0);
     LogicalChannel chan = lchan_create(tbs / 8, CRC16);
     lchan_add_all_msgs(chan, mac->broadcast_ctrl_queue);
-    if (mac_frag_has_fragment(mac->broadcast_data_fragmenter)) {
-      uint payload_size = lchan_unused_bytes(chan);
-      MacMessage msg = mac_frag_get_fragment(mac->broadcast_data_fragmenter,
-                                             payload_size, 0);
+    uint payload_size = lchan_unused_bytes(chan);
+    MacMessage msg =
+        mac_frag_get_fragment(mac->broadcast_data_fragmenter, payload_size, 0);
+    if (msg != NULL) {
       lchan_add_message(chan, msg);
       mac_msg_destroy(msg);
     }
@@ -708,19 +708,10 @@ void *mac_bs_tap_rx_th(void *arg) {
     if (mac->tapdevice->bytes_rec > 0) {
       MacDataFrame frame = dataframe_create(dev->bytes_rec);
       memcpy(frame->data, dev->buffer, dev->bytes_rec);
-
-      // Packet inspection: determine if this is TCP traffic
-      // then activate ARQ
-      uint16_t ether_type = (frame->data[12] << 8) + frame->data[13];
-      struct iphdr *ip4hdr = (struct iphdr *)&frame->data[14];
-      frame->do_arq = 0; // no ARQ by default
-      LOG(DEBUG, "[TAP] Packet inspect: ethertype %04x, proto %d\n", ether_type,
-          ip4hdr->protocol);
-      if (ether_type == ETHERTYPE_IP) {
-        // is IPv4 packet, check if TCP
-        if (ip4hdr->protocol == 6) {
-          frame->do_arq = 1;
-        }
+      if (packet_inspect_is_tcpip(frame->data, frame->size)) {
+        frame->do_arq = 1;
+      } else {
+        frame->do_arq = 0;
       }
       // find correct userid to forward EtherFrame to
       // if no entry is found, broadcast channel is used

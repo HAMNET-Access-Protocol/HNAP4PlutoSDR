@@ -20,8 +20,6 @@
 
 #include "mac_ue.h"
 #include "../phy/phy_ue.h"
-#include <net/ethernet.h>
-#include <netinet/ip.h>
 #include <unistd.h>
 
 #ifdef MAC_TEST_DELAY
@@ -248,11 +246,8 @@ void mac_ue_run_scheduler(MacUE mac) {
             lchan_add_message(chan, msg);
             mac_msg_destroy(msg);
           }
-          MacMessage msg = NULL;
-          if (mac_frag_has_fragment(mac->fragmenter)) {
-            msg = mac_frag_get_fragment(mac->fragmenter,
-                                        lchan_unused_bytes(chan), 1);
-          }
+          MacMessage msg = mac_frag_get_fragment(mac->fragmenter,
+                                                 lchan_unused_bytes(chan), 1);
           if (msg != NULL) {
             lchan_add_message(chan, msg);
             mac->stats.bytes_tx += msg->payload_len;
@@ -375,18 +370,10 @@ void *mac_ue_tap_rx_th(void *arg) {
     if (mac->tapdevice->bytes_rec > 0) {
       MacDataFrame frame = dataframe_create(mac->tapdevice->bytes_rec);
       memcpy(frame->data, mac->tapdevice->buffer, frame->size);
-      // Packet inspection: determine if this is TCP traffic
-      // then activate ARQ
-      uint16_t ether_type = (frame->data[12] << 8) + frame->data[13];
-      struct iphdr *ip4hdr = (struct iphdr *)&frame->data[14];
-      LOG(DEBUG, "[TAP] Packet inspect: ethertype %04x, proto %d\n", ether_type,
-          ip4hdr->protocol);
-      frame->do_arq = 0; // no ARQ by default
-      if (ether_type == ETHERTYPE_IP) {
-        // is IPv4 packet, check if TCP
-        if (ip4hdr->protocol == 6) {
-          frame->do_arq = 1;
-        }
+      if (packet_inspect_is_tcpip(frame->data, frame->size)) {
+        frame->do_arq = 1;
+      } else {
+        frame->do_arq = 0;
       }
       if (!mac_ue_add_txdata(mac, frame)) {
         dataframe_destroy(frame);

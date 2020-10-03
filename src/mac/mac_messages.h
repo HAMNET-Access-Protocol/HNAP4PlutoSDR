@@ -38,23 +38,23 @@
 typedef enum {
   msg_none = 0,
   associate_response = 1,
-  dl_mcs_info,
-  ul_mcs_info,
-  timing_advance,
-  session_end,
-  ul_data_ack,
+  dl_mcs_info = 2,
+  ul_mcs_info = 3,
+  timing_advance = 4,
+  session_end = 5,
+  ul_data_ack = 6,
   dl_data = 7,
   ul_req = 9,
-  channel_quality,
-  keepalive,
-  control_ack,
-  mcs_chance_req,
-  dl_data_ack,
+  channel_quality = 10,
+  keepalive = 11,
+  control_ack = 12,
+  mcs_chance_req = 13,
+  dl_data_ack = 14,
   ul_data = 15
 } CtrlID_e;
 
 // Association response types
-enum { assoc_resp_success = 0, assoc_resp_full };
+enum { assoc_resp_success = 0, assoc_resp_full = 1 };
 
 // ACK-mode types: UM - unacknowledged, AM - ack mode with selective repeat ARQ
 enum { UM = 0, AM = 1 };

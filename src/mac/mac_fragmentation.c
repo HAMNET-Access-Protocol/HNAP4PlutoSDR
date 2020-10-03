@@ -110,6 +110,7 @@ void arq_window_ack_msg(MacFrag frag, uint8_t acked_seqnr,
       uint8_t fragnr = frag->am_send_window[idx]->hdr.DLdata.fragNr;
       if (seqnr == acked_seqnr && fragnr == acked_fragnr) {
         arq_window_remove(frag, idx);
+        return;
       }
     }
   }
@@ -209,100 +210,106 @@ MacMessage mac_frag_get_fragment(MacFrag frag, uint max_frag_size,
   uint bytes_remain = 0, final_flag, data_len;
   MacMessage fragment = NULL;
 
-  // ensure that we can transmit at least one payload byte
-  if (max_frag_size <= mac_msg_get_hdrlen(ul_data)) {
-    return NULL;
-  }
-  // check if there are timed out fragments that have not been acknowledged
-  // retransmit them
-  for (int i = 0; i < ARQ_WINDOW_LEN; i++) {
-    int idx = (frag->am_last_ack_idx + i) % ARQ_WINDOW_LEN;
-    if (frag->am_send_window[idx] != NULL) {
-      if (frag->am_window_timestamp[idx] + ARQ_ACK_TIMEOUT < *frag->subframe) {
-        // no ack received, retransmit this frame
-        fragment = mac_msg_copy(frag->am_send_window[idx]);
-        frag->am_window_retransmits[idx]++;
-        frag->am_window_timestamp[idx] = *frag->subframe;
-        // if (frag->am_window_retransmits[idx] > ARQ_MAX_RETRANSMITS) {
-        //  arq_window_remove(frag, idx);
-        //}
-        LOG(DEBUG,
-            "[MAC FRAG] retransmit fragment %d:%d. Num retransmits: %d\n",
-            fragment->hdr.DLdata.seqNr, fragment->hdr.DLdata.fragNr,
-            frag->am_window_retransmits[idx]);
-        return fragment;
-      }
-    }
-  }
+  if (mac_frag_has_fragment(frag)) {
 
-  if (frag->curr_frame) {
-    // there is a open frame that is being fragmented
-    bytes_remain = frag->curr_frame->size - frag->bytes_sent;
-  } else {
-    // fetch new frame from queue
-    MacDataFrame sdu = ringbuf_get(frag->frame_queue);
-    if (sdu == NULL) {
-      LOG(ERR, "[MAC FRAG] cannot fetch any SDU from buf\n");
+    // ensure that we can transmit at least one payload byte
+    if (max_frag_size <= mac_msg_get_hdrlen(ul_data)) {
       return NULL;
     }
-    frag->bytes_buffered -= sdu->size;
-    frag->curr_frame = sdu;
-    if (sdu->do_arq) {
-      frag->am_fragNr = 0;
-      frag->am_seqNr = (frag->am_seqNr + 1) % MAX_SEQNR;
-    } else {
-      frag->um_fragNr = 0;
-      frag->um_seqNr = (frag->um_seqNr + 1) % MAX_SEQNR;
+    // check if there are timed out fragments that have not been acknowledged
+    // retransmit them
+    for (int i = 0; i < ARQ_WINDOW_LEN; i++) {
+      int idx = (frag->am_last_ack_idx + i) % ARQ_WINDOW_LEN;
+      if (frag->am_send_window[idx] != NULL) {
+        if (frag->am_window_timestamp[idx] + ARQ_ACK_TIMEOUT <
+            *frag->subframe) {
+          // no ack received, retransmit this frame
+          fragment = mac_msg_copy(frag->am_send_window[idx]);
+          frag->am_window_retransmits[idx]++;
+          frag->am_window_timestamp[idx] = *frag->subframe;
+          if (frag->am_window_retransmits[idx] > ARQ_MAX_RETRANSMITS) {
+            arq_window_remove(frag, idx);
+          }
+          LOG(DEBUG,
+              "[MAC FRAG] retransmit fragment %d:%d. Num retransmits: %d\n",
+              fragment->hdr.DLdata.seqNr, fragment->hdr.DLdata.fragNr,
+              frag->am_window_retransmits[idx]);
+          return fragment;
+        }
+      }
     }
-    frag->bytes_sent = 0;
-    bytes_remain = sdu->size;
-  }
 
-  // get fragment size and final flag
-  if (max_frag_size >= bytes_remain + mac_msg_get_hdrlen(ul_data)) {
-    data_len = bytes_remain;
-    final_flag = 1;
-  } else {
-    data_len = max_frag_size - mac_msg_get_hdrlen(ul_data);
-    final_flag = 0;
-  }
+    if (frag->curr_frame) {
+      // there is a open frame that is being fragmented
+      bytes_remain = frag->curr_frame->size - frag->bytes_sent;
+    } else {
+      // fetch new frame from queue
+      MacDataFrame sdu = ringbuf_get(frag->frame_queue);
+      if (sdu == NULL) {
+        LOG(ERR, "[MAC FRAG] cannot fetch any SDU from buf\n");
+        return NULL;
+      }
+      frag->bytes_buffered -= sdu->size;
+      frag->curr_frame = sdu;
+      if (sdu->do_arq) {
+        frag->am_fragNr = 0;
+        frag->am_seqNr = (frag->am_seqNr + 1) % MAX_SEQNR;
+      } else {
+        frag->um_fragNr = 0;
+        frag->um_seqNr = (frag->um_seqNr + 1) % MAX_SEQNR;
+      }
+      frag->bytes_sent = 0;
+      bytes_remain = sdu->size;
+    }
 
-  if (frag->curr_frame->do_arq) {
-    if (!arq_window_isfull(frag)) {
-      // create MAC Message in Acknowledged mode and add it to send window
+    // get fragment size and final flag
+    if (max_frag_size >= bytes_remain + mac_msg_get_hdrlen(ul_data)) {
+      data_len = bytes_remain;
+      final_flag = 1;
+    } else {
+      data_len = max_frag_size - mac_msg_get_hdrlen(ul_data);
+      final_flag = 0;
+    }
+
+    if (frag->curr_frame->do_arq) {
+      if (!arq_window_isfull(frag)) {
+        // create MAC Message in Acknowledged mode and add it to send window
+        if (is_uplink) {
+          fragment = mac_msg_create_ul_data(
+              data_len, 1, final_flag, frag->am_seqNr, frag->am_fragNr++,
+              frag->curr_frame->data + frag->bytes_sent);
+        } else {
+          fragment = mac_msg_create_dl_data(
+              data_len, 1, final_flag, frag->am_seqNr, frag->am_fragNr++,
+              frag->curr_frame->data + frag->bytes_sent);
+        }
+        arq_window_put(frag, fragment);
+        fragment = mac_msg_copy(fragment);
+      }
+    } else {
+      // create MAC Message in Unacknowledged Mode
       if (is_uplink) {
         fragment = mac_msg_create_ul_data(
-            data_len, 1, final_flag, frag->am_seqNr, frag->am_fragNr++,
+            data_len, 0, final_flag, frag->um_seqNr, frag->um_fragNr++,
             frag->curr_frame->data + frag->bytes_sent);
       } else {
         fragment = mac_msg_create_dl_data(
-            data_len, 1, final_flag, frag->am_seqNr, frag->am_fragNr++,
+            data_len, 0, final_flag, frag->um_seqNr, frag->um_fragNr++,
             frag->curr_frame->data + frag->bytes_sent);
       }
-      arq_window_put(frag, fragment);
-      fragment = mac_msg_copy(fragment);
     }
+
+    // update fragmenter state
+    frag->bytes_sent += data_len;
+    if (final_flag) {
+      dataframe_destroy(frag->curr_frame);
+      frag->curr_frame = NULL;
+    }
+
+    return fragment;
   } else {
-    // create MAC Message in Unacknowledged Mode
-    if (is_uplink) {
-      fragment = mac_msg_create_ul_data(
-          data_len, 0, final_flag, frag->um_seqNr, frag->um_fragNr++,
-          frag->curr_frame->data + frag->bytes_sent);
-    } else {
-      fragment = mac_msg_create_dl_data(
-          data_len, 0, final_flag, frag->um_seqNr, frag->um_fragNr++,
-          frag->curr_frame->data + frag->bytes_sent);
-    }
+    return NULL; // No fragment available
   }
-
-  // update fragmenter state
-  frag->bytes_sent += data_len;
-  if (final_flag) {
-    dataframe_destroy(frag->curr_frame);
-    frag->curr_frame = NULL;
-  }
-
-  return fragment;
 }
 
 MacAssmbl mac_assmbl_init() {
