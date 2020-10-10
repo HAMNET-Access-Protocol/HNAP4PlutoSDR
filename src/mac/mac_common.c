@@ -95,9 +95,11 @@ int packet_inspect_is_tcpip(uint8_t *buf, uint buflen) {
   // Packet inspection: determine if this is TCP traffic
   // then activate ARQ
 
-  if (buflen < 34) {
+  if (buf == NULL)
+    return -1; // no buffer
+
+  if (buflen < 34)
     return -1; // buffersize is shorter than Ethernet+IP header size
-  }
 
   uint16_t ether_type = (buf[12] << 8) + buf[13];
   struct iphdr *ip4hdr = (struct iphdr *)&buf[14];

@@ -159,14 +159,12 @@ int mac_frag_add_frame(MacFrag frag, MacDataFrame frame) {
 }
 
 int mac_frag_has_fragment(MacFrag frag) {
-  // check if arq window is full. We cannot
-  // send further data in this case
-  if (arq_window_isfull(frag)) {
-    return 0;
-  }
   // Check if there is any frame buffered that can be sent.
   if (!ringbuf_isempty(frag->frame_queue) || (frag->curr_frame != NULL)) {
-    return 1;
+    // ensure that the arq window is not full
+    if (!arq_window_isfull(frag)) {
+      return 1;
+    }
   }
   // Check if there is any retransmission that can be made
   for (int i = 0; i < ARQ_WINDOW_LEN; i++) {
