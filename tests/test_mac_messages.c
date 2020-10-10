@@ -2,14 +2,6 @@
 #include <src/mac/mac_messages.h>
 #include <unity.h>
 
-void setUp(void) {
-  // set stuff up here
-}
-
-void tearDown(void) {
-  // clean stuff up here
-}
-
 void test_mac_msg_get_hdrlen(void) {
   TEST_ASSERT_EQUAL_INT(mac_msg_get_hdrlen(associate_response), 3);
   TEST_ASSERT_EQUAL_INT(mac_msg_get_hdrlen(dl_mcs_info), 1);
@@ -58,7 +50,7 @@ void test_mac_msg_parse_dldata(void) {
   uint8_t ack_mode = AM;
   uint8_t final_flag = 1;
   uint8_t fragnr = 31;
-  uint8_t seqnr = 7;
+  uint8_t seqnr = 15;
   uint datalen = 531;
   uint8_t databuf[531] = {1, 124, 85, 213, 12, 90, 34, 0, 1, 255};
   MacMessage test_msg = mac_msg_create_dl_data(datalen, ack_mode, final_flag,
@@ -88,7 +80,7 @@ void test_mac_msg_parse_uldata(void) {
   uint8_t ack_mode = AM;
   uint8_t final_flag = 1;
   uint8_t fragnr = 31;
-  uint8_t seqnr = 7;
+  uint8_t seqnr = 15;
   uint datalen = 531;
   uint8_t databuf[531] = {1, 124, 85, 213, 12, 90, 34, 0, 1, 255};
   MacMessage test_msg = mac_msg_create_ul_data(datalen, ack_mode, final_flag,
@@ -117,8 +109,8 @@ void test_mac_msg_parse_uldata(void) {
 void test_mac_msg_parse_dl_data_ack(void) {
   // create message
   uint8_t ack_type = ACK;
-  uint8_t seqNr = 5;
-  uint8_t fragNr = 13;
+  uint8_t seqNr = 15;
+  uint8_t fragNr = 31;
   MacMessage test_msg = mac_msg_create_dl_data_ack(ack_type, seqNr, fragNr);
 
   // write msg to buffer
@@ -141,8 +133,8 @@ void test_mac_msg_parse_dl_data_ack(void) {
 void test_mac_msg_parse_ul_data_ack(void) {
   // create message
   uint8_t ack_type = ACK;
-  uint8_t seqNr = 5;
-  uint8_t fragNr = 13;
+  uint8_t seqNr = 15;
+  uint8_t fragNr = 31;
   MacMessage test_msg = mac_msg_create_ul_data_ack(ack_type, seqNr, fragNr);
 
   // write msg to buffer
@@ -160,16 +152,4 @@ void test_mac_msg_parse_ul_data_ack(void) {
   mac_msg_destroy(test_msg);
   mac_msg_destroy(parsed_msg);
   free(buf);
-}
-
-// not needed when using generate_test_runner.rb
-int main(void) {
-  UNITY_BEGIN();
-  RUN_TEST(test_mac_msg_get_hdrlen);
-  RUN_TEST(test_mac_msg_parse_associate_response);
-  RUN_TEST(test_mac_msg_parse_dldata);
-  RUN_TEST(test_mac_msg_parse_uldata);
-  RUN_TEST(test_mac_msg_parse_dl_data_ack);
-  RUN_TEST(test_mac_msg_parse_ul_data_ack);
-  return UNITY_END();
 }
