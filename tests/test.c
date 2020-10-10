@@ -24,7 +24,6 @@
 #include "test_mac_common.c"
 #include "test_mac_messages.c"
 
-
 void setUp(void) {
   // set stuff up here
 }
