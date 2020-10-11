@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 * Version info added to executables
 * Transmit firmware and HNAP version with LLDP (#5) (#30)
+* Add ARQ for TCP traffic (#10) (#37)
 
 ### Changed
 
