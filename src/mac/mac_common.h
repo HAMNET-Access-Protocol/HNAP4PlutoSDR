@@ -43,6 +43,7 @@
 typedef struct {
   uint size;
   uint8_t *data;
+  uint do_arq;
 } MacDataFrame_s;
 
 // Store some MAC layer statistics
@@ -66,5 +67,17 @@ void lchan_add_all_msgs(LogicalChannel lchan, ringbuf ctrl_msg_buf);
 
 void mac_stats_init(MACstat_s *stats);
 int mac_stats_print(char *buf, int buflen, MACstat_s *stats);
+
+/**
+ * Check whether an Ethernet frame contains a IPv4+TCP datagram
+ *
+ * This function inspects an Ethernet frame given as a uint8_t buffer
+ *
+ * @param buf Pointer to the start of the Ethernet frame
+ * @param buflen the length of the buffer
+ * @returns 1 if it is a TCP/IP datagram, -1 if no inspection is possible
+ *          0 in all other cases
+ */
+int packet_inspect_is_tcpip(uint8_t *buf, uint buflen);
 
 #endif /* MAC_MAC_COMMON_H_ */

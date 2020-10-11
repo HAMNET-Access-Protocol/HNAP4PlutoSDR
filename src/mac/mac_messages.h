@@ -29,6 +29,8 @@
 // MAC Protocol version
 #define PROTO_VERSION 0
 
+#define MSG_HDR_BYTES 4
+
 // lowest 3 bits of this number are equal to the control ID
 // that is written to the message itself
 // bit 4 indicates wether its a DL (0) or UL (1) message
@@ -36,21 +38,29 @@
 typedef enum {
   msg_none = 0,
   associate_response = 1,
-  dl_mcs_info,
-  ul_mcs_info,
-  timing_advance,
-  session_end,
+  dl_mcs_info = 2,
+  ul_mcs_info = 3,
+  timing_advance = 4,
+  session_end = 5,
+  ul_data_ack = 6,
   dl_data = 7,
   ul_req = 9,
-  channel_quality,
-  keepalive,
-  control_ack,
-  mcs_chance_req,
+  channel_quality = 10,
+  keepalive = 11,
+  control_ack = 12,
+  mcs_chance_req = 13,
+  dl_data_ack = 14,
   ul_data = 15
 } CtrlID_e;
 
 // Association response types
-enum { assoc_resp_success = 0, assoc_resp_full };
+enum { assoc_resp_success = 0, assoc_resp_full = 1 };
+
+// ACK-mode types: UM - unacknowledged, AM - ack mode with selective repeat ARQ
+enum { UM = 0, AM = 1 };
+
+// ACK msg types: ACK - acknowledgment, NAK - not acknowledged (not used yet)
+enum { ACK = 0, NAK = 1 };
 
 typedef struct {
   uint32_t ctrl_id : 3;
@@ -78,9 +88,17 @@ typedef struct {
 
 typedef struct {
   uint32_t ctrl_id : 3;
-  uint32_t data_length : 12;
+  uint32_t ack_type : 1;
+  uint32_t seqNr : 4;
+  uint32_t fragNr : 5;
+} MacULdataAck;
+
+typedef struct {
+  uint32_t ctrl_id : 3;
+  uint32_t data_length : 10;
   uint32_t final_flag : 1;
-  uint32_t seqNr : 3;
+  uint32_t do_ack : 1;
+  uint32_t seqNr : 4;
   uint32_t fragNr : 5;
 } MacDLdata;
 
@@ -112,27 +130,38 @@ typedef struct {
 
 typedef struct {
   uint32_t ctrl_id : 3;
-  uint32_t data_length : 12;
+  uint32_t ack_type : 1;
+  uint32_t seqNr : 4;
+  uint32_t fragNr : 5;
+} MacDLdataAck;
+
+typedef struct {
+  uint32_t ctrl_id : 3;
+  uint32_t data_length : 10;
   uint32_t final_flag : 1;
-  uint32_t seqNr : 3;
+  uint32_t do_ack : 1;
+  uint32_t seqNr : 4;
   uint32_t fragNr : 5;
 } MacULdata;
 
 // Generic struct for Mac Message exchange between Modules
 typedef struct {
-  uint8_t hdr_bin[4]; // max header len fixed to 4 bytes. Can be changed
+  uint8_t
+      hdr_bin[MSG_HDR_BYTES]; // max header len fixed to 4 bytes. Can be changed
   union {
     uint8_t ctrl_id : 3;
     MacAssociateResponse AssociateResponse;
     MacDLMCSInfo DLMCSInfo;
     MacULMCSInfo ULMCSInfo;
     MacTimingAdvance TimingAdvance;
+    MacULdataAck ULdataAck;
     MacDLdata DLdata;
     MacULreq ULreq;
     MacChannelQuality ChannelQuality;
     MacKeepalive Keepalive;
     MacControlAck ControlAck;
     MacMCSChangeReq MCSChangeReq;
+    MacDLdataAck DLdataAck;
     MacULdata ULdata;
   } hdr;
   CtrlID_e type;
@@ -156,17 +185,24 @@ MacMessage mac_msg_create_dl_mcs_info(uint mcs);
 MacMessage mac_msg_create_ul_mcs_info(uint mcs);
 MacMessage mac_msg_create_timing_advance(uint timingAdvance);
 MacMessage mac_msg_create_session_end();
-MacMessage mac_msg_create_dl_data(uint data_length, uint8_t fragment,
-                                  uint8_t seqNr, uint8_t fragNr, uint8_t *data);
+MacMessage mac_msg_create_ul_data_ack(uint8_t ack_type, uint8_t seqNr,
+                                      uint8_t fragNr);
+MacMessage mac_msg_create_dl_data(uint data_length, uint8_t do_ack,
+                                  uint8_t final_flag, uint8_t seqNr,
+                                  uint8_t fragNr, uint8_t *data);
 // Uplink
 MacMessage mac_msg_create_ul_req(uint PacketQueueSize);
 MacMessage mac_msg_create_channel_quality(uint quality_idx);
 MacMessage mac_msg_create_keepalive();
 MacMessage mac_msg_create_control_ack(uint acked_ctrl_id);
 MacMessage mac_msg_create_mcs_change_req(uint is_ul, uint mcs);
-MacMessage mac_msg_create_ul_data(uint data_length, uint8_t final,
-                                  uint8_t seqNr, uint8_t fragNr, uint8_t *data);
+MacMessage mac_msg_create_dl_data_ack(uint8_t ack_type, uint8_t seqNr,
+                                      uint8_t fragNr);
+MacMessage mac_msg_create_ul_data(uint data_length, uint8_t do_ack,
+                                  uint8_t final, uint8_t seqNr, uint8_t fragNr,
+                                  uint8_t *data);
 
+MacMessage mac_msg_copy(MacMessage msg);
 void mac_msg_destroy(MacMessage genericmsg);
 
 //// Functions to write/parse messages to/from buffers ////

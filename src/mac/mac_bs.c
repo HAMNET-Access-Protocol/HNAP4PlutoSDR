@@ -20,17 +20,19 @@
 
 #include "mac_bs.h"
 #include "../util/log.h"
+#include <net/ethernet.h>
+#include <netinet/ip.h>
 #include <unistd.h>
 
 #ifdef MAC_TEST_DELAY
 #include "../runtime/test.h"
 #endif
 
-user_s *ue_create(uint userid) {
+user_s *ue_create(uint userid, long long unsigned int *subframe_ptr) {
   // create user instance and association response
   user_s *new_ue = calloc(sizeof(user_s), 1);
   new_ue->msg_control_queue = ringbuf_create(MAC_CTRL_MSG_BUF_SIZE);
-  new_ue->fragmenter = mac_frag_init();
+  new_ue->fragmenter = mac_frag_init(subframe_ptr);
   new_ue->reassembler = mac_assmbl_init();
   new_ue->userid = userid;
   new_ue->ul_queue = 0;
@@ -63,7 +65,7 @@ MacBS mac_bs_init() {
     macinst->UE[i] = NULL;
   }
   macinst->broadcast_ctrl_queue = ringbuf_create(MAC_CTRL_MSG_BUF_SIZE);
-  macinst->broadcast_data_fragmenter = mac_frag_init();
+  macinst->broadcast_data_fragmenter = mac_frag_init(&macinst->subframe_cnt);
 
 #ifdef MAC_ENABLE_TAP_DEV
   macinst->tapdevice = tap_init("tap0");
@@ -137,7 +139,7 @@ void mac_bs_add_new_ue(MacBS mac, uint8_t rachuserid, uint8_t rach_try_cnt,
       ringbuf_put(mac->broadcast_ctrl_queue, response);
     } else {
       // create new UE struct
-      mac->UE[userid] = ue_create(userid);
+      mac->UE[userid] = ue_create(userid, &mac->subframe_cnt);
       mac->UE[userid]->fs = fs;
       mac->UE[userid]->last_seen = mac->subframe_cnt;
       mac->UE[userid]->timingadvance = timing_diff;
@@ -199,6 +201,8 @@ int mac_bs_add_txdata(MacBS mac, uint8_t destUserID, MacDataFrame frame) {
   MacFrag fragmenter = NULL;
   if (destUserID == USER_BROADCAST) {
     fragmenter = mac->broadcast_data_fragmenter;
+    // force frames that are forwarded using broadcast frag to disable ARQ
+    frame->do_arq = 0;
   } else if (mac->UE[destUserID] != NULL) {
     fragmenter = mac->UE[destUserID]->fragmenter;
   } else {
@@ -284,7 +288,15 @@ int mac_bs_handle_message(MacBS mac, MacMessage msg, uint8_t userID) {
         INFO, "[MAC BS] mcs_change_request from user %d mcs: %d is_ul %d\n",
         userID, msg->hdr.MCSChangeReq.mcs, msg->hdr.MCSChangeReq.ul_flag)
     break;
+  case dl_data_ack:
+    mac_frag_ack_fragment(user->fragmenter, msg);
+    break;
   case ul_data:
+    if (msg->hdr.ULdata.do_ack) {
+      MacMessage ack = mac_msg_create_ul_data_ack(ACK, msg->hdr.ULdata.seqNr,
+                                                  msg->hdr.ULdata.fragNr);
+      ringbuf_put(user->msg_control_queue, ack);
+    }
     frame = mac_assmbl_reassemble(user->reassembler, msg);
     if (frame != NULL) {
       user->stats.bytes_rx += frame->size;
@@ -379,11 +391,16 @@ void mac_bs_map_slot(MacBS mac, uint subframe, uint slot, user_s *ue) {
   uint tbs = get_tbs_size(mac->phy->common, ue->dl_mcs);
   LogicalChannel chan = lchan_create(tbs / 8, CRC16);
   lchan_add_all_msgs(chan, ue->msg_control_queue);
-  if (mac_frag_has_fragment(ue->fragmenter)) {
-    uint payload_size = lchan_unused_bytes(chan);
-    MacMessage msg = mac_frag_get_fragment(ue->fragmenter, payload_size, 0);
+  uint payload_size = lchan_unused_bytes(chan);
+  MacMessage msg = mac_frag_get_fragment(ue->fragmenter, payload_size, 0);
+  if (msg != NULL) {
     lchan_add_message(chan, msg);
     ue->stats.bytes_tx += msg->payload_len;
+    if (msg->hdr.DLdata.do_ack) {
+      // if the user is expected to send an ack for this frame, indicate a
+      // pending transmission to the scheduler
+      ue->ul_queue++;
+    }
     mac_msg_destroy(msg);
   }
   lchan_calc_crc(chan);
@@ -558,10 +575,10 @@ void mac_bs_run_scheduler(MacBS mac) {
     uint tbs = get_tbs_size(mac->phy->common, 0);
     LogicalChannel chan = lchan_create(tbs / 8, CRC16);
     lchan_add_all_msgs(chan, mac->broadcast_ctrl_queue);
-    if (mac_frag_has_fragment(mac->broadcast_data_fragmenter)) {
-      uint payload_size = lchan_unused_bytes(chan);
-      MacMessage msg = mac_frag_get_fragment(mac->broadcast_data_fragmenter,
-                                             payload_size, 0);
+    uint payload_size = lchan_unused_bytes(chan);
+    MacMessage msg =
+        mac_frag_get_fragment(mac->broadcast_data_fragmenter, payload_size, 0);
+    if (msg != NULL) {
       lchan_add_message(chan, msg);
       mac_msg_destroy(msg);
     }
@@ -691,7 +708,11 @@ void *mac_bs_tap_rx_th(void *arg) {
     if (mac->tapdevice->bytes_rec > 0) {
       MacDataFrame frame = dataframe_create(dev->bytes_rec);
       memcpy(frame->data, dev->buffer, dev->bytes_rec);
-
+      if (packet_inspect_is_tcpip(frame->data, frame->size)) {
+        frame->do_arq = 1;
+      } else {
+        frame->do_arq = 0;
+      }
       // find correct userid to forward EtherFrame to
       // if no entry is found, broadcast channel is used
       struct entry *np = NULL;

@@ -28,10 +28,14 @@
 #include "mac_channels.h"
 #include "mac_messages.h"
 
+#include <net/ethernet.h>
+#include <netinet/ip.h>
+
 MacDataFrame dataframe_create(uint size) {
   MacDataFrame frame = malloc(sizeof(MacDataFrame_s));
   frame->data = malloc(size);
   frame->size = size;
+  frame->do_arq = 0; // do not use ARQ mode by default
   return frame;
 }
 
@@ -85,4 +89,27 @@ int mac_stats_print(char *buf, int buflen, MACstat_s *stats) {
                   "RX bytes: %6d   TX bytes: %6d\n",
                   up_days, up_hours, up_min, up_secs, stats->chan_rx_succ,
                   stats->chan_rx_fail, stats->bytes_rx, stats->bytes_tx);
+}
+
+int packet_inspect_is_tcpip(uint8_t *buf, uint buflen) {
+  // Packet inspection: determine if this is TCP traffic
+  // then activate ARQ
+
+  if (buf == NULL)
+    return -1; // no buffer
+
+  if (buflen < 34)
+    return -1; // buffersize is shorter than Ethernet+IP header size
+
+  uint16_t ether_type = (buf[12] << 8) + buf[13];
+  struct iphdr *ip4hdr = (struct iphdr *)&buf[14];
+  LOG(DEBUG, "[MAC] Packet inspect: ethertype %04x, proto %d\n", ether_type,
+      ip4hdr->protocol);
+  if (ether_type == ETHERTYPE_IP) {
+    // is IPv4 packet, check if TCP
+    if (ip4hdr->protocol == 6) {
+      return 1; // This is a IPv4 header with TCP content
+    }
+  }
+  return 0; // this frame does not contain TCP/IP
 }

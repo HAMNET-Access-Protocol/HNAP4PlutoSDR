@@ -56,7 +56,7 @@ set(UTIL src/util/log.h src/util/log.c src/util/ringbuf.h src/util/ringbuf.c)
 
 # Unit Tests
 set(UNITY tests/unity/src/unity.c)
-set(TESTS tests/test_mac_messages.c)
+set(TESTS tests/test.c)
 
 ### Add different executables
 

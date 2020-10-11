@@ -30,7 +30,7 @@
 MacUE mac_ue_init() {
   MacUE mac = calloc(sizeof(struct MacUE_s), 1);
   mac->msg_control_queue = ringbuf_create(MAC_CTRL_MSG_BUF_SIZE);
-  mac->fragmenter = mac_frag_init();
+  mac->fragmenter = mac_frag_init(&mac->subframe_cnt);
   mac->reassembler = mac_assmbl_init();
   mac->reassembler_brcst = mac_assmbl_init();
 #ifdef MAC_ENABLE_TAP_DEV
@@ -138,15 +138,25 @@ int mac_ue_handle_message(MacUE mac, MacMessage msg, uint is_broadcast) {
     mac->phy->userid = -1;
     mac->userid = 0;
     break;
+  case ul_data_ack:
+    mac_frag_ack_fragment(mac->fragmenter, msg);
+    break;
   case dl_data:
-    if (is_broadcast)
+    if (is_broadcast) {
       frame = mac_assmbl_reassemble(mac->reassembler_brcst, msg);
-    else
+    } else {
+      if (msg->hdr.ULdata.do_ack) {
+        MacMessage ack = mac_msg_create_ul_data_ack(ACK, msg->hdr.ULdata.seqNr,
+                                                    msg->hdr.ULdata.fragNr);
+        ringbuf_put(mac->msg_control_queue, ack);
+      }
       frame = mac_assmbl_reassemble(mac->reassembler, msg);
+    }
     if (frame != NULL) {
       mac->stats.bytes_rx += frame->size;
-      LOG(INFO, "[MAC UE] received dataframe of %d bytes. brdcst: %d\n",
-          frame->size, is_broadcast);
+      LOG(INFO,
+          "[MAC UE] received dataframe of %d bytes. brdcst: %d arq_mode: %d \n",
+          frame->size, is_broadcast, frame->do_arq);
       // PRINT_BIN(INFO,frame->data,frame->size); LOG(INFO,"\n");
 
 #ifdef MAC_ENABLE_TAP_DEV
@@ -238,9 +248,11 @@ void mac_ue_run_scheduler(MacUE mac) {
           }
           MacMessage msg = mac_frag_get_fragment(mac->fragmenter,
                                                  lchan_unused_bytes(chan), 1);
-          lchan_add_message(chan, msg);
-          mac->stats.bytes_tx += msg->payload_len;
-          mac_msg_destroy(msg);
+          if (msg != NULL) {
+            lchan_add_message(chan, msg);
+            mac->stats.bytes_tx += msg->payload_len;
+            mac_msg_destroy(msg);
+          }
         } else {
           // client is assigned to slot but has no data
           // send keepalive instead.
@@ -281,7 +293,7 @@ void mac_ue_run_scheduler(MacUE mac) {
     for (int i = 0; i < MAC_ULCTRL_SLOTS; i++) {
       if (mac->ul_ctrl_assignments[i] == UE_ASSIGNED) {
         phy_map_ulctrl(mac->phy, chan, next_sfn, i);
-        LOG_SFN_MAC(DEBUG, "[MAC UE] map ulctrl %d %d\n",
+        LOG_SFN_MAC(TRACE, "[MAC UE] map ulctrl %d %d\n",
                     mac->phy->common->tx_subframe, mac->phy->common->tx_symbol);
       }
     }
@@ -358,6 +370,11 @@ void *mac_ue_tap_rx_th(void *arg) {
     if (mac->tapdevice->bytes_rec > 0) {
       MacDataFrame frame = dataframe_create(mac->tapdevice->bytes_rec);
       memcpy(frame->data, mac->tapdevice->buffer, frame->size);
+      if (packet_inspect_is_tcpip(frame->data, frame->size)) {
+        frame->do_arq = 1;
+      } else {
+        frame->do_arq = 0;
+      }
       if (!mac_ue_add_txdata(mac, frame)) {
         dataframe_destroy(frame);
         LOG(WARN, "[MAC UE] could not forward TAP data to MAC. queue full\n");

@@ -183,7 +183,7 @@ int phy_ue_initial_sync(PhyUE phy, float complex *rxbuf_time,
       float cfo_filt = (1 - coarse_cfo_filt_param) * phy->prev_cfo +
                        coarse_cfo_filt_param * new_cfo;
       ofdmframesync_set_cfo(phy->fs, cfo_filt);
-      LOG_SFN_PHY(DEBUG, "[PHY UE] sync seq. cfo: %.3fHz offset: %d samps\n",
+      LOG_SFN_PHY(TRACE, "[PHY UE] sync seq. cfo: %.3fHz offset: %d samps\n",
                   new_cfo * samplerate / 6.28, offset);
     }
   }
@@ -224,10 +224,10 @@ int phy_ue_proc_dlctrl(PhyUE phy) {
   }
 
   // Set the decoded user assignments in the phy struct
-  LOG_SFN_PHY(DEBUG, "[PHY UE] DLCTRL:");
+  LOG_SFN_PHY(TRACE, "[PHY UE] DLCTRL:");
   uint idx = 0;
   for (int i = 0; i < NUM_SLOT / 2; i++) {
-    LOG(DEBUG, "%02x", dlctrl_buf[idx].byte);
+    LOG(TRACE, "%02x", dlctrl_buf[idx].byte);
     phy->dlslot_assignments[sfn][2 * i] =
         dlctrl_buf[idx].h4 == phy->userid ? UE_ASSIGNED : NOT_ASSIGNED;
     phy->dlslot_assignments[sfn][2 * i] =
@@ -243,7 +243,7 @@ int phy_ue_proc_dlctrl(PhyUE phy) {
     idx++;
   }
   for (int i = 0; i < NUM_SLOT / 2; i++) {
-    LOG(DEBUG, "%02x", dlctrl_buf[idx].byte);
+    LOG(TRACE, "%02x", dlctrl_buf[idx].byte);
     phy->ulslot_assignments[sfn][2 * i] =
         (dlctrl_buf[idx].h4 == phy->userid) ? UE_ASSIGNED : NOT_ASSIGNED;
     phy->ulslot_assignments[sfn][2 * i + 1] =
@@ -251,7 +251,7 @@ int phy_ue_proc_dlctrl(PhyUE phy) {
     idx++;
   }
   for (int i = 0; i < NUM_ULCTRL_SLOT / 2; i++) {
-    LOG(DEBUG, "%02x\n", dlctrl_buf[idx].byte);
+    LOG(TRACE, "%02x\n", dlctrl_buf[idx].byte);
     phy->ulctrl_assignments[sfn][2 * i] =
         (dlctrl_buf[idx].h4 == phy->userid) ? UE_ASSIGNED : NOT_ASSIGNED;
     phy->ulctrl_assignments[sfn][2 * i + 1] =
@@ -384,7 +384,7 @@ int phy_ue_proc_sync_info(PhyUE phy) {
   if (lchan_verify_crc(chan)) {
     phy->bs_rxgain = chan->data[0];
     phy->bs_txgain = chan->data[1];
-    LOG(DEBUG, "[PHY UE] BS sync info: bs_rxgain: %d bs_txgain: %d\n",
+    LOG(TRACE, "[PHY UE] BS sync info: bs_rxgain: %d bs_txgain: %d\n",
         phy->bs_rxgain, phy->bs_txgain);
   } else {
     LOG(WARN, "[PHY UE] cannot decode SYNC INFO slot!\n");
