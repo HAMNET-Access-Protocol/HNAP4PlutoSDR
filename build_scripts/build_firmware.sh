@@ -122,16 +122,16 @@ echo "plutosdr-fw "$PLUTOSDR_FW_TAG >> $FW_OVERLAY/root/VERSION
 ## Copy network init script to rootfs
 cd $SRC_DIR || exit 1
 echo "Copy network autoconfig script to rootfs..."
-cp startup_scripts/* $FW_OVERLAY/etc/init.d/
+cp overlay/fw/etc/init.d/* $FW_OVERLAY/etc/init.d/
 
 
 ## Copy FIR filter to rootfs
 echo "Copy FIR filter coefficients to rootfs..."
-cp AD9361_256kSPS.ftr $FW_OVERLAY/root/
+cp overlay/fw/root/AD9361_256kSPS.ftr $FW_OVERLAY/root/
 
 ## Copy the default configuration file to rootfs
 echo "Copy config.txt to rootfs..."
-cp config.txt $FW_OVERLAY/root/
+cp overlay/fw/root/config.txt $FW_OVERLAY/root/
 
 cd $PLUTOSDR_FW_DIR || exit 1
 make || exit 1
