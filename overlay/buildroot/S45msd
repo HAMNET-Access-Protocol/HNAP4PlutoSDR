@@ -29,6 +29,18 @@ patch_html_page() {
 	sed -i -e "s/#CALLSIGN#/$CALLSIGN/g" -e "s/#PLATFORM#/$PLATFORM/g" -e "s/#HNAP#/$HNAP/g" /etc/motd
 
 	sed -i -e "s/#BUILD#/$BUILD/g" $2
+
+	# Warning because of default root pw
+	PWWARNING=""
+	SHADOW="$(grep -E '^root:' /etc/shadow 2>/dev/null)"
+	SALT=$(echo "${SHADOW}" | sed -n 's/root:\$5\$//;s/\$.*//p')
+	HASH=$(mkpasswd -msha-256 analog "$SALT")
+
+	if echo "${SHADOW}" | grep -q "${HASH}"; then
+			PWWARNING="The default password for the 'root' user has not been changed.\n"
+			PWWARNING="${PWWARNING}This is a security risk - please login as the 'root' user and type 'device_passwd' to set a new password"
+	fi
+	sed -i -e "s/#PWWARNING#/$PWWARNING/g" /etc/motd
 }
 
 
