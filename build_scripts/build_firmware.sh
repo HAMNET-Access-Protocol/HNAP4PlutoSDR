@@ -122,6 +122,10 @@ cp -R overlay/fw/* $FW_OVERLAY/
 echo "Copy overlay files to buildroot..."
 cp -R overlay/buildroot/* $PLUTOSDR_FW_DIR/buildroot/board/pluto/
 
+echo "Removing unnecessary files from buildroot"
+cd $PLUTOSDR_FW_DIR/buildroot/board/pluto/msd/img
+rm ADI_Logo_AWP.png ez.png fb.png GNURadio_logo.png gp.png ig.png li.png mathworks_logo.png osc128.png PlutoSDR.png prof_blue.png SDR-Sharp.png sdrangel.png ss.png sw.png tw.png yk.png yt.png
+
 cd $PLUTOSDR_FW_DIR || exit 1
 make || exit 1
 cp $PLUTOSDR_FW_DIR/build/pluto.frm $BUILD_DIR
