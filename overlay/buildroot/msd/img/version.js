@@ -3,12 +3,14 @@ function OnTheWeb() {
 }
 
 function versionCompare(v1, v2) {
-	var v1parts = ("" + v1).replace(/[a-zA-Z]/g, "").replace("-", ".").split("."),
-	v2parts = ("" + v2).replace(/[a-zA-Z]/g, "").replace("-", ".").split("."),
+	// Suitable for version strings like v2.0.0-rc1-7-g529f514
+	var v1parts = ("" + v1).replace(/[a-zA-Z]/g, "").replace(/[-]/g, ".").split("."),
+	v2parts = ("" + v2).replace(/[a-zA-Z]/g, "").replace(/[-]/g, ".").split("."),
 	minLength = Math.min(v1parts.length, v2parts.length),
 	p1, p2, i;
 	console.log(v1parts + " || " + v2parts);
-	for(i = 0; i < minLength; i++) {
+	for(i = 0; i < minLength && i < 5; i++) {
+		// Compare everything of v2.0.0-rc1-7, leave out g529f514
 		p1 = parseInt(v1parts[i], 10);
 		p2 = parseInt(v2parts[i], 10);
 		if (isNaN(p1)){ p1 = v1parts[i]; }
@@ -22,8 +24,21 @@ function versionCompare(v1, v2) {
 		}
 		return NaN;
 	}
+
 	if (v1parts.length === v2parts.length) {
-		return 0;
+		if (v1parts.length == 6) {
+			// Same version string up to v2.0.0-rc1-7, now decide how to handle g529f514
+			if (v1parts[5] === v2parts[5]) {
+				// Same commit hash
+				return 0;
+			} else {
+				// Different commit hashes, declare as "newer"
+				return 1;
+			}
+		} else {
+			// Same version
+			return 0;
+		}
 	}
 	return (v1parts.length < v2parts.length) ? -1 : 1;
 }
