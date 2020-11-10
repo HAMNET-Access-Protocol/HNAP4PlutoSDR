@@ -351,11 +351,13 @@ void phy_carrier_sync(PhyUE phy, platform hw) {
   pluto_set_txgain(hw, txgain);
 
   // tune to the correct frequency
-  pluto_set_tx_freq(hw, ul_lo + (long)cfo_hz);
-  pluto_set_rx_freq(hw, dl_lo + (long)cfo_hz);
+  pluto_set_tx_freq(hw,
+                    ul_lo + (long long)(cfo_hz * (float)ul_lo / (float)dl_lo));
+  pluto_set_rx_freq(hw, dl_lo + (long long)cfo_hz);
   LOG(INFO, "[CLIENT] retune transceiver with cfo %.3fHz:\n", cfo_hz);
-  LOG(INFO, "[CLIENT] TX LO freq: %lldHz\n", ul_lo + (long)cfo_hz);
-  LOG(INFO, "[CLIENT] RX LO freq: %lldHz\n", dl_lo + (long)cfo_hz);
+  LOG(INFO, "[CLIENT] TX LO freq: %lldHz\n",
+      ul_lo + (long long)(cfo_hz * (float)ul_lo / (float)dl_lo));
+  LOG(INFO, "[CLIENT] RX LO freq: %lldHz\n", dl_lo + (long long)cfo_hz);
   LOG(INFO, "[CLIENT] rxgain adjusted: %d\n", rxgain);
   LOG(INFO, "[CLIENT] txgain adjusted: %d\n", txgain);
   free(rxbuf_time);
