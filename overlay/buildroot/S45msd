@@ -23,12 +23,12 @@ patch_html_page() {
 
 	CALLSIGN=$(fw_printenv -n hnap_callsign)
 	PLATFORM=$(grep plutosdr-fw /root/VERSION)
-	HNAP=$(grep hnap /root/VERSION)
+	HNAP=$(grep hnap /root/VERSION | cut -d' ' -f2)
 
 	sed -i -e "s/#CALLSIGN#/$CALLSIGN/g" -e "s/#PLATFORM#/$PLATFORM/g" -e "s/#HNAP#/$HNAP/g" $1
 	sed -i -e "s/#CALLSIGN#/$CALLSIGN/g" -e "s/#PLATFORM#/$PLATFORM/g" -e "s/#HNAP#/$HNAP/g" /etc/motd
 
-	sed -i -e "s/#BUILD#/$BUILD/g" $2
+	sed -i -e "s/#BUILD#/$HNAP/g" $2
 
 	# Warning because of default root pw
 	PWWARNING=""
