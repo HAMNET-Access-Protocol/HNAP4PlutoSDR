@@ -88,12 +88,6 @@ else
   echo "Linux kernel seems to be already configured."
 fi
 
-
-## Init rootfs overlay structure
-mkdir -p $FW_OVERLAY/usr/lib
-mkdir -p $FW_OVERLAY/root
-mkdir -p $FW_OVERLAY/etc/init.d
-
 cd $SCRIPT_DIR || exit 1
 
 ## Create sysroot
@@ -105,33 +99,32 @@ sed -i '/STATUS_SYSROOT_GOT_LIBLIQUID/d' $BUILD_STATUS
 
 # Copy libfec and liquid-dsp to rootfs overlay. These libs are not built with buildroot
 # so we have to manually copy them.
+mkdir -p $FW_OVERLAY/usr/lib
 cp $SYSROOT_DIR/usr/lib/libliquid.so $FW_OVERLAY/usr/lib/
 cp $SYSROOT_DIR/usr/lib/libfec.so $FW_OVERLAY/usr/lib
 
 ## Build Main Apps
 ./build_standalone_binaries.sh
 cd $BUILD_DIR || exit 1
+mkdir -p $FW_OVERLAY/root
 cp basestation client client-calib $FW_OVERLAY/root/
-
 
 # Create VERSION file
 touch $FW_OVERLAY/root/VERSION
 echo "hnap "`git describe --tags` > $FW_OVERLAY/root/VERSION
 echo "plutosdr-fw "$PLUTOSDR_FW_TAG >> $FW_OVERLAY/root/VERSION
 
-## Copy network init script to rootfs
+## Copy firmware overlay files to rootfs
 cd $SRC_DIR || exit 1
-echo "Copy network autoconfig script to rootfs..."
-cp startup_scripts/* $FW_OVERLAY/etc/init.d/
+echo "Copy overlay files to firmware rootfs..."
+cp -R overlay/fw/* $FW_OVERLAY/
 
+echo "Copy overlay files to buildroot..."
+cp -R overlay/buildroot/* $PLUTOSDR_FW_DIR/buildroot/board/pluto/
 
-## Copy FIR filter to rootfs
-echo "Copy FIR filter coefficients to rootfs..."
-cp AD9361_256kSPS.ftr $FW_OVERLAY/root/
-
-## Copy the default configuration file to rootfs
-echo "Copy config.txt to rootfs..."
-cp config.txt $FW_OVERLAY/root/
+echo "Removing unnecessary files from buildroot"
+cd $PLUTOSDR_FW_DIR/buildroot/board/pluto/msd/img
+rm -f ADI_Logo_AWP.png ez.png fb.png GNURadio_logo.png gp.png ig.png li.png mathworks_logo.png osc128.png PlutoSDR.png prof_blue.png SDR-Sharp.png sdrangel.png ss.png sw.png tw.png yk.png yt.png
 
 cd $PLUTOSDR_FW_DIR || exit 1
 make || exit 1
