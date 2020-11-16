@@ -1,0 +1,9 @@
+#!/bin/sh
+set +e
+
+cat /proc/mounts | grep -q mtd2 || (echo "Filesystem not mounted use device_format_jffs2 command to setup your partition"; exit 1)
+
+install -D /root/hnap_config.txt -t /mnt/jffs2/root
+cd /root
+md5sum hnap_config.txt 2>/dev/null > /mnt/jffs2/root/hnap_config.md5
+
