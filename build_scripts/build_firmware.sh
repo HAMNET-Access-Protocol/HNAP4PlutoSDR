@@ -20,19 +20,14 @@ linux_rt_patch() {
 
   # Configure RT kernel
   KERNEL_CONFIG=$PLUTOSDR_FW_DIR/linux/arch/arm/configs/zynq_pluto_defconfig
-  echo "CONFIG_TUN=y" >> $KERNEL_CONFIG
-  echo "CONFIG_PREEMPT_RT_FULL=y" >> $KERNEL_CONFIG
+  cat overlay/linux_zynq_pluto_defconfig_patch >> $KERNEL_CONFIG
 }
 
 # Changes to buildroot
 config_buildroot() {
   BR_CONFIG=$PLUTOSDR_FW_DIR/buildroot/configs/zynq_pluto_defconfig
   echo 'BR2_ROOTFS_OVERLAY="'"$FW_OVERLAY"'"' >> $BR_CONFIG
-  echo 'BR2_PACKAGE_LIBCONFIG=y' >> $BR_CONFIG
-  echo 'BR2_PACKAGE_FFTW_SINGLE=y' >> $BR_CONFIG
-  echo 'BR2_PACKAGE_TUNCTL=y' >> $BR_CONFIG
-  echo 'BR2_PACKAGE_IPERF3=y' >> $BR_CONFIG
-  echo 'BR2_PACKAGE_LLDPD=y' >> $BR_CONFIG
+  cat overlay/buildroot_zynq_pluto_defconfig_patch >> $BR_CONFIG
 }
 
 #Check if env variable for Xilinx tools exists
