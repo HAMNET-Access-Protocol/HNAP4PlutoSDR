@@ -20,6 +20,7 @@ linux_rt_patch() {
 
   # Configure RT kernel
   KERNEL_CONFIG=$PLUTOSDR_FW_DIR/linux/arch/arm/configs/zynq_pluto_defconfig
+  cd $SRC_DIR || exit 1
   cat overlay/linux_zynq_pluto_defconfig_patch >> $KERNEL_CONFIG
 }
 
@@ -27,6 +28,7 @@ linux_rt_patch() {
 config_buildroot() {
   BR_CONFIG=$PLUTOSDR_FW_DIR/buildroot/configs/zynq_pluto_defconfig
   echo 'BR2_ROOTFS_OVERLAY="'"$FW_OVERLAY"'"' >> $BR_CONFIG
+  cd $SRC_DIR || exit 1
   cat overlay/buildroot_zynq_pluto_defconfig_patch >> $BR_CONFIG
 }
 
