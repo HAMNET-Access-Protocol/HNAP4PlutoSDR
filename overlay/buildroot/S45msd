@@ -31,16 +31,31 @@ patch_html_page() {
 	sed -i -e "s/#BUILD#/$HNAP/g" $2
 
 	# Warning because of default root pw
-	PWWARNING=""
+	WARNINGS=""
 	SHADOW="$(grep -E '^root:' /etc/shadow 2>/dev/null)"
 	SALT=$(echo "${SHADOW}" | sed -n 's/root:\$5\$//;s/\$.*//p')
 	HASH=$(mkpasswd -msha-256 analog "$SALT")
 
 	if echo "${SHADOW}" | grep -q "${HASH}"; then
-			PWWARNING="The default password for the 'root' user has not been changed.\n"
-			PWWARNING="${PWWARNING}This is a security risk - please login as the 'root' user and type 'device_passwd' to set a new password"
+			WARNINGS="${WARNINGS}WARNING The default password for the 'root' user has not been changed.\n"
+			WARNINGS="${WARNINGS}This is a security risk - please login as the 'root' user and type 'device_passwd' to set a new password.\n"
 	fi
-	sed -i -e "s/#PWWARNING#/$PWWARNING/g" /etc/motd
+	
+	# Warning because of misconfiguration of cpus
+	RET=`fw_printenv -n maxcpus 2>/dev/null`
+	if [ "$RET" -eq "1" ] 2>/dev/null; then
+		WARNINGS="${WARNINGS}\nWARNING Second CPU is required for HNAP, but not activated yet!\n"
+		WARNINGS="${WARNINGS}Call 'fw_setenv maxcpus' to fix this, then 'reboot'.\n"
+	fi
+
+	# Warning because of misconfiguration of core isolation
+	RET=`fw_printenv -n isolcpus 2>/dev/null`
+	if ! [ "$RET" -eq "1" ] 2> /dev/null; then
+		WARNINGS="${WARNINGS}\nWARNING Core isolation is required for HNAP, but not activated yet!\n"
+		WARNINGS="${WARNINGS}Call 'fw_setenv isolcpus 1' to fix this, then 'reboot'.\n"
+	fi
+
+	sed -i -e "s/#WARNINGS#/$WARNINGS/g" /etc/motd
 }
 
 
