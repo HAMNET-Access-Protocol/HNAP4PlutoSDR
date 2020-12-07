@@ -5,6 +5,7 @@ ENDPOINTS=3
 
 #S40network / S41network
 UDHCPD_CONF=/etc/udhcpd.conf
+UDHCPD_CONF_TAP0=/etc/udhcpd_tap0.conf
 CONF=/opt/config.txt
 IFAC=/etc/network/interfaces
 

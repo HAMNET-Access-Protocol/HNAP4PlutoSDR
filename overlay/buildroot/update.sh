@@ -81,6 +81,9 @@ process_ini() {
 	ini_parser $FILE "WLAN"
 	ini_parser $FILE "SYSTEM"
 	ini_parser $FILE "USB_ETHERNET"
+	ini_parser $FILE "HNAP_NETWORK"
+	ini_parser $FILE "NAT"
+	ini_parser $FILE "BRIDGE"
 
 	rm -f /mnt/msd/SUCCESS_ENV_UPDATE /mnt/msd/FAILED_INVALID_UBOOT_ENV /mnt/msd/CAL_STATUS
 
@@ -99,6 +102,17 @@ process_ini() {
 		echo "udc_handle_suspend $udc_handle_suspend" >> /opt/fw_set.tmp
 		echo "ipaddr_eth $ipaddr_eth" >> /opt/fw_set.tmp
 		echo "netmask_eth $netmask_eth" >> /opt/fw_set.tmp
+		echo "dhcp_server_pool_start $dhcp_server_pool_start" >> /opt/fw_set.tmp
+		echo "dhcp_server_leasetime $dhcp_server_leasetime" >> /opt/fw_set.tmp
+		echo "dhcp_server_gateway $dhcp_server_gateway" >> /opt/fw_set.tmp
+		echo "ipaddr_tap $ipaddr_tap" >> /opt/fw_set.tmp
+		echo "netmask_tap $netmask_tap" >> /opt/fw_set.tmp
+		echo "dhcp_server_pool_start_tap $dhcp_server_pool_start_tap" >> /opt/fw_set.tmp
+		echo "dhcp_server_leasetime_tap $dhcp_server_leasetime_tap" >> /opt/fw_set.tmp
+		echo "dhcp_server_gateway_tap $dhcp_server_gateway_tap" >> /opt/fw_set.tmp
+		echo "nat_interface $nat_interface" >> /opt/fw_set.tmp
+		echo "bridge_master_interface $bridge_master_interface" >> /opt/fw_set.tmp
+		echo "bridge_slave_interface_1 $bridge_slave_interface_1" >> /opt/fw_set.tmp
 		fw_setenv -s /opt/fw_set.tmp
 		rm /opt/fw_set.tmp
 		flash_indication_off

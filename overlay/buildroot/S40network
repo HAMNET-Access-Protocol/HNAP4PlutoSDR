@@ -7,9 +7,28 @@
 
 source /etc/device_config
 
+function spoken_name_to_ifname () {
+	SPOKENNAME=$1
+	case $SPOKENNAME in
+		"ETHERNET")
+			echo "usb0"
+			;;
+		"USB_ETHERNET")
+			echo "eth0"
+			;;
+		"WLAN")
+			echo "wlan0"
+			;;
+		"HNAP_INTERFACE")
+			echo "tap0"
+			;;
+	esac
+}
+
 create_system_files () {
 
 	UDHCPD_CONF=/etc/udhcpd.conf
+	UDHCPD_CONF_TAP=/etc/udhcpd_tap0.conf
 	CONF=/opt/config.txt
 	IFAC=/etc/network/interfaces
 
@@ -17,23 +36,48 @@ create_system_files () {
 	echo $HOSTNAME > /etc/hostname
 
 	IPADDR=`fw_printenv -n ipaddr 2> /dev/null || echo 192.168.2.1`
-	IPADDR_HOST=`fw_printenv -n ipaddr_host 2> /dev/null || echo 192.168.2.10`
 	NETMASK=`fw_printenv -n netmask 2> /dev/null || echo 255.255.255.0`
-
-	ETH_IPADDR=`fw_printenv -n ipaddr_eth 2> /dev/null`
-	ETH_NETMASK=`fw_printenv -n netmask_eth 2> /dev/null || echo 255.255.255.0`
+	DHCP_SERVER_POOL_START=`fw_printenv -n dhcp_server_pool_start 2> /dev/null || echo 192.168.2.10`
+	DHCP_SERVER_LEASETIME=`fw_printenv -n dhcp_server_leasetime 2> /dev/null || echo 600`
+	DHCP_SERVER_GATEWAY=`fw_printenv -n dhcp_server_gateway 2> /dev/null || echo $IPADDR`
 
 	WLAN_SSID=`fw_printenv -n ssid_wlan 2> /dev/null`
 	WLAN_PWD=`fw_printenv -n pwd_wlan 2> /dev/null`
 	WLAN_IPADDR=`fw_printenv -n ipaddr_wlan 2> /dev/null`
 
+	ETH_IPADDR=`fw_printenv -n ipaddr_eth 2> /dev/null`
+	ETH_NETMASK=`fw_printenv -n netmask_eth 2> /dev/null || echo 255.255.255.0`
+
+	TAP_IPADDR=`fw_printenv -n ipaddr_tap 2> /dev/null`
+	TAP_NETMASK=`fw_printenv -n netmask_tap 2> /dev/null || echo 255.255.255.240`
+	TAP_DHCP_SERVER_POOL_START=`fw_printenv -n dhcp_server_pool_start_tap 2> /dev/null`
+	TAP_DHCP_SERVER_LEASETIME=`fw_printenv -n dhcp_server_leasetime_tap 2> /dev/null || echo 600`
+	TAP_DHCP_SERVER_GATEWAY=`fw_printenv -n dhcp_server_gateway_tap 2> /dev/null || echo $TAP_IPADDR`
+
+	NAT_INTERFACE=`fw_printenv -n nat_interface 2> /dev/null || echo HNAP_NETWORK`
+
+	BRIDGE_MASTER_INTERFACE=`fw_printenv -n bridge_master_interface 2> /dev/null`
+	BRIDGE_SLAVE_INTERFACE_1=`fw_printenv -n bridge_slave_interface_1 2> /dev/null`
+
 	XO_CORRECTION=`fw_printenv -n xo_correction 2> /dev/null`
 	UDC_HANDLE_SUSPEND=`fw_printenv -n udc_handle_suspend 2> /dev/null || echo 0`
 
 	### /etc/udhcpd.conf ###
-	echo "start $IPADDR_HOST" > $UDHCPD_CONF
+	echo "start $DHCP_SERVER_POOL_START" > $UDHCPD_CONF
 	echo "interface usb0" >> $UDHCPD_CONF
 	echo "option subnet $NETMASK" >> $UDHCPD_CONF
+	echo "option lease $DHCP_SERVER_LEASETIME" >> $UDHCPD_CONF
+	echo "option router $DHCP_SERVER_GATEWAY" >> $UDHCPD_CONF
+
+	### /etc/udhcpd_tap0.conf ###
+	if [ -n "$TAP_DHCP_SERVER_POOL_START" ]
+	then
+		echo "start $TAP_DHCP_SERVER_POOL_START" > $UDHCPD_CONF_TAP0
+		echo "interface tap0" >> $UDHCPD_CONF_TAP0
+		echo "option subnet $TAP_NETMASK" >> $UDHCPD_CONF_TAP0
+		echo "option lease $TAP_DHCP_SERVER_LEASETIME" >> $UDHCPD_CONF_TAP0
+		echo "option router $TAP_DHCP_SERVER_GATEWAY" >> $UDHCPD_CONF_TAP0
+	fi
 
 	### /etc/network/interfaces ###
 	echo -e "auto lo\n""iface lo inet loopback\n" > $IFAC
@@ -47,6 +91,30 @@ create_system_files () {
 		echo -e "\taddress $ETH_IPADDR\n""\tnetmask $ETH_NETMASK\n" >> $IFAC
 	else
 		echo -e "iface eth0 inet dhcp\n" >> $IFAC
+	fi
+
+	echo -e "auto tap0" >> $IFAC
+	if [ -n "$TAP_IPADDR" ]
+	then
+		echo -e "iface tap0 inet static" >> $IFAC
+		echo -e "\taddress $TAP_IPADDR\n""\tnetmask $TAP_NETMASK" >> $IFAC
+	else
+		echo -e "iface tap0 inet dhcp" >> $IFAC
+	fi
+	echo -e "\tpre-up /usr/sbin/tunctl -t tap0\n" >> $IFAC
+
+	if [ -n "$BRIDGE_MASTER_INTERFACE" ]
+	then
+		retval_master=$(spoken_name_to_ifname $BRIDGE_MASTER_INTERFACE)
+		retval_slave=$(spoken_name_to_ifname $BRIDGE_SLAVE_INTERFACE_1)
+		echo -e "iface br0 inet dhcp" >> $IFAC
+		echo -e "\tbridge_ports $retval_master $retval_slave\n" >> $IFAC
+	fi
+	
+	if [ -n "$NAT_INTERFACE" ]
+	then
+		retval=$(spoken_name_to_ifname $NAT_INTERFACE)
+		iptables -t nat -A POSTROUTING -o $retval -j MASQUERADE
 	fi
 
 	### /etc/wpa.conf ###
@@ -83,25 +151,49 @@ create_system_files () {
 	echo "#   4. Eject the device USB Drive"$'\r' >> $CONF
 	echo "# Doc: https://wiki.analog.com/university/tools/pluto/users/customizing"$'\r' >> $CONF
 	echo ""$'\r'>> $CONF
+
 	echo "[NETWORK]"$'\r' >> $CONF
 	echo "hostname = $HOSTNAME"$'\r' >> $CONF
 	echo "ipaddr = $IPADDR"$'\r' >> $CONF
-	echo "ipaddr_host = $IPADDR_HOST"$'\r' >> $CONF
 	echo "netmask = $NETMASK"$'\r' >> $CONF
+	echo "dhcp_server_pool_start = $DHCP_SERVER_POOL_START"$'\r' >> $CONF
+	echo "dhcp_server_leasetime = $DHCP_SERVER_LEASETIME"$'\r' >> $CONF
+	echo "dhcp_server_gateway = $DHCP_SERVER_GATEWAY"$'\r' >> $CONF
 	echo ""$'\r'>> $CONF
+
 	echo "[WLAN]"$'\r' >> $CONF
 	echo "ssid_wlan = $WLAN_SSID"$'\r' >> $CONF
 	echo "pwd_wlan = $WLAN_PWD"$'\r' >> $CONF
 	echo "ipaddr_wlan = $WLAN_IPADDR"$'\r' >> $CONF
 	echo ""$'\r'>> $CONF
+
 	echo "[USB_ETHERNET]"$'\r' >> $CONF
 	echo "ipaddr_eth = $ETH_IPADDR"$'\r' >> $CONF
 	echo "netmask_eth = $ETH_NETMASK"$'\r' >> $CONF
 	echo ""$'\r'>> $CONF
+
+	echo "[HNAP_NETWORK]"$'\r' >> $CONF
+	echo "ipaddr_tap = $TAP_IPADDR"$'\r' >> $CONF
+	echo "netmask_tap = $TAP_NETMASK"$'\r' >> $CONF
+	echo "dhcp_server_pool_start_tap = $TAP_DHCP_SERVER_POOL_START"$'\r' >> $CONF
+	echo "dhcp_server_leasetime_tap = $TAP_DHCP_SERVER_LEASETIME"$'\r' >> $CONF
+	echo "dhcp_server_gateway_tap = $TAP_DHCP_SERVER_GATEWAY"$'\r' >> $CONF
+	echo ""$'\r'>> $CONF
+
+	echo "[NAT]"$'\r' >> $CONF
+	echo "nat_interface = $NAT_INTERFACE"$'\r' >> $CONF
+	echo ""$'\r'>> $CONF	
+
+	echo "[BRIDGE]"$'\r' >> $CONF
+	echo "master_interface = $BRIDGE_MASTER_INTERFACE"$'\r' >> $CONF
+	echo "slave_interface_1 = $BRIDGE_SLAVE_INTERFACE_1"$'\r' >> $CONF
+	echo ""$'\r'>> $CONF
+
 	echo "[SYSTEM]"$'\r' >> $CONF
 	echo "xo_correction = $XO_CORRECTION"$'\r' >> $CONF
 	echo "udc_handle_suspend = $UDC_HANDLE_SUSPEND"$'\r' >> $CONF
 	echo ""$'\r'>> $CONF
+
 	echo "[ACTIONS]"$'\r' >> $CONF
 	echo "diagnostic_report = 0"$'\r' >> $CONF
 	echo "dfu = 0"$'\r' >> $CONF
