@@ -105,11 +105,13 @@ process_ini() {
 		echo "dhcp_server_pool_start $dhcp_server_pool_start" >> /opt/fw_set.tmp
 		echo "dhcp_server_leasetime $dhcp_server_leasetime" >> /opt/fw_set.tmp
 		echo "dhcp_server_gateway $dhcp_server_gateway" >> /opt/fw_set.tmp
+		echo "dhcp_server_dns $dhcp_server_dns" >> /opt/fw_set.tmp
 		echo "ipaddr_tap $ipaddr_tap" >> /opt/fw_set.tmp
 		echo "netmask_tap $netmask_tap" >> /opt/fw_set.tmp
 		echo "dhcp_server_pool_start_tap $dhcp_server_pool_start_tap" >> /opt/fw_set.tmp
 		echo "dhcp_server_leasetime_tap $dhcp_server_leasetime_tap" >> /opt/fw_set.tmp
 		echo "dhcp_server_gateway_tap $dhcp_server_gateway_tap" >> /opt/fw_set.tmp
+		echo "dhcp_server_dns_tap $dhcp_server_dns_tap" >> /opt/fw_set.tmp
 		echo "nat_interface $nat_interface" >> /opt/fw_set.tmp
 		echo "bridge_master_interface $bridge_master_interface" >> /opt/fw_set.tmp
 		echo "bridge_slave_interface_1 $bridge_slave_interface_1" >> /opt/fw_set.tmp

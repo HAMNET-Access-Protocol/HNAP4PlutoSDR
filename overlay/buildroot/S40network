@@ -19,7 +19,7 @@ function spoken_name_to_ifname () {
 		"WLAN")
 			echo "wlan0"
 			;;
-		"HNAP_INTERFACE")
+		"HNAP_NETWORK")
 			echo "tap0"
 			;;
 	esac
@@ -40,6 +40,7 @@ create_system_files () {
 	DHCP_SERVER_POOL_START=`fw_printenv -n dhcp_server_pool_start 2> /dev/null || echo 192.168.2.10`
 	DHCP_SERVER_LEASETIME=`fw_printenv -n dhcp_server_leasetime 2> /dev/null || echo 600`
 	DHCP_SERVER_GATEWAY=`fw_printenv -n dhcp_server_gateway 2> /dev/null || echo $IPADDR`
+	DHCP_SERVER_DNS=`fw_printenv -n dhcp_server_dns 2> /dev/null || echo $IPADDR`
 
 	WLAN_SSID=`fw_printenv -n ssid_wlan 2> /dev/null`
 	WLAN_PWD=`fw_printenv -n pwd_wlan 2> /dev/null`
@@ -53,6 +54,7 @@ create_system_files () {
 	TAP_DHCP_SERVER_POOL_START=`fw_printenv -n dhcp_server_pool_start_tap 2> /dev/null`
 	TAP_DHCP_SERVER_LEASETIME=`fw_printenv -n dhcp_server_leasetime_tap 2> /dev/null || echo 600`
 	TAP_DHCP_SERVER_GATEWAY=`fw_printenv -n dhcp_server_gateway_tap 2> /dev/null || echo $TAP_IPADDR`
+	TAP_DHCP_SERVER_DNS=`fw_printenv -n dhcp_server_dns_tap 2> /dev/null || echo $TAP_IPADDR`
 
 	NAT_INTERFACE=`fw_printenv -n nat_interface 2> /dev/null || echo HNAP_NETWORK`
 
@@ -68,6 +70,7 @@ create_system_files () {
 	echo "option subnet $NETMASK" >> $UDHCPD_CONF
 	echo "option lease $DHCP_SERVER_LEASETIME" >> $UDHCPD_CONF
 	echo "option router $DHCP_SERVER_GATEWAY" >> $UDHCPD_CONF
+	echo "option dns $DHCP_SERVER_DNS" >> $UDHCPD_CONF
 
 	### /etc/udhcpd_tap0.conf ###
 	if [ -n "$TAP_DHCP_SERVER_POOL_START" ]
@@ -77,6 +80,7 @@ create_system_files () {
 		echo "option subnet $TAP_NETMASK" >> $UDHCPD_CONF_TAP0
 		echo "option lease $TAP_DHCP_SERVER_LEASETIME" >> $UDHCPD_CONF_TAP0
 		echo "option router $TAP_DHCP_SERVER_GATEWAY" >> $UDHCPD_CONF_TAP0
+		echo "option dns $TAP_DHCP_SERVER_DNS" >> $UDHCPD_CONF_TAP0
 	fi
 
 	### /etc/network/interfaces ###
@@ -101,7 +105,13 @@ create_system_files () {
 	else
 		echo -e "iface tap0 inet dhcp" >> $IFAC
 	fi
-	echo -e "\tpre-up /usr/sbin/tunctl -t tap0\n" >> $IFAC
+	echo -e "\tpre-up /usr/sbin/tunctl -t tap0" >> $IFAC
+	if [ -n "$NAT_INTERFACE" ] && [ "$NAT_INTERFACE" != "NONE" ]
+	then
+		retval=$(spoken_name_to_ifname $NAT_INTERFACE)		
+		echo -e "\tpre-up iptables -t nat -A POSTROUTING -o $retval -j MASQUERADE" >> $IFAC
+	fi
+	echo -e "\n" >> $IFAC
 
 	if [ -n "$BRIDGE_MASTER_INTERFACE" ]
 	then
@@ -109,12 +119,6 @@ create_system_files () {
 		retval_slave=$(spoken_name_to_ifname $BRIDGE_SLAVE_INTERFACE_1)
 		echo -e "iface br0 inet dhcp" >> $IFAC
 		echo -e "\tbridge_ports $retval_master $retval_slave\n" >> $IFAC
-	fi
-	
-	if [ -n "$NAT_INTERFACE" ]
-	then
-		retval=$(spoken_name_to_ifname $NAT_INTERFACE)
-		iptables -t nat -A POSTROUTING -o $retval -j MASQUERADE
 	fi
 
 	### /etc/wpa.conf ###
@@ -159,6 +163,7 @@ create_system_files () {
 	echo "dhcp_server_pool_start = $DHCP_SERVER_POOL_START"$'\r' >> $CONF
 	echo "dhcp_server_leasetime = $DHCP_SERVER_LEASETIME"$'\r' >> $CONF
 	echo "dhcp_server_gateway = $DHCP_SERVER_GATEWAY"$'\r' >> $CONF
+	echo "dhcp_server_dns = $DHCP_SERVER_DNS"$'\r' >> $CONF
 	echo ""$'\r'>> $CONF
 
 	echo "[WLAN]"$'\r' >> $CONF
@@ -178,6 +183,7 @@ create_system_files () {
 	echo "dhcp_server_pool_start_tap = $TAP_DHCP_SERVER_POOL_START"$'\r' >> $CONF
 	echo "dhcp_server_leasetime_tap = $TAP_DHCP_SERVER_LEASETIME"$'\r' >> $CONF
 	echo "dhcp_server_gateway_tap = $TAP_DHCP_SERVER_GATEWAY"$'\r' >> $CONF
+	echo "dhcp_server_dns_tap = $TAP_DHCP_SERVER_DNS"$'\r' >> $CONF
 	echo ""$'\r'>> $CONF
 
 	echo "[NAT]"$'\r' >> $CONF
