@@ -168,6 +168,7 @@ create_system_files () {
 	echo "#   3. Save this file on the device USB drive"$'\r' >> $CONF
 	echo "#   4. Eject the device USB Drive"$'\r' >> $CONF
 	echo "# Doc: https://wiki.analog.com/university/tools/pluto/users/customizing"$'\r' >> $CONF
+	echo "#      https://manual.hnap.de"$'\r' >> $CONF
 	echo ""$'\r'>> $CONF
 
 	echo "[NETWORK]"$'\r' >> $CONF
