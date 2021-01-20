@@ -82,7 +82,6 @@ process_ini() {
 	ini_parser $FILE "SYSTEM"
 	ini_parser $FILE "USB_ETHERNET"
 	ini_parser $FILE "HNAP_NETWORK"
-	ini_parser $FILE "NAT"
 	ini_parser $FILE "BRIDGE"
 
 	rm -f /mnt/msd/SUCCESS_ENV_UPDATE /mnt/msd/FAILED_INVALID_UBOOT_ENV /mnt/msd/CAL_STATUS
@@ -112,7 +111,10 @@ process_ini() {
 		echo "dhcp_server_leasetime_tap $dhcp_server_leasetime_tap" >> /opt/fw_set.tmp
 		echo "dhcp_server_gateway_tap $dhcp_server_gateway_tap" >> /opt/fw_set.tmp
 		echo "dhcp_server_dns_tap $dhcp_server_dns_tap" >> /opt/fw_set.tmp
-		echo "nat_interface $nat_interface" >> /opt/fw_set.tmp
+		echo "nat $nat" >> /opt/fw_set.tmp
+		echo "nat_wlan $nat_wlan" >> /opt/fw_set.tmp
+		echo "nat_eth $nat_eth" >> /opt/fw_set.tmp
+		echo "nat_tap $nat_tap" >> /opt/fw_set.tmp
 		echo "bridge_master_interface $bridge_master_interface" >> /opt/fw_set.tmp
 		echo "bridge_slave_interface_1 $bridge_slave_interface_1" >> /opt/fw_set.tmp
 		fw_setenv -s /opt/fw_set.tmp
