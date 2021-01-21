@@ -7,28 +7,11 @@
 
 source /etc/device_config
 
-function spoken_name_to_ifname () {
-	SPOKENNAME=$1
-	case $SPOKENNAME in
-		"ETHERNET")
-			echo "usb0"
-			;;
-		"USB_ETHERNET")
-			echo "eth0"
-			;;
-		"WLAN")
-			echo "wlan0"
-			;;
-		"HNAP_NETWORK")
-			echo "tap0"
-			;;
-	esac
-}
-
 create_system_files () {
 
 	UDHCPD_CONF=/etc/udhcpd.conf
-	UDHCPD_CONF_TAP=/etc/udhcpd_tap0.conf
+	UDHCPD_CONF_TAP0=/etc/udhcpd_tap0.conf
+	UDHCPD_CONF_ETH0=/etc/udhcpd_eth0.conf
 	CONF=/opt/config.txt
 	IFAC=/etc/network/interfaces
 
@@ -48,6 +31,10 @@ create_system_files () {
 
 	ETH_IPADDR=`fw_printenv -n ipaddr_eth 2> /dev/null`
 	ETH_NETMASK=`fw_printenv -n netmask_eth 2> /dev/null || echo 255.255.255.0`
+	ETH_DHCP_SERVER_POOL_START=`fw_printenv -n dhcp_server_pool_start_eth 2> /dev/null`
+	ETH_DHCP_SERVER_LEASETIME=`fw_printenv -n dhcp_server_leasetime_eth 2> /dev/null || echo 600`
+	ETH_DHCP_SERVER_GATEWAY=`fw_printenv -n dhcp_server_gateway_eth 2> /dev/null || echo $ETH_IPADDR`
+	ETH_DHCP_SERVER_DNS=`fw_printenv -n dhcp_server_dns_eth 2> /dev/null || echo $ETH_IPADDR`
 
 	TAP_IPADDR=`fw_printenv -n ipaddr_tap 2> /dev/null`
 	TAP_NETMASK=`fw_printenv -n netmask_tap 2> /dev/null || echo 255.255.255.240`
@@ -61,79 +48,55 @@ create_system_files () {
 	ETH_NAT=`fw_printenv -n nat_eth 2> /dev/null`
 	TAP_NAT=`fw_printenv -n nat_tap 2> /dev/null`
 
-	BRIDGE_MASTER_INTERFACE=`fw_printenv -n bridge_master_interface 2> /dev/null`
-	BRIDGE_SLAVE_INTERFACE_1=`fw_printenv -n bridge_slave_interface_1 2> /dev/null`
+	BRIDGE=`fw_printenv -n bridge 2> /dev/null`
+	WLAN_BRIDGE=`fw_printenv -n bridge_wlan 2> /dev/null`
+	ETH_BRIDGE=`fw_printenv -n bridge_eth 2> /dev/null`
+	TAP_BRIDGE=`fw_printenv -n bridge_tap 2> /dev/null`
 
 	XO_CORRECTION=`fw_printenv -n xo_correction 2> /dev/null`
 	UDC_HANDLE_SUSPEND=`fw_printenv -n udc_handle_suspend 2> /dev/null || echo 0`
 
+	### /etc/network/interfaces ###
+	CREATE_BRIDGE=0
+
+	echo -e "auto lo\n""iface lo inet loopback\n" > $IFAC
+
+	### usb0
+	if [ "$BRIDGE" == "master" ]
+	then
+		CREATE_BRIDGE=1
+		BRIDGE_IPADDR=$IPADDR
+		BRIDGE_NETMASK=$NETMASK
+		BRIDGE_NAT=$NAT
+	elif [ "$BRIDGE" != "slave" ]
+	then
+		echo -e "auto usb0\n""iface usb0 inet static" >> $IFAC
+		echo -e "\taddress $IPADDR\n""\tnetmask $NETMASK" >> $IFAC
+		if [ "$NAT" == "yes" ]
+		then	
+			echo -e "\tpre-up iptables -t nat -A POSTROUTING -o usb0 -j MASQUERADE" >> $IFAC
+		fi
+		echo -e "\n" >> $IFAC
+	fi
+
 	### /etc/udhcpd.conf ###
 	echo "start $DHCP_SERVER_POOL_START" > $UDHCPD_CONF
-	echo "interface usb0" >> $UDHCPD_CONF
+	if [ "$BRIDGE" == "master" ]
+	then
+		echo "interface br0" >> $UDHCPD_CONF
+	else
+		echo "interface usb0" >> $UDHCPD_CONF
+	fi
 	echo "option subnet $NETMASK" >> $UDHCPD_CONF
 	echo "option lease $DHCP_SERVER_LEASETIME" >> $UDHCPD_CONF
 	echo "option router $DHCP_SERVER_GATEWAY" >> $UDHCPD_CONF
 	echo "option dns $DHCP_SERVER_DNS" >> $UDHCPD_CONF
 
-	### /etc/udhcpd_tap0.conf ###
-	if [ -n "$TAP_DHCP_SERVER_POOL_START" ]
-	then
-		echo "start $TAP_DHCP_SERVER_POOL_START" > $UDHCPD_CONF_TAP0
-		echo "interface tap0" >> $UDHCPD_CONF_TAP0
-		echo "option subnet $TAP_NETMASK" >> $UDHCPD_CONF_TAP0
-		echo "option lease $TAP_DHCP_SERVER_LEASETIME" >> $UDHCPD_CONF_TAP0
-		echo "option router $TAP_DHCP_SERVER_GATEWAY" >> $UDHCPD_CONF_TAP0
-		echo "option dns $TAP_DHCP_SERVER_DNS" >> $UDHCPD_CONF_TAP0
-	fi
-
-	### /etc/network/interfaces ###
-	echo -e "auto lo\n""iface lo inet loopback\n" > $IFAC
-	echo -e "auto usb0\n""iface usb0 inet static" >> $IFAC
-	echo -e "\taddress $IPADDR\n""\tnetmask $NETMASK\n" >> $IFAC
-	if [ "$NAT" == "yes" ]
-	then	
-		echo -e "\tpre-up iptables -t nat -A POSTROUTING -o usb0 -j MASQUERADE" >> $IFAC
-	fi
-
-	echo -e "auto eth0" >> $IFAC
-	if [ -n "$ETH_IPADDR" ]
-	then
-		echo -e "iface eth0 inet static" >> $IFAC
-		echo -e "\taddress $ETH_IPADDR\n""\tnetmask $ETH_NETMASK\n" >> $IFAC
-	else
-		echo -e "iface eth0 inet dhcp\n" >> $IFAC
-	fi
-	if [ "$ETH_NAT" == "yes" ]
-	then	
-		echo -e "\tpre-up iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE" >> $IFAC
-	fi
-
-	echo -e "auto tap0" >> $IFAC
-	if [ -n "$TAP_IPADDR" ]
-	then
-		echo -e "iface tap0 inet static" >> $IFAC
-		echo -e "\taddress $TAP_IPADDR\n""\tnetmask $TAP_NETMASK" >> $IFAC
-	else
-		echo -e "iface tap0 inet dhcp" >> $IFAC
-	fi
-	echo -e "\tpre-up /usr/sbin/tunctl -t tap0" >> $IFAC
-	if [ "$TAP_NAT" == "yes" ]
-	then	
-		echo -e "\tpre-up iptables -t nat -A POSTROUTING -o tap0 -j MASQUERADE" >> $IFAC
-	fi
-	echo -e "\n" >> $IFAC
-
-	if [ -n "$BRIDGE_MASTER_INTERFACE" ]
-	then
-		retval_master=$(spoken_name_to_ifname $BRIDGE_MASTER_INTERFACE)
-		retval_slave=$(spoken_name_to_ifname $BRIDGE_SLAVE_INTERFACE_1)
-		echo -e "iface br0 inet dhcp" >> $IFAC
-		echo -e "\tbridge_ports $retval_master $retval_slave\n" >> $IFAC
-	fi
-
-	### /etc/wpa.conf ###
+	### wlan0
+	
 	if [ -n "$WLAN_SSID" ]
 	then
+		### /etc/wpa.conf ###
 		if [ -n "$WLAN_PWD" ]
 		then
 			wpa_passphrase $WLAN_SSID $WLAN_PWD > /etc/wpa.conf
@@ -144,19 +107,158 @@ create_system_files () {
 			echo "}" >> /etc/wpa.conf
 		fi
 
-		echo -e "auto wlan0" >> $IFAC
-
-		if [ -n "$WLAN_IPADDR" ]
+		if [ "$WLAN_BRIDGE" == "master" ]
 		then
-			echo -e "iface wlan0 inet static" >> $IFAC
-			echo -e "\taddress $WLAN_IPADDR\n""\tnetmask 255.255.255.0" >> $IFAC
-		else
-			echo -e "iface wlan0 inet dhcp" >> $IFAC
+			CREATE_BRIDGE=1
+			BRIDGE_IPADDR=$WLAN_IPADDR
+			BRIDGE_NETMASK="255.255.255.0"
+			BRIDGE_NAT=$WLAN_NAT
+		elif [ "$WLAN_BRIDGE" != "slave" ]
+		then
+			echo -e "auto wlan0" >> $IFAC
+
+			if [ -n "$WLAN_IPADDR" ]
+			then
+				echo -e "iface wlan0 inet static" >> $IFAC
+				echo -e "\taddress $WLAN_IPADDR\n""\tnetmask 255.255.255.0" >> $IFAC
+			else
+				echo -e "iface wlan0 inet dhcp" >> $IFAC
+			fi
+			echo -e "\twpa-conf /etc/wpa.conf" >> $IFAC
+			if [ "$WLAN_NAT" == "yes" ]
+			then	
+				echo -e "\tpre-up iptables -t nat -A POSTROUTING -o wlan0 -j MASQUERADE" >> $IFAC
+			fi
+			echo -e "\n" >> $IFAC
 		fi
-		echo -e "\twpa-conf /etc/wpa.conf\n" >> $IFAC
-		if [ "$WLAN_NAT" == "yes" ]
+	fi
+
+	### eth0
+	if [ "$ETH_BRIDGE" == "master" ]
+	then
+		CREATE_BRIDGE=1
+		BRIDGE_IPADDR=$ETH_IPADDR
+		BRIDGE_NETMASK=$ETH_NETMASK
+		BRIDGE_NAT=$ETH_NAT
+	elif [ "$ETH_BRIDGE" != "slave" ]
+	then
+		echo -e "auto eth0" >> $IFAC
+		if [ -n "$ETH_IPADDR" ]
+		then
+			echo -e "iface eth0 inet static" >> $IFAC
+			echo -e "\taddress $ETH_IPADDR\n""\tnetmask $ETH_NETMASK" >> $IFAC
+		else
+			echo -e "iface eth0 inet dhcp" >> $IFAC
+		fi
+		if [ "$ETH_NAT" == "yes" ]
 		then	
-			echo -e "\tpre-up iptables -t nat -A POSTROUTING -o wlan0 -j MASQUERADE" >> $IFAC
+			echo -e "\tpre-up iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE" >> $IFAC
+		fi
+		echo -e "\n" >> $IFAC
+	fi
+
+	### /etc/udhcpd_eth0.conf ###
+	if [ -n "$ETH_DHCP_SERVER_POOL_START" ]
+	then
+		echo "start $ETH_DHCP_SERVER_POOL_START" > $UDHCPD_CONF_ETH0
+		if [ "$ETH_BRIDGE" == "master" ]
+		then
+			echo "interface br0" >> $UDHCPD_CONF_ETH0
+		else
+			echo "interface eth0" >> $UDHCPD_CONF_ETH0
+		fi
+		echo "option subnet $ETH_NETMASK" >> $UDHCPD_CONF_ETH0
+		echo "option lease $ETH_DHCP_SERVER_LEASETIME" >> $UDHCPD_CONF_ETH0
+		echo "option router $ETH_DHCP_SERVER_GATEWAY" >> $UDHCPD_CONF_ETH0
+		echo "option dns $ETH_DHCP_SERVER_DNS" >> $UDHCPD_CONF_ETH0
+	fi
+
+	### tap0
+
+	if [ "$TAP_BRIDGE" == "master" ]
+	then
+		CREATE_BRIDGE=1
+		BRIDGE_IPADDR=$TAP_IPADDR
+		BRIDGE_NETMASK=$TAP_NETMASK
+		BRIDGE_NAT=$TAP_NAT
+	elif [ "$TAP_BRIDGE" != "slave" ]
+	then
+		echo -e "auto tap0" >> $IFAC
+		if [ -n "$TAP_IPADDR" ]
+		then
+			echo -e "iface tap0 inet static" >> $IFAC
+			echo -e "\taddress $TAP_IPADDR\n""\tnetmask $TAP_NETMASK" >> $IFAC
+		else
+			echo -e "iface tap0 inet dhcp" >> $IFAC
+		fi
+		echo -e "\tpre-up tunctl -t tap0" >> $IFAC
+		if [ "$TAP_NAT" == "yes" ]
+		then	
+			echo -e "\tpre-up iptables -t nat -A POSTROUTING -o tap0 -j MASQUERADE" >> $IFAC
+		fi
+		echo -e "\n" >> $IFAC
+	fi
+
+	### /etc/udhcpd_tap0.conf ###
+	if [ -n "$TAP_DHCP_SERVER_POOL_START" ]
+	then
+		echo "start $TAP_DHCP_SERVER_POOL_START" > $UDHCPD_CONF_TAP0
+		if [ "$TAP_BRIDGE" == "master" ]
+		then
+			echo "interface br0" >> $UDHCPD_CONF_TAP0
+		else
+			echo "interface tap0" >> $UDHCPD_CONF_TAP0
+		fi
+		echo "option subnet $TAP_NETMASK" >> $UDHCPD_CONF_TAP0
+		echo "option lease $TAP_DHCP_SERVER_LEASETIME" >> $UDHCPD_CONF_TAP0
+		echo "option router $TAP_DHCP_SERVER_GATEWAY" >> $UDHCPD_CONF_TAP0
+		echo "option dns $TAP_DHCP_SERVER_DNS" >> $UDHCPD_CONF_TAP0
+	fi
+
+	### br0
+
+	if [ "$CREATE_BRIDGE" == 1 ]
+	then
+		echo -e "auto br0" >> $IFAC
+
+		if [ -n "$BRIDGE_IPADDR" ]
+		then
+			echo -e "iface br0 inet static" >> $IFAC
+			echo -e "\taddress $BRIDGE_IPADDR\n""\tnetmask $BRIDGE_NETMASK" >> $IFAC
+		else
+			echo -e "iface br0 inet dhcp" >> $IFAC
+		fi
+
+		## If tap0 is on bridge, bring it up
+		if [ "$TAP_BRIDGE" == "master" ] || [ "$TAP_BRIDGE" == "slave" ]
+		then
+			echo -e "\tpre-up tunctl -t tap0" >> $IFAC
+		fi
+
+		echo -e "\tpre-up brctl addbr br0" >> $IFAC
+
+		# Add slave interfaces
+		if [ "$BRIDGE" == "master" ] || [ "$BRIDGE" == "slave" ]
+		then
+			echo -e "\tpre-up brctl addif br0 usb0" >> $IFAC
+		fi
+		if [ "$WLAN_BRIDGE" == "master" ] || [ "$WLAN_BRIDGE" == "slave" ]
+		then
+			echo -e "\tpre-up brctl addif br0 wlan0" >> $IFAC
+		fi
+		if [ "$ETH_BRIDGE" == "master" ] || [ "$ETH_BRIDGE" == "slave" ]
+		then
+			echo -e "\tpre-up brctl addif br0 eth0" >> $IFAC
+		fi
+		if [ "$TAP_BRIDGE" == "master" ] || [ "$TAP_BRIDGE" == "slave" ]
+		then
+			echo -e "\tpre-up brctl addif br0 tap0" >> $IFAC
+		fi
+
+		# Set up NAT, if desired
+		if [ "$BRIDGE_NAT" == "yes" ]
+		then	
+			echo -e "\tpre-up iptables -t nat -A POSTROUTING -o br0 -j MASQUERADE" >> $IFAC
 		fi
 	fi
 
@@ -176,6 +278,7 @@ create_system_files () {
 	echo "ipaddr = $IPADDR"$'\r' >> $CONF
 	echo "netmask = $NETMASK"$'\r' >> $CONF
 	echo "nat = $NAT"$'\r' >> $CONF
+	echo "bridge = $BRIDGE"$'\r' >> $CONF
 	echo "dhcp_server_pool_start = $DHCP_SERVER_POOL_START"$'\r' >> $CONF
 	echo "dhcp_server_leasetime = $DHCP_SERVER_LEASETIME"$'\r' >> $CONF
 	echo "dhcp_server_gateway = $DHCP_SERVER_GATEWAY"$'\r' >> $CONF
@@ -187,27 +290,29 @@ create_system_files () {
 	echo "pwd_wlan = $WLAN_PWD"$'\r' >> $CONF
 	echo "ipaddr_wlan = $WLAN_IPADDR"$'\r' >> $CONF
 	echo "nat_wlan = $WLAN_NAT"$'\r' >> $CONF
+	echo "bridge_wlan = $WLAN_BRIDGE"$'\r' >> $CONF
 	echo ""$'\r'>> $CONF
 
 	echo "[USB_ETHERNET]"$'\r' >> $CONF
 	echo "ipaddr_eth = $ETH_IPADDR"$'\r' >> $CONF
 	echo "netmask_eth = $ETH_NETMASK"$'\r' >> $CONF
 	echo "nat_eth = $ETH_NAT"$'\r' >> $CONF
+	echo "bridge_eth = $ETH_BRIDGE"$'\r' >> $CONF
+	echo "dhcp_server_pool_start_eth = $ETH_DHCP_SERVER_POOL_START"$'\r' >> $CONF
+	echo "dhcp_server_leasetime_eth = $ETH_DHCP_SERVER_LEASETIME"$'\r' >> $CONF
+	echo "dhcp_server_gateway_eth = $ETH_DHCP_SERVER_GATEWAY"$'\r' >> $CONF
+	echo "dhcp_server_dns_eth = $ETH_DHCP_SERVER_DNS"$'\r' >> $CONF
 	echo ""$'\r'>> $CONF
 
 	echo "[HNAP_NETWORK]"$'\r' >> $CONF
 	echo "ipaddr_tap = $TAP_IPADDR"$'\r' >> $CONF
 	echo "netmask_tap = $TAP_NETMASK"$'\r' >> $CONF
 	echo "nat_tap = $TAP_NAT"$'\r' >> $CONF
+	echo "bridge_tap = $TAP_BRIDGE"$'\r' >> $CONF
 	echo "dhcp_server_pool_start_tap = $TAP_DHCP_SERVER_POOL_START"$'\r' >> $CONF
 	echo "dhcp_server_leasetime_tap = $TAP_DHCP_SERVER_LEASETIME"$'\r' >> $CONF
 	echo "dhcp_server_gateway_tap = $TAP_DHCP_SERVER_GATEWAY"$'\r' >> $CONF
 	echo "dhcp_server_dns_tap = $TAP_DHCP_SERVER_DNS"$'\r' >> $CONF
-	echo ""$'\r'>> $CONF
-
-	echo "[BRIDGE]"$'\r' >> $CONF
-	echo "bridge_master_interface = $BRIDGE_MASTER_INTERFACE"$'\r' >> $CONF
-	echo "bridge_slave_interface_1 = $BRIDGE_SLAVE_INTERFACE_1"$'\r' >> $CONF
 	echo ""$'\r'>> $CONF
 
 	echo "[SYSTEM]"$'\r' >> $CONF
