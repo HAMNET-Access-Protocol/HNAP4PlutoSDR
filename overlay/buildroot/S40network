@@ -237,22 +237,26 @@ create_system_files () {
 
 		echo -e "\tpre-up brctl addbr br0" >> $IFAC
 
-		# Add slave interfaces
+		# Add slave interfaces and activate them manually
 		if [ "$BRIDGE" == "master" ] || [ "$BRIDGE" == "slave" ]
 		then
 			echo -e "\tpre-up brctl addif br0 usb0" >> $IFAC
+			echo -e "\tpre-up ip link set dev usb0 up" >> $IFAC
 		fi
 		if [ "$WLAN_BRIDGE" == "master" ] || [ "$WLAN_BRIDGE" == "slave" ]
 		then
 			echo -e "\tpre-up brctl addif br0 wlan0" >> $IFAC
+			echo -e "\tpre-up ip link set dev wlan0 up" >> $IFAC
 		fi
 		if [ "$ETH_BRIDGE" == "master" ] || [ "$ETH_BRIDGE" == "slave" ]
 		then
 			echo -e "\tpre-up brctl addif br0 eth0" >> $IFAC
+			echo -e "\tpre-up ip link set dev eth0 up" >> $IFAC
 		fi
 		if [ "$TAP_BRIDGE" == "master" ] || [ "$TAP_BRIDGE" == "slave" ]
 		then
 			echo -e "\tpre-up brctl addif br0 tap0" >> $IFAC
+			echo -e "\tpre-up ip link set dev tap0 up" >> $IFAC
 		fi
 
 		# Set up NAT, if desired
