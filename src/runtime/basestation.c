@@ -37,9 +37,6 @@
 // Set to 1 in order to use the simulated platform
 #define BS_USE_PLATFORM_SIM 0
 
-// set to one if the BS shall send random MAC data frames
-#define BS_SEND_ENABLE 0
-
 // FPGA sample buffers will contain multiple ofdm symbols. We use 2 symbols per
 // buffer
 #define SYMBOLS_PER_BUF 2
@@ -65,6 +62,7 @@ struct option Options[] = {
     {"config", required_argument, NULL, 'c'},
     {"log", required_argument, NULL, 'l'},
     {"help", no_argument, NULL, 'h'},
+    {"demo", no_argument, NULL, 'd'},
     {"version", no_argument, NULL, 'v'},
     {NULL},
 };
@@ -76,6 +74,8 @@ Options:\n \
    --config -c     specify a configuration file\n \
    --log -l        specify the log level. Default: 2.\n \
                    0=TRACE 1=DEBUG 2=INFO 3=WARN 4=ERR 5=NONE\n \
+   --demo -d       Enable demo mode. In this mode, the basestation\n \
+                   continuously sends random packets\n \
    --version -v    show version info";
 
 extern char *optarg;
@@ -83,6 +83,7 @@ int rxgain = 70;
 int txgain = 0;
 long long int frequency = -1;
 char *config_file = NULL;
+int arg_set_demo = 0;
 
 // struct holds arguments for RX thread
 struct rx_th_data_s {
@@ -222,23 +223,30 @@ void *thread_mac_bs_scheduler(void *arg) {
   TIMECHECK_CREATE(timecheck_mac_bs);
   TIMECHECK_INIT(timecheck_mac_bs, "bs.mac_scheduler", 1000);
   uint subframe_cnt = 0;
+  int userid = 0;
 
+  if (demo_mode == 1) {
+    userid = mac_bs_add_new_ue(mac, 11, 0, NULL, 0);
+  }
   while (1) {
     // Wait for signal from BS tx thread
     pthread_mutex_lock(mutex);
     pthread_cond_wait(cond_signal, mutex);
     TIMECHECK_START(timecheck_mac_bs);
-    // add some data to send
-#if BS_SEND_ENABLE
-    uint payload_len = 200;
-    MacDataFrame dl_frame = dataframe_create(payload_len);
-    for (int i = 0; i < payload_len; i++)
-      dl_frame->data[i] = rand() & 0xFF;
-    memcpy(dl_frame->data, &subframe_cnt, sizeof(uint));
-    if (!mac_bs_add_txdata(mac, 2, dl_frame)) {
-      dataframe_destroy(dl_frame);
+
+    if (demo_mode == 1) {
+      uint payload_len = 200;
+      MacDataFrame dl_frame = dataframe_create(payload_len);
+      for (int i = 0; i < payload_len; i++)
+          dl_frame->data[i] = rand() & 0xFF;
+      memcpy(dl_frame->data, &subframe_cnt, sizeof(uint));
+      if (!mac_bs_add_txdata(mac, userid, dl_frame)) {
+          dataframe_destroy(dl_frame);
+      }
+      // Force our dummy user to be set to active
+      mac->UE[userid]->last_seen = mac->subframe_cnt;
     }
-#endif
+
     mac_bs_run_scheduler(mac);
     subframe_cnt++;
     TIMECHECK_STOP_CHECK(timecheck_mac_bs, 3500);
@@ -256,7 +264,7 @@ int main(int argc, char *argv[]) {
 
   // parse program args
   int d;
-  while ((d = getopt_long(argc, argv, "g:t:f:c:l:v:h", Options, NULL)) != EOF) {
+  while ((d = getopt_long(argc, argv, "g:t:f:c:l:vdh", Options, NULL)) != EOF) {
     switch (d) {
     case 'g':
       rxgain = atoi(optarg);
@@ -287,6 +295,10 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
       }
       break;
+    case 'd':
+        arg_set_demo = 1;
+        printf("Demo mode activated\n");
+        break;
     case 'h':
       printf("%s", helpstring);
       exit(0);
@@ -307,6 +319,10 @@ int main(int argc, char *argv[]) {
   if (frequency > 0) {
     ul_lo = ul_lo + frequency - dl_lo;
     dl_lo = frequency;
+  }
+  // override demo config from file, if it was passed as an arg
+  if (arg_set_demo==1) {
+    demo_mode = arg_set_demo;
   }
   // print system config
   phy_config_print();

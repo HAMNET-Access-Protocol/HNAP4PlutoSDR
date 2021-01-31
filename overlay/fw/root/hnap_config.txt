@@ -47,6 +47,10 @@ phy:
   # the desired RSSI of the RX path. Used to tune our AGC
   # Theoretical limits for RSSI are [-66 0]. For OFDM-QAM waveform this should be set to ~ -15
   agc_desired_rssi = -15;
+
+  # Demo mode
+  # Enable a demo mode in which the basestation continously transmits random packets. 0=False, 1=True
+  demo_mode = 0;
 }
 
 # Platform configuration

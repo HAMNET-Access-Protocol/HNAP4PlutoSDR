@@ -104,7 +104,7 @@ void mac_bs_set_phy_interface(MacBS mac, struct PhyBS_s *phy) {
   mac->phy = phy;
 }
 
-void mac_bs_add_new_ue(MacBS mac, uint8_t rachuserid, uint8_t rach_try_cnt,
+int mac_bs_add_new_ue(MacBS mac, uint8_t rachuserid, uint8_t rach_try_cnt,
                        ofdmframesync fs, int timing_diff) {
   MacMessage response = NULL;
   uint8_t userid = 0;
@@ -137,6 +137,7 @@ void mac_bs_add_new_ue(MacBS mac, uint8_t rachuserid, uint8_t rach_try_cnt,
           mac_msg_create_associate_response(0, rachuserid, assoc_resp_full, 0);
       // Response will be sent via broadcast channel
       ringbuf_put(mac->broadcast_ctrl_queue, response);
+      return -1;
     } else {
       // create new UE struct
       mac->UE[userid] = ue_create(userid, &mac->subframe_cnt);
@@ -153,6 +154,7 @@ void mac_bs_add_new_ue(MacBS mac, uint8_t rachuserid, uint8_t rach_try_cnt,
       ringbuf_put(mac->broadcast_ctrl_queue, response);
       mac->last_added_userid = userid;
       mac->last_added_rachuserid = rachuserid;
+      return userid;
     }
   }
 }

@@ -113,6 +113,8 @@ int agc_change_threshold;
 // Theoretical limits for RSSI are [-66 0]. For OFDM-QAM waveform this should be
 // set to ~ -15
 int agc_desired_rssi;
+// Flag to indicate if the demo mode is activated
+int demo_mode;
 
 int log_coarse_cfo_flag;     // set this flag to enable logging the coarse cfo
                              // estimate to a file

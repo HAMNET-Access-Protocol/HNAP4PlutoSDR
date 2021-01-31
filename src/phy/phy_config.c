@@ -52,7 +52,8 @@ void phy_config_load_file(char *config_file) {
                               &agc_change_threshold);
     config_setting_lookup_int(phy_settings, "agc_desired_rssi",
                               &agc_desired_rssi);
-
+    config_setting_lookup_int(phy_settings, "demo_mode",
+                              &demo_mode);
     subcarrier_settings =
         config_setting_get_member(phy_settings, "subcarrier_alloc");
     if (subcarrier_settings != NULL &&
@@ -171,4 +172,5 @@ void phy_config_print() {
   printf("\n");
 
   printf("coarse cfo filter param: %.3f\n", coarse_cfo_filt_param);
+  printf("demo mode: %d\n", demo_mode);
 }
