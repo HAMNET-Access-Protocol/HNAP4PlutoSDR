@@ -104,7 +104,7 @@ void mac_bs_set_phy_interface(MacBS mac, struct PhyBS_s *phy);
 // --------------- Interface functions for PHY --------------- //
 ofdmframesync mac_bs_get_receiver(MacBS mac, uint userid);
 int mac_bs_add_new_ue(MacBS mac, uint8_t rachuserid, uint8_t rach_try_cnt,
-                       ofdmframesync fs, int timing_diff);
+                      ofdmframesync fs, int timing_diff);
 void mac_bs_update_timingadvance(MacBS mac, uint userid, int timing_diff);
 int mac_bs_rx_channel(MacBS mac, LogicalChannel chan, uint userid);
 

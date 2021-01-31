@@ -238,10 +238,10 @@ void *thread_mac_bs_scheduler(void *arg) {
       uint payload_len = 200;
       MacDataFrame dl_frame = dataframe_create(payload_len);
       for (int i = 0; i < payload_len; i++)
-          dl_frame->data[i] = rand() & 0xFF;
+        dl_frame->data[i] = rand() & 0xFF;
       memcpy(dl_frame->data, &subframe_cnt, sizeof(uint));
       if (!mac_bs_add_txdata(mac, userid, dl_frame)) {
-          dataframe_destroy(dl_frame);
+        dataframe_destroy(dl_frame);
       }
       // Force our dummy user to be set to active
       mac->UE[userid]->last_seen = mac->subframe_cnt;
@@ -296,9 +296,9 @@ int main(int argc, char *argv[]) {
       }
       break;
     case 'd':
-        arg_set_demo = 1;
-        printf("Demo mode activated\n");
-        break;
+      arg_set_demo = 1;
+      printf("Demo mode activated\n");
+      break;
     case 'h':
       printf("%s", helpstring);
       exit(0);
@@ -321,7 +321,7 @@ int main(int argc, char *argv[]) {
     dl_lo = frequency;
   }
   // override demo config from file, if it was passed as an arg
-  if (arg_set_demo==1) {
+  if (arg_set_demo == 1) {
     demo_mode = arg_set_demo;
   }
   // print system config

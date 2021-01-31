@@ -105,7 +105,7 @@ void mac_bs_set_phy_interface(MacBS mac, struct PhyBS_s *phy) {
 }
 
 int mac_bs_add_new_ue(MacBS mac, uint8_t rachuserid, uint8_t rach_try_cnt,
-                       ofdmframesync fs, int timing_diff) {
+                      ofdmframesync fs, int timing_diff) {
   MacMessage response = NULL;
   uint8_t userid = 0;
 
